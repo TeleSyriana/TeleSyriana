@@ -353,7 +353,47 @@ input:focus {
   background: #e2e3e5;
   color: #505050;
 }
+/* Main status value (big box) */
+.status-value {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: bold;
+  display: inline-block;
+  color: #fff;
+}
+
+/* Colors for each status */
+.status-in_operation {
+  background-color: #28a745 !important; /* Green */
+}
+
+.status-break {
+  background-color: #ffc107 !important; /* Yellow */
+  color: #000 !important;
+}
+
+.status-meeting {
+  background-color: #17a2b8 !important; /* Cyan/Blue */
+}
+
+.status-handling {
+  background-color: #6f42c1 !important; /* Purple */
+}
+
+.status-unavailable {
+  background-color: #dc3545 !important; /* Red */
+}
+
+/* Supervisor table pills */
+.sup-status-pill {
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+}
 
 .hidden {
   display: none;
 }
+
