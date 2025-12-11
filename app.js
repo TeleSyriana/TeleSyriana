@@ -5,6 +5,7 @@ import { db, fs } from "./firebase.js";
 const {
   doc,
   setDoc,
+  getDoc,
   collection,
   query,
   where,
@@ -164,14 +165,12 @@ async function syncStateToFirestore(liveUsage) {
       updatedAt: serverTimestamp(),
     };
 
-    // doc(collection(...), id) أو doc(db, col, id) الاثنين شغالين
     await setDoc(doc(collection(db, AGENT_DAYS_COL), id), payload, { merge: true });
   } catch (err) {
     console.error("syncStateToFirestore error:", err);
   }
 }
 
-// *** هنا التعديل المهم ***
 // ما عاد نفلتر role في Firestore، بس نفلتر اليوم، والباقي في JS
 function subscribeSupervisorDashboard() {
   if (!currentUser || currentUser.role !== "supervisor") return;
@@ -246,15 +245,57 @@ document.addEventListener("DOMContentLoaded", () => {
   statusSelect.addEventListener("change", handleStatusChange);
 });
 
-function initStateForUser() {
+// ✅ تحديث: initStateForUser تستخدم localStorage أولاً ثم Firestore
+async function initStateForUser() {
   const today = getTodayKey();
   const now = Date.now();
 
-  const existing = loadStateForToday(currentUser.id);
+  // 1) جرّب الـ localStorage لنفس اليوم
+  const local = loadStateForToday(currentUser.id);
+  if (local) {
+    state = local;
+    finishInit(now);
+    return;
+  }
 
-  if (existing) {
-    state = existing;
-  } else {
+  // 2) لو مافي لوكال، جرّب Firestore: agentDays/<today>_<CCMS>
+  const docId = `${today}_${currentUser.id}`;
+  const ref = doc(collection(db, AGENT_DAYS_COL), docId);
+
+  try {
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const d = snap.data();
+      state = {
+        userId: currentUser.id,
+        day: today,
+        status: d.status || "in_operation",
+        lastStatusChange: now, // نبدأ من وقت الدخول الحالي
+        breakUsedMinutes: d.breakUsedMinutes || 0,
+        operationMinutes: d.operationMinutes || 0,
+        meetingMinutes: d.meetingMinutes || 0,
+        handlingMinutes: d.handlingMinutes || 0,
+        unavailableMinutes: d.unavailableMinutes || 0,
+        loginTime: d.loginTime || now,
+      };
+    } else {
+      // 3) لا لوكال ولا Firestore → يوم جديد
+      state = {
+        userId: currentUser.id,
+        day: today,
+        status: "in_operation",
+        lastStatusChange: now,
+        breakUsedMinutes: 0,
+        operationMinutes: 0,
+        meetingMinutes: 0,
+        handlingMinutes: 0,
+        unavailableMinutes: 0,
+        loginTime: now,
+      };
+    }
+  } catch (err) {
+    console.error("Error loading from Firestore:", err);
+    // لو صار خطأ برضو نبدأ يوم جديد
     state = {
       userId: currentUser.id,
       day: today,
@@ -267,15 +308,20 @@ function initStateForUser() {
       unavailableMinutes: 0,
       loginTime: now,
     };
-    saveState();
   }
 
+  saveState();
+  finishInit(now);
+}
+
+// دالة مساعدة تكمل الإقلاع بعد ما نحدد state
+function finishInit(now) {
   if (currentUser.role === "supervisor") {
     subscribeSupervisorDashboard();
   }
-
   startTimer();
-  syncStateToFirestore();
+  const live = recomputeLiveUsage(now);
+  syncStateToFirestore(live);
 }
 
 // ---------- Screen switching ----------
@@ -329,13 +375,33 @@ function handleLogin(e) {
   showDashboard();
 }
 
-function handleLogout() {
+// ✅ تحديث: Logout = يحوّل الحالة لـ Unavailable ويسجّلها
+async function handleLogout() {
+  if (currentUser && state) {
+    const now = Date.now();
+
+    // ثبّت الزمن المنقضي على الحالة الحالية
+    applyElapsedToState(now);
+
+    // غيّر الحالة لـ Unavailable
+    state.status = "unavailable";
+    state.lastStatusChange = now;
+    saveState();
+
+    // ارفع الأرقام النهائية لليوم
+    const live = recomputeLiveUsage(now);
+    await syncStateToFirestore(live);
+  }
+
+  // بعدها طلّع المستخدم
   localStorage.removeItem(USER_KEY);
+
   if (timerId) clearInterval(timerId);
   if (supUnsub) {
     supUnsub();
     supUnsub = null;
   }
+
   currentUser = null;
   state = null;
   showLogin();
@@ -354,8 +420,6 @@ async function handleStatusChange(e) {
 
   const newStatus = e.target.value;
   const now = Date.now();
-
-  // Meeting متاحة للجميع الآن
 
   // Break limit check
   if (
@@ -550,4 +614,5 @@ function buildSupervisorTableFromFirestore(rows) {
   if (sumMeet) sumMeet.textContent = totals.meeting;
   if (sumUnavail) sumUnavail.textContent = totals.unavailable;
 }
+
 
