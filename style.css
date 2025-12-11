@@ -369,22 +369,22 @@ input:focus {
 
 .status-break {
   background: #fff3cd;
-  color: #856404;
+  color: #856404 !important;
 }
 
 .status-meeting {
   background: #fff3cd;
-  color: #856404;
+  color: #856404 !important;
 }
 
 .status-handling {
   background: #f5cdff;
-  color: #85047f;
+  color: #85047f !important;
 }
 
 .status-unavailable {
   background: #e2e3e5;
-  color: #505050;
+  color: #505050 !important;
 }
 
 /* Supervisor table pills */
@@ -396,6 +396,7 @@ input:focus {
 .hidden {
   display: none;
 }
+
 
 
 
