@@ -5,27 +5,27 @@ import { db, fs } from "./firebase.js";
 const {
   doc,
   setDoc,
-  getDoc,
-  updateDoc,
   collection,
   query,
   where,
   orderBy,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
 } = fs;
 
-// Demo users – later moved إلى Firestore/Auth
+// Demo users – مؤقتاً هون (ممكن ننقلهم لـ Auth بعدين)
 const USERS = {
   "1001": { password: "1234", role: "agent", name: "Agent 01" },
   "1002": { password: "1234", role: "agent", name: "Agent 02" },
-  "2001": { password: "sup123", role: "supervisor", name: "Supervisor 01" }
+  "1003": { password: "1234", role: "agent", name: "Agent 03" },
+  "2001": { password: "sup123", role: "supervisor", name: "Supervisor Dema" },
+  "2002": { password: "sup123", role: "supervisor", name: "Supervisor Moustafa" },
 };
 
 const USER_KEY = "telesyrianaUser";
 const STATE_KEY = "telesyrianaState";
 const BREAK_LIMIT_MIN = 45;
-const AGENT_DAYS_COL = "agentDays"; // collection in Firestore
+const AGENT_DAYS_COL = "agentDays"; // collection name في Firestore
 
 let currentUser = null;
 let state = null;
@@ -39,7 +39,7 @@ function getTodayKey() {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return `${y}-${m}-${day}`; // e.g. 2025-12-11
 }
 
 function statusLabel(code) {
@@ -59,7 +59,7 @@ function statusLabel(code) {
   }
 }
 
-// يرجّع usage live بدون ما يعدّل state فعلياً
+// يرجّع usage live بدون ما يغيّر state المخزّن
 function recomputeLiveUsage(now) {
   if (!state) {
     return {
@@ -67,7 +67,7 @@ function recomputeLiveUsage(now) {
       operation: 0,
       meeting: 0,
       handling: 0,
-      unavailable: 0
+      unavailable: 0,
     };
   }
 
@@ -104,11 +104,11 @@ function recomputeLiveUsage(now) {
     operation: op,
     meeting: meet,
     handling: hand,
-    unavailable: unav
+    unavailable: unav,
   };
 }
 
-// يثبّت الوقت المنقضي في state عند تغيير status
+// يثبّت الزمن المنقضي في state عند تغيير الـ status
 function applyElapsedToState(now) {
   if (!state) return;
 
@@ -147,7 +147,6 @@ async function syncStateToFirestore(liveUsage) {
 
     const today = state.day || getTodayKey();
     const id = `${today}_${currentUser.id}`;
-
     const usage = liveUsage || recomputeLiveUsage(Date.now());
 
     const payload = {
@@ -163,10 +162,10 @@ async function syncStateToFirestore(liveUsage) {
       meetingMinutes: usage.meeting,
       handlingMinutes: usage.handling,
       unavailableMinutes: usage.unavailable,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
     };
 
-    await setDoc(doc(db, AGENT_DAYS_COL, id), payload, { merge: true });
+    await setDoc(doc(collection(db, AGENT_DAYS_COL), id), payload, { merge: true });
   } catch (err) {
     console.error("syncStateToFirestore error:", err);
   }
@@ -174,7 +173,7 @@ async function syncStateToFirestore(liveUsage) {
 
 function subscribeSupervisorDashboard() {
   if (!currentUser || currentUser.role !== "supervisor") return;
-  if (supUnsub) return; // already
+  if (supUnsub) return;
 
   const today = getTodayKey();
   const q = query(
@@ -191,9 +190,7 @@ function subscribeSupervisorDashboard() {
       snapshot.forEach((d) => rows.push(d.data()));
       buildSupervisorTableFromFirestore(rows);
     },
-    (err) => {
-      console.error("Supervisor snapshot error:", err);
-    }
+    (err) => console.error("Supervisor snapshot error:", err)
   );
 }
 
@@ -267,12 +264,11 @@ function initStateForUser() {
       meetingMinutes: 0,
       handlingMinutes: 0,
       unavailableMinutes: 0,
-      loginTime: now
+      loginTime: now,
     };
     saveState();
   }
 
-  // supervisor live dashboard
   if (currentUser.role === "supervisor") {
     subscribeSupervisorDashboard();
   }
@@ -358,21 +354,17 @@ async function handleStatusChange(e) {
   const newStatus = e.target.value;
   const now = Date.now();
 
-  // Meeting فقط للسوبرفايزر
-  if (newStatus === "meeting" && currentUser.role !== "supervisor") {
-    alert("Only Supervisors can use the Meeting status.");
-    e.target.value = state.status;
-    return;
-  }
-
+  // Meeting متاحة للجميع الآن
   // Break limit check
-  if (newStatus === "break" && state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01) {
+  if (
+    newStatus === "break" &&
+    state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01
+  ) {
     alert("Daily break limit (45 minutes) already reached.");
     e.target.value = state.status;
     return;
   }
 
-  // ثبّت الزمن الحالي في الحالة السابقة
   applyElapsedToState(now);
 
   state.status = newStatus;
@@ -389,7 +381,7 @@ async function handleStatusChange(e) {
 
 function startTimer() {
   if (timerId) clearInterval(timerId);
-  timerId = setInterval(tick, 10000);
+  timerId = setInterval(tick, 10000); // كل 10 ثواني
   tick();
 }
 
@@ -401,7 +393,6 @@ async function tick() {
 
   // enforce break limit → auto Unavailable
   if (state.status === "break" && live.breakUsed >= BREAK_LIMIT_MIN) {
-    // ثبّت وغيّر الحالة لمرة واحدة
     applyElapsedToState(now);
     state.status = "unavailable";
     state.lastStatusChange = now;
@@ -462,26 +453,26 @@ function updateBreakUI(usedMinutes) {
   if (remainingElem) remainingElem.textContent = remaining;
 }
 
-// live minutes labels في كرت الـ Agent نفسه (لو عندك سبانات لها IDs)
+// هنا استخدمنا IDs الموجودة فعلياً في الـ HTML:
+// op-min, meet-min, hand-min
 function updateStatusMinutesUI(live) {
-  const opEl = document.getElementById("stat-op");
-  const brEl = document.getElementById("stat-break");
-  const meetEl = document.getElementById("stat-meet");
-  const handEl = document.getElementById("stat-handle");
-  const unEl = document.getElementById("stat-unavail");
+  const opEl = document.getElementById("op-min");
+  const meetEl = document.getElementById("meet-min");
+  const handEl = document.getElementById("hand-min");
 
   if (opEl) opEl.textContent = Math.floor(live.operation || 0);
-  if (brEl) brEl.textContent = Math.floor(live.breakUsed || 0);
   if (meetEl) meetEl.textContent = Math.floor(live.meeting || 0);
   if (handEl) handEl.textContent = Math.floor(live.handling || 0);
-  if (unEl) unEl.textContent = Math.floor(live.unavailable || 0);
 }
 
 // ---------- Supervisor table from Firestore ----------
 
 function buildSupervisorTableFromFirestore(rows) {
   const body = document.getElementById("sup-table-body");
-  const totalsEl = document.getElementById("sup-totals");
+  const sumOp = document.getElementById("sum-op");
+  const sumBreak = document.getElementById("sum-break");
+  const sumMeet = document.getElementById("sum-meet");
+  const sumUnavail = document.getElementById("sum-unavail");
 
   if (!body) return;
   body.innerHTML = "";
@@ -491,7 +482,7 @@ function buildSupervisorTableFromFirestore(rows) {
     break: 0,
     meeting: 0,
     handling: 0,
-    unavailable: 0
+    unavailable: 0,
   };
 
   rows.forEach((record) => {
@@ -524,9 +515,6 @@ function buildSupervisorTableFromFirestore(rows) {
     const meetTd = document.createElement("td");
     meetTd.textContent = `${Math.floor(record.meetingMinutes || 0)} min`;
 
-    const handTd = document.createElement("td");
-    handTd.textContent = `${Math.floor(record.handlingMinutes || 0)} min`;
-
     const unTd = document.createElement("td");
     unTd.textContent = `${Math.floor(record.unavailableMinutes || 0)} min`;
 
@@ -546,19 +534,14 @@ function buildSupervisorTableFromFirestore(rows) {
     tr.appendChild(opTd);
     tr.appendChild(brTd);
     tr.appendChild(meetTd);
-    tr.appendChild(handTd);
     tr.appendChild(unTd);
     tr.appendChild(loginTd);
 
     body.appendChild(tr);
   });
 
-  if (totalsEl) {
-    totalsEl.textContent =
-      `In Operation: ${totals.in_operation} | ` +
-      `Break: ${totals.break} | ` +
-      `Meeting: ${totals.meeting} | ` +
-      `Handling: ${totals.handling} | ` +
-      `Unavailable: ${totals.unavailable}`;
-  }
+  if (sumOp) sumOp.textContent = totals.in_operation;
+  if (sumBreak) sumBreak.textContent = totals.break;
+  if (sumMeet) sumMeet.textContent = totals.meeting;
+  if (sumUnavail) sumUnavail.textContent = totals.unavailable;
 }
