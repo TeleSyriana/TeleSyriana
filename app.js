@@ -1,28 +1,230 @@
-// Demo users – later will be moved to Firebase / DB
+// app.js — TeleSyriana Agent Access Panel (Firestore + daily docs)
+
+import { db, fs } from "./firebase.js";
+
+const {
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp
+} = fs;
+
+// Demo users – later moved إلى Firestore/Auth
 const USERS = {
-  "1001": { password: "1234", role: "agent", name: "Agent's Name" },
-  "1002": { password: "1234", role: "agent", name: "Agent's Name" },
-  "1003": { password: "1234", role: "agent", name: "Agent's Name" },
-  "2001": { password: "sup123", role: "supervisor", name: "Dema" },
-  "2002": { password: "sup123", role: "supervisor", name: "Moustafa" },
+  "1001": { password: "1234", role: "agent", name: "Agent 01" },
+  "1002": { password: "1234", role: "agent", name: "Agent 02" },
+  "2001": { password: "sup123", role: "supervisor", name: "Supervisor 01" }
 };
 
 const USER_KEY = "telesyrianaUser";
 const STATE_KEY = "telesyrianaState";
-const LOGIN_LOG_KEY = "telesyrianaLoginLog";
-const STATS_KEY = "telesyrianaDailyStats";
 const BREAK_LIMIT_MIN = 45;
+const AGENT_DAYS_COL = "agentDays"; // collection in Firestore
 
 let currentUser = null;
 let state = null;
 let timerId = null;
+let supUnsub = null;
+
+// ---------- Helpers ----------
+
+function getTodayKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function statusLabel(code) {
+  switch (code) {
+    case "in_operation":
+      return "In Operation";
+    case "break":
+      return "Break";
+    case "meeting":
+      return "Meeting";
+    case "handling":
+      return "Handling";
+    case "unavailable":
+      return "Unavailable";
+    default:
+      return code;
+  }
+}
+
+// يرجّع usage live بدون ما يعدّل state فعلياً
+function recomputeLiveUsage(now) {
+  if (!state) {
+    return {
+      breakUsed: 0,
+      operation: 0,
+      meeting: 0,
+      handling: 0,
+      unavailable: 0
+    };
+  }
+
+  const elapsedMin = (now - state.lastStatusChange) / 60000;
+
+  let op = state.operationMinutes || 0;
+  let br = state.breakUsedMinutes || 0;
+  let meet = state.meetingMinutes || 0;
+  let hand = state.handlingMinutes || 0;
+  let unav = state.unavailableMinutes || 0;
+
+  switch (state.status) {
+    case "in_operation":
+      op += elapsedMin;
+      break;
+    case "break":
+      br += elapsedMin;
+      break;
+    case "meeting":
+      meet += elapsedMin;
+      break;
+    case "handling":
+      hand += elapsedMin;
+      break;
+    case "unavailable":
+      unav += elapsedMin;
+      break;
+  }
+
+  if (br > BREAK_LIMIT_MIN) br = BREAK_LIMIT_MIN;
+
+  return {
+    breakUsed: br,
+    operation: op,
+    meeting: meet,
+    handling: hand,
+    unavailable: unav
+  };
+}
+
+// يثبّت الوقت المنقضي في state عند تغيير status
+function applyElapsedToState(now) {
+  if (!state) return;
+
+  const elapsedMin = (now - state.lastStatusChange) / 60000;
+  if (elapsedMin <= 0) return;
+
+  switch (state.status) {
+    case "in_operation":
+      state.operationMinutes += elapsedMin;
+      break;
+    case "break":
+      state.breakUsedMinutes = Math.min(
+        BREAK_LIMIT_MIN,
+        state.breakUsedMinutes + elapsedMin
+      );
+      break;
+    case "meeting":
+      state.meetingMinutes += elapsedMin;
+      break;
+    case "handling":
+      state.handlingMinutes += elapsedMin;
+      break;
+    case "unavailable":
+      state.unavailableMinutes += elapsedMin;
+      break;
+  }
+
+  state.lastStatusChange = now;
+}
+
+// ---------- Firestore sync ----------
+
+async function syncStateToFirestore(liveUsage) {
+  try {
+    if (!currentUser || !state) return;
+
+    const today = state.day || getTodayKey();
+    const id = `${today}_${currentUser.id}`;
+
+    const usage = liveUsage || recomputeLiveUsage(Date.now());
+
+    const payload = {
+      userId: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+      day: today,
+      status: state.status,
+      loginTime: state.loginTime,
+      lastStatusChange: state.lastStatusChange,
+      breakUsedMinutes: usage.breakUsed,
+      operationMinutes: usage.operation,
+      meetingMinutes: usage.meeting,
+      handlingMinutes: usage.handling,
+      unavailableMinutes: usage.unavailable,
+      updatedAt: serverTimestamp()
+    };
+
+    await setDoc(doc(db, AGENT_DAYS_COL, id), payload, { merge: true });
+  } catch (err) {
+    console.error("syncStateToFirestore error:", err);
+  }
+}
+
+function subscribeSupervisorDashboard() {
+  if (!currentUser || currentUser.role !== "supervisor") return;
+  if (supUnsub) return; // already
+
+  const today = getTodayKey();
+  const q = query(
+    collection(db, AGENT_DAYS_COL),
+    where("day", "==", today),
+    where("role", "==", "agent"),
+    orderBy("userId")
+  );
+
+  supUnsub = onSnapshot(
+    q,
+    (snapshot) => {
+      const rows = [];
+      snapshot.forEach((d) => rows.push(d.data()));
+      buildSupervisorTableFromFirestore(rows);
+    },
+    (err) => {
+      console.error("Supervisor snapshot error:", err);
+    }
+  );
+}
+
+// ---------- Local storage state ----------
+
+function saveState() {
+  if (!state) return;
+  localStorage.setItem(STATE_KEY, JSON.stringify(state));
+}
+
+function loadStateForToday(userId) {
+  const today = getTodayKey();
+  const raw = localStorage.getItem(STATE_KEY);
+  if (!raw) return null;
+
+  try {
+    const s = JSON.parse(raw);
+    if (s && s.userId === userId && s.day === today) return s;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+// ---------- Login / init ----------
 
 document.addEventListener("DOMContentLoaded", () => {
   const loginForm = document.getElementById("login-form");
   const logoutBtn = document.getElementById("logout-btn");
   const statusSelect = document.getElementById("status-select");
 
-  // Restore session if exists
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
     try {
@@ -46,219 +248,40 @@ document.addEventListener("DOMContentLoaded", () => {
   statusSelect.addEventListener("change", handleStatusChange);
 });
 
-/* Utility: date key per day */
-
-function getTodayKey() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`; // e.g. 2025-12-10
-}
-
-/* State init / persistence */
-
 function initStateForUser() {
   const today = getTodayKey();
-  const raw = localStorage.getItem(STATE_KEY);
   const now = Date.now();
 
-  if (raw) {
-    try {
-      const saved = JSON.parse(raw);
+  const existing = loadStateForToday(currentUser.id);
 
-      if (saved.userId === currentUser.id && saved.day === today) {
-        state = saved;
-        ensureStateFields();
-        startTimer();
-        updateStatsStore(); // save initial stats snapshot
-        return;
-      }
-    } catch {
-      // ignore and create new state below
-    }
-  }
-
-  // New day / no state yet
-  state = {
-    userId: currentUser.id,
-    day: today,
-    status: "in_operation",
-    lastStatusChange: now,
-    breakUsedMinutes: 0,
-    loginTime: now,
-    operationMinutes: 0,
-    meetingMinutes: 0,
-    handlingMinutes: 0,
-    unavailableMinutes: 0,
-  };
-  saveState();
-  logLoginTime(); // for supervisor dashboard
-  updateStatsStore();
-  startTimer();
-}
-
-function ensureStateFields() {
-  if (!state) return;
-  if (state.operationMinutes == null) state.operationMinutes = 0;
-  if (state.meetingMinutes == null) state.meetingMinutes = 0;
-  if (state.handlingMinutes == null) state.handlingMinutes = 0;
-  if (state.unavailableMinutes == null) state.unavailableMinutes = 0;
-  if (state.breakUsedMinutes == null) state.breakUsedMinutes = 0;
-  if (!state.loginTime) state.loginTime = Date.now();
-}
-
-function saveState() {
-  if (!state) return;
-  localStorage.setItem(STATE_KEY, JSON.stringify(state));
-}
-
-/* Login log for supervisor */
-
-function logLoginTime() {
-  const raw = localStorage.getItem(LOGIN_LOG_KEY);
-  let log = {};
-  if (raw) {
-    try {
-      log = JSON.parse(raw) || {};
-    } catch {
-      log = {};
-    }
-  }
-
-  log[currentUser.id] = {
-    id: currentUser.id,
-    name: currentUser.name,
-    role: currentUser.role,
-    lastLogin: new Date(state.loginTime || Date.now()).toISOString(),
-    lastStatus: state.status,
-  };
-
-  localStorage.setItem(LOGIN_LOG_KEY, JSON.stringify(log));
-}
-
-/* Timer + live usage */
-
-function startTimer() {
-  if (timerId) clearInterval(timerId);
-  timerId = setInterval(tick, 10000); // every 10 seconds
-  tick(); // update immediately
-}
-
-function recomputeLiveUsage(now) {
-  if (!state) {
-    return {
-      breakUsed: 0,
-      operation: 0,
-      meeting: 0,
-      handling: 0,
-      unavailable: 0,
+  if (existing) {
+    state = existing;
+  } else {
+    state = {
+      userId: currentUser.id,
+      day: today,
+      status: "in_operation",
+      lastStatusChange: now,
+      breakUsedMinutes: 0,
+      operationMinutes: 0,
+      meetingMinutes: 0,
+      handlingMinutes: 0,
+      unavailableMinutes: 0,
+      loginTime: now
     };
-  }
-
-  let breakUsed = state.breakUsedMinutes || 0;
-  let op = state.operationMinutes || 0;
-  let meet = state.meetingMinutes || 0;
-  let hand = state.handlingMinutes || 0;
-  let unavail = state.unavailableMinutes || 0;
-
-  const elapsedMin = (now - state.lastStatusChange) / 60000;
-
-  if (elapsedMin > 0) {
-    switch (state.status) {
-      case "break":
-        breakUsed = Math.min(BREAK_LIMIT_MIN, breakUsed + elapsedMin);
-        break;
-      case "in_operation":
-        op += elapsedMin;
-        break;
-      case "meeting":
-        meet += elapsedMin;
-        break;
-      case "handling":
-        hand += elapsedMin;
-        break;
-      case "unavailable":
-        unavail += elapsedMin;
-        break;
-      default:
-        break;
-    }
-  }
-
-  return {
-    breakUsed,
-    operation: op,
-    meeting: meet,
-    handling: hand,
-    unavailable: unavail,
-  };
-}
-
-function tick() {
-  if (!state) return;
-
-  const now = Date.now();
-  const live = recomputeLiveUsage(now);
-
-  // If on break and reached limit → auto switch to Unavailable
-  if (state.status === "break" && live.breakUsed >= BREAK_LIMIT_MIN) {
-    state.breakUsedMinutes = BREAK_LIMIT_MIN;
-    state.status = "unavailable";
-    state.lastStatusChange = now;
     saveState();
-    logLoginTime();
-    updateStatsStore();
-    updateDashboardUI();
-    alert("Break limit (45 minutes) reached. Status set to Unavailable.");
-    return;
   }
 
-  updateBreakUI(live.breakUsed);
-  updateStatusMinutesUI(live.operation, live.meeting, live.handling);
-  updateStatsStore(live);
-}
-
-/* Stats store for supervisor (per day, per user) */
-
-function updateStatsStore(liveUsage) {
-  if (!currentUser || !state) return;
-
-  const today = getTodayKey();
-  const now = Date.now();
-  const live = liveUsage || recomputeLiveUsage(now);
-
-  const raw = localStorage.getItem(STATS_KEY);
-  let store = { day: today, users: {} };
-
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.day === today) {
-        store = parsed;
-      }
-    } catch {
-      // ignore, use fresh store
-    }
+  // supervisor live dashboard
+  if (currentUser.role === "supervisor") {
+    subscribeSupervisorDashboard();
   }
 
-  if (!store.users) store.users = {};
-
-  store.users[currentUser.id] = {
-    id: currentUser.id,
-    name: currentUser.name,
-    role: currentUser.role,
-    in_operation: live.operation,
-    break: live.breakUsed,
-    meeting: live.meeting,
-    handling: live.handling,
-    unavailable: live.unavailable,
-  };
-
-  localStorage.setItem(STATS_KEY, JSON.stringify(store));
+  startTimer();
+  syncStateToFirestore();
 }
 
-/* Screen switches */
+// ---------- Screen switching ----------
 
 function showLogin() {
   document.getElementById("login-screen").classList.remove("hidden");
@@ -271,11 +294,10 @@ function showDashboard() {
   updateDashboardUI();
 }
 
-/* Login / logout handlers */
+// ---------- Login / logout handlers ----------
 
-function handleLogin(event) {
-  event.preventDefault();
-
+function handleLogin(e) {
+  e.preventDefault();
   const idInput = document.getElementById("ccmsId");
   const pwInput = document.getElementById("password");
   const errorBox = document.getElementById("login-error");
@@ -289,18 +311,17 @@ function handleLogin(event) {
   }
 
   const user = USERS[id];
-
   if (!user) {
     showError("User not found. Please check your CCMS ID.");
     return;
   }
-
   if (user.password !== pw) {
     showError("Incorrect password. Please try again.");
     return;
   }
 
   errorBox.classList.add("hidden");
+
   currentUser = { id, name: user.name, role: user.role };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
@@ -313,9 +334,13 @@ function handleLogin(event) {
 
 function handleLogout() {
   localStorage.removeItem(USER_KEY);
+  if (timerId) clearInterval(timerId);
+  if (supUnsub) {
+    supUnsub();
+    supUnsub = null;
+  }
   currentUser = null;
   state = null;
-  if (timerId) clearInterval(timerId);
   showLogin();
 }
 
@@ -325,71 +350,77 @@ function showError(message) {
   errorBox.classList.remove("hidden");
 }
 
-/* Status change handler */
+// ---------- Status change ----------
 
-function handleStatusChange(e) {
+async function handleStatusChange(e) {
   if (!state || !currentUser) return;
 
   const newStatus = e.target.value;
   const now = Date.now();
 
-  // // Restrict Meeting to supervisors only
-  // if (newStatus === "meeting" && currentUser.role !== "supervisor") {
-  //   alert("Only Supervisors can use the Meeting status.");
-  //   e.target.value = state.status;
-  //   return;
-  // }
-
-  // Prevent more break than limit
-  if (newStatus === "break") {
-    if (state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01) {
-      alert("Daily break limit (45 minutes) already reached.");
-      e.target.value = state.status;
-      return;
-    }
+  // Meeting فقط للسوبرفايزر
+  if (newStatus === "meeting" && currentUser.role !== "supervisor") {
+    alert("Only Supervisors can use the Meeting status.");
+    e.target.value = state.status;
+    return;
   }
 
-  // Commit time spent in the previous status
-  const elapsedMin = (now - state.lastStatusChange) / 60000;
-
-  if (elapsedMin > 0) {
-    switch (state.status) {
-      case "break":
-        state.breakUsedMinutes = Math.min(
-          BREAK_LIMIT_MIN,
-          (state.breakUsedMinutes || 0) + elapsedMin
-        );
-        break;
-      case "in_operation":
-        state.operationMinutes =
-          (state.operationMinutes || 0) + elapsedMin;
-        break;
-      case "meeting":
-        state.meetingMinutes =
-          (state.meetingMinutes || 0) + elapsedMin;
-        break;
-      case "handling":
-        state.handlingMinutes =
-          (state.handlingMinutes || 0) + elapsedMin;
-        break;
-      case "unavailable":
-        state.unavailableMinutes =
-          (state.unavailableMinutes || 0) + elapsedMin;
-        break;
-      default:
-        break;
-    }
+  // Break limit check
+  if (newStatus === "break" && state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01) {
+    alert("Daily break limit (45 minutes) already reached.");
+    e.target.value = state.status;
+    return;
   }
+
+  // ثبّت الزمن الحالي في الحالة السابقة
+  applyElapsedToState(now);
 
   state.status = newStatus;
   state.lastStatusChange = now;
   saveState();
-  logLoginTime(); // update last status for supervisor
-  updateStatsStore();
+
+  const live = recomputeLiveUsage(now);
+  await syncStateToFirestore(live);
+
   updateDashboardUI();
 }
 
-/* Dashboard UI updates */
+// ---------- Timer / tick ----------
+
+function startTimer() {
+  if (timerId) clearInterval(timerId);
+  timerId = setInterval(tick, 10000);
+  tick();
+}
+
+async function tick() {
+  if (!state || !currentUser) return;
+
+  const now = Date.now();
+  const live = recomputeLiveUsage(now);
+
+  // enforce break limit → auto Unavailable
+  if (state.status === "break" && live.breakUsed >= BREAK_LIMIT_MIN) {
+    // ثبّت وغيّر الحالة لمرة واحدة
+    applyElapsedToState(now);
+    state.status = "unavailable";
+    state.lastStatusChange = now;
+    saveState();
+
+    alert("Break limit (45 minutes) reached. Status set to Unavailable.");
+
+    const newLive = recomputeLiveUsage(now);
+    await syncStateToFirestore(newLive);
+    updateDashboardUI();
+    return;
+  }
+
+  updateBreakUI(live.breakUsed);
+  updateStatusMinutesUI(live);
+  await syncStateToFirestore(live);
+}
+
+// ---------- Dashboard UI ----------
 
 function updateDashboardUI() {
   if (!state || !currentUser) return;
@@ -403,38 +434,20 @@ function updateDashboardUI() {
   welcomeTitle.textContent = `Welcome, ${currentUser.name}`;
   welcomeSubtitle.textContent = `Logged in as ${currentUser.role.toUpperCase()} (CCMS: ${currentUser.id})`;
 
-  const label = statusLabel(state.status);
-  statusValue.textContent = label;
-  statusValue.className = "status-value " + "status-" + state.status;
+  statusValue.textContent = statusLabel(state.status);
+  statusValue.className = "status-value status-" + state.status;
+
   statusSelect.value = state.status;
 
   const live = recomputeLiveUsage(Date.now());
   updateBreakUI(live.breakUsed);
-  updateStatusMinutesUI(live.operation, live.meeting, live.handling);
+  updateStatusMinutesUI(live);
 
-  // Show supervisor overview if role is supervisor
   if (currentUser.role === "supervisor") {
     supPanel.classList.remove("hidden");
-    buildSupervisorTable();
+    subscribeSupervisorDashboard();
   } else {
     supPanel.classList.add("hidden");
-  }
-}
-
-function statusLabel(code) {
-  switch (code) {
-    case "in_operation":
-      return "Operation";
-    case "break":
-      return "Break";
-    case "unavailable":
-      return "Unavailable";
-    case "meeting":
-      return "Meeting";
-    case "handling":
-      return "Handling";
-    default:
-      return code;
   }
 }
 
@@ -445,139 +458,82 @@ function updateBreakUI(usedMinutes) {
   const usedRounded = Math.floor(usedMinutes || 0);
   const remaining = Math.max(0, BREAK_LIMIT_MIN - usedRounded);
 
-  usedElem.textContent = usedRounded;
-  remainingElem.textContent = remaining;
+  if (usedElem) usedElem.textContent = usedRounded;
+  if (remainingElem) remainingElem.textContent = remaining;
 }
 
-function updateStatusMinutesUI(opMin, meetMin, handMin) {
-  const opElem = document.getElementById("op-min");
-  const meetElem = document.getElementById("meet-min");
-  const handElem = document.getElementById("hand-min");
+// live minutes labels في كرت الـ Agent نفسه (لو عندك سبانات لها IDs)
+function updateStatusMinutesUI(live) {
+  const opEl = document.getElementById("stat-op");
+  const brEl = document.getElementById("stat-break");
+  const meetEl = document.getElementById("stat-meet");
+  const handEl = document.getElementById("stat-handle");
+  const unEl = document.getElementById("stat-unavail");
 
-  if (opElem) opElem.textContent = Math.floor(opMin || 0);
-  if (meetElem) meetElem.textContent = Math.floor(meetMin || 0);
-  if (handElem) handElem.textContent = Math.floor(handMin || 0);
+  if (opEl) opEl.textContent = Math.floor(live.operation || 0);
+  if (brEl) brEl.textContent = Math.floor(live.breakUsed || 0);
+  if (meetEl) meetEl.textContent = Math.floor(live.meeting || 0);
+  if (handEl) handEl.textContent = Math.floor(live.handling || 0);
+  if (unEl) unEl.textContent = Math.floor(live.unavailable || 0);
 }
 
-/* Supervisor dashboard */
+// ---------- Supervisor table from Firestore ----------
 
-function formatMinutes(m) {
-  const total = Math.floor(m || 0);
-  const h = Math.floor(total / 60);
-  const min = total % 60;
-  if (h > 0) {
-    return `${h}h ${min}m`;
-  }
-  return `${min} min`;
-}
-
-function formatMinutesShort(m) {
-  const total = Math.floor(m || 0);
-  if (!total) return "0m";
-  const h = Math.floor(total / 60);
-  const min = total % 60;
-  return h ? `${h}h ${min}m` : `${min}m`;
-}
-
-function buildSupervisorTable() {
+function buildSupervisorTableFromFirestore(rows) {
   const body = document.getElementById("sup-table-body");
+  const totalsEl = document.getElementById("sup-totals");
+
+  if (!body) return;
   body.innerHTML = "";
-
-  // load login log
-  const rawLog = localStorage.getItem(LOGIN_LOG_KEY);
-  let log = {};
-  if (rawLog) {
-    try {
-      log = JSON.parse(rawLog) || {};
-    } catch {
-      log = {};
-    }
-  }
-
-  // load stats (per day, per user)
-  const today = getTodayKey();
-  const rawStats = localStorage.getItem(STATS_KEY);
-  let statsStore = { day: today, users: {} };
-  if (rawStats) {
-    try {
-      const parsed = JSON.parse(rawStats);
-      if (parsed && parsed.day === today) {
-        statsStore = parsed;
-      }
-    } catch {
-      // ignore
-    }
-  }
 
   const totals = {
     in_operation: 0,
     break: 0,
     meeting: 0,
-    unavailable: 0,
+    handling: 0,
+    unavailable: 0
   };
 
-  Object.entries(USERS).forEach(([id, user]) => {
-    // show only agents (اخفي السوبرفايزر)
-    if (user.role !== "agent") return;
-
-    const record = log[id] || {
-      id,
-      name: user.name,
-      role: user.role,
-      lastLogin: null,
-      lastStatus: "unavailable",
-    };
-
-    const statusCode = record.lastStatus || "unavailable";
-
-    // count totals by status (للـ summary اللي فوق)
-    if (totals[statusCode] != null) {
-      totals[statusCode] += 1;
-    }
-
-    const stats =
-      (statsStore.users && statsStore.users[id]) || {
-        in_operation: 0,
-        break: 0,
-        meeting: 0,
-        handling: 0,
-        unavailable: 0,
-      };
+  rows.forEach((record) => {
+    const status = record.status || "unavailable";
+    if (totals[status] != null) totals[status] += 1;
 
     const tr = document.createElement("tr");
 
     const nameTd = document.createElement("td");
-    nameTd.textContent = record.name;
+    nameTd.textContent = record.name || "";
 
     const idTd = document.createElement("td");
-    idTd.textContent = record.id;
+    idTd.textContent = record.userId || "";
 
     const roleTd = document.createElement("td");
-    roleTd.textContent = record.role.toUpperCase();
+    roleTd.textContent = (record.role || "").toUpperCase();
 
     const statusTd = document.createElement("td");
     const pill = document.createElement("span");
-    pill.className = "sup-status-pill " + (statusCode || "unavailable");
-    pill.textContent = statusLabel(statusCode || "unavailable");
+    pill.className = "sup-status-pill status-" + status;
+    pill.textContent = statusLabel(status);
     statusTd.appendChild(pill);
 
-    // NEW: كل حالة بعمود لوحده
     const opTd = document.createElement("td");
-    opTd.textContent = formatMinutesShort(stats.in_operation);
+    opTd.textContent = `${Math.floor(record.operationMinutes || 0)} min`;
 
-    const breakTd = document.createElement("td");
-    breakTd.textContent = formatMinutesShort(stats.break);
+    const brTd = document.createElement("td");
+    brTd.textContent = `${Math.floor(record.breakUsedMinutes || 0)} min`;
 
     const meetTd = document.createElement("td");
-    meetTd.textContent = formatMinutesShort(stats.meeting);
+    meetTd.textContent = `${Math.floor(record.meetingMinutes || 0)} min`;
 
-    const unavailTd = document.createElement("td");
-    unavailTd.textContent = formatMinutesShort(stats.unavailable);
+    const handTd = document.createElement("td");
+    handTd.textContent = `${Math.floor(record.handlingMinutes || 0)} min`;
+
+    const unTd = document.createElement("td");
+    unTd.textContent = `${Math.floor(record.unavailableMinutes || 0)} min`;
 
     const loginTd = document.createElement("td");
-    if (record.lastLogin) {
-      const date = new Date(record.lastLogin);
-      loginTd.textContent = date.toLocaleString();
+    if (record.loginTime) {
+      const d = new Date(record.loginTime);
+      loginTd.textContent = d.toLocaleString();
     } else {
       loginTd.textContent = "Never";
       loginTd.style.opacity = "0.6";
@@ -588,22 +544,21 @@ function buildSupervisorTable() {
     tr.appendChild(roleTd);
     tr.appendChild(statusTd);
     tr.appendChild(opTd);
-    tr.appendChild(breakTd);
+    tr.appendChild(brTd);
     tr.appendChild(meetTd);
-    tr.appendChild(unavailTd);
+    tr.appendChild(handTd);
+    tr.appendChild(unTd);
     tr.appendChild(loginTd);
 
     body.appendChild(tr);
   });
 
-  // update totals summary (In Operation / Break / Meeting / Unavailable)
-  const opSpan = document.getElementById("sum-op");
-  const breakSpan = document.getElementById("sum-break");
-  const meetSpan = document.getElementById("sum-meet");
-  const unavailSpan = document.getElementById("sum-unavail");
-
-  if (opSpan) opSpan.textContent = totals.in_operation || 0;
-  if (breakSpan) breakSpan.textContent = totals.break || 0;
-  if (meetSpan) meetSpan.textContent = totals.meeting || 0;
-  if (unavailSpan) unavailSpan.textContent = totals.unavailable || 0;
+  if (totalsEl) {
+    totalsEl.textContent =
+      `In Operation: ${totals.in_operation} | ` +
+      `Break: ${totals.break} | ` +
+      `Meeting: ${totals.meeting} | ` +
+      `Handling: ${totals.handling} | ` +
+      `Unavailable: ${totals.unavailable}`;
+  }
 }
