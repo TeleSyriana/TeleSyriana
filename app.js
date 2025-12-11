@@ -44,7 +44,7 @@ function getTodayKey() {
 function statusLabel(code) {
   switch (code) {
     case "in_operation":
-      return "In Operation";
+      return "Operating";
     case "break":
       return "Break";
     case "meeting":
@@ -550,3 +550,4 @@ function buildSupervisorTableFromFirestore(rows) {
   if (sumMeet) sumMeet.textContent = totals.meeting;
   if (sumUnavail) sumUnavail.textContent = totals.unavailable;
 }
+
