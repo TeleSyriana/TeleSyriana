@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TeleSyriana – Agent Access Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Header / Logo -->
+    <header class="app-header">
+      <div class="logo">Tele<span>Syriana</span></div>
+      <div class="tagline">Agent Access Panel</div>
+    </header>
+
+    <!-- LOGIN SCREEN -->
+    <main id="login-screen" class="card">
+      <h1>Login</h1>
+      <p class="subtitle">Please sign in with your CCMS ID and password.</p>
+
+      <div id="login-error" class="alert hidden"></div>
+
+      <form id="login-form">
+        <label>
+          CCMS ID
+          <input
+            type="text"
+            id="ccmsId"
+            autocomplete="off"
+            placeholder="e.g. 1001"
+            required
+          />
+        </label>
+
+        <label>
+          Password
+          <input
+            type="password"
+            id="password"
+            placeholder="Password"
+            required
+          />
+        </label>
+
+        <button type="submit" class="btn-primary">Login</button>
+      </form>
+
+      <p class="hint">
+        Demo users:<br />
+        <code>1001 / 1002 / 1003 / 1234</code> (Agent)<br />
+        <code>2001 / sup123</code> (Supervisor Dema)<br />
+        <code>2002 / sup123</code> (Supervisor Moustafa)
+      </p>
+    </main>
+
+    <!-- DASHBOARD SCREEN -->
+    <main id="dashboard-screen" class="card hidden">
+      <h1 id="welcome-title">Welcome</h1>
+      <p id="welcome-subtitle" class="subtitle"></p>
+
+      <div class="status-box">
+        <div class="status-label">Current status:</div>
+        <div id="status-value" class="status-value status-in_operation">
+          In Operation
+        </div>
+      </div>
+
+      <div class="status-controls">
+        <label for="status-select">Change status:</label>
+        <select id="status-select">
+          <option value="in_operation">In Operation</option>
+          <option value="break">Break</option>
+          <option value="unavailable">Unavailable</option>
+          <option value="meeting">Meeting</option>
+          <option value="handling">Handling</option>
+        </select>
+        <small class="status-note">
+          Break limit is <strong>45 minutes per day</strong>. After that, status
+          will automatically switch to <strong>Unavailable</strong> only if you didn't switch it manually on time.
+        </small>
+      </div>
+
+      <div class="break-box">
+        <div>Break used today: <span id="break-used">0</span> / 45 min</div>
+        <div>Remaining: <span id="break-remaining">45</span> min</div>
+      </div>
+      <div class="time-box">
+        <div>In Operation: <span id="op-min">0</span> min</div>
+        <div>Meeting: <span id="meet-min">0</span> min</div>
+        <div>Handling: <span id="hand-min">0</span> min</div>
+      </div>
+
+      <div class="actions">
+        <button id="logout-btn" class="btn-secondary">Logout</button>
+      </div>
+
+      <!-- SUPERVISOR PANEL -->
+      <section id="supervisor-panel" class="sup-panel hidden">
+        <h2>Team Overview</h2>
+        <p class="sup-note">
+          Latest known status and login time for each agent
+          (local demo – will be global later with Firebase).
+        </p>
+
+        <!-- NEW: totals summary -->
+        <div class="sup-summary">
+          <span>In Operation: <strong id="sum-op">0</strong></span>
+          <span>Break: <strong id="sum-break">0</strong></span>
+          <span>Meeting: <strong id="sum-meet">0</strong></span>
+          <span>Unavailable: <strong id="sum-unavail">0</strong></span>
+        </div>
+        <div class="sup-table-wrapper">
+          <table class="sup-table">
+            <thead>
+               <tr>
+               <th>Agent</th>
+               <th>CCMS</th>
+               <th>Role</th>
+               <th>Status</th>
+               <th>Operation</th>
+               <th>Break</th>
+               <th>Meeting</th>
+               <th>Unavailable</th>
+               <th>Last login</th>
+               </tr>
+             </thead>
+
+            <tbody id="sup-table-body">
+              <!-- Filled by JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
