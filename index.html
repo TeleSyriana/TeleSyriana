@@ -12,14 +12,12 @@
 
     <!-- HEADER -->
     <header class="app-header">
-      <!-- Main nav – يظهر فقط بعد تسجيل الدخول (من app.js) -->
       <nav id="main-nav" class="main-nav hidden">
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
         <button class="nav-link" data-page="messages">Messages</button>
         <button class="nav-link" data-page="settings">Settings</button>
 
-        <!-- Logout أعلى اليمين -->
         <div class="actions">
           <button id="logout-btn" class="nav-link">Logout</button>
         </div>
@@ -60,7 +58,7 @@
 
           <p class="hint">
             Demo users:<br />
-            <code>1001 / 1002 / 1003 / 1234</code> (Agents)<br />
+            <code>1001 / 1002 / 1003</code> (Agents)<br />
             <code>2001 / sup123</code> (Supervisor Dema)<br />
             <code>2002 / sup123</code> (Supervisor Moustafa)
           </p>
@@ -68,7 +66,7 @@
       </div>
     </main>
 
-    <!-- DASHBOARD (بعد تسجيل الدخول) -->
+    <!-- DASHBOARD -->
     <main id="dashboard-screen" class="hidden">
 
       <!-- HOME PAGE -->
@@ -93,9 +91,7 @@
                 <option value="meeting">In Meeting</option>
                 <option value="handling">Handling</option>
               </select>
-              <small class="status-note">
-                Break limit: <strong>45 minutes</strong>.
-              </small>
+              <small class="status-note">Break limit: <strong>45 minutes</strong>.</small>
             </div>
 
             <div class="break-box">
@@ -109,7 +105,6 @@
               <div>Handling: <span id="hand-min">0</span> min</div>
             </div>
 
-            <!-- SUPERVISOR PANEL -->
             <section id="supervisor-panel" class="sup-panel hidden">
               <h2>Team Overview</h2>
               <p class="sup-note">Live status for all agents today.</p>
@@ -169,11 +164,12 @@
         <section class="card messages-card">
           <div class="messages-layout">
 
-            <!-- ROOMS SIDEBAR -->
+            <!-- SIDEBAR -->
             <aside class="messages-sidebar">
               <div class="messages-sidebar-header">Rooms</div>
 
-              <button class="chat-room active" data-room="general">
+              <!-- ✅ ما في active افتراضي -->
+              <button class="chat-room" data-room="general">
                 <div class="chat-room-title">General chat</div>
                 <div class="chat-room-sub">All agents &amp; supervisors</div>
               </button>
@@ -185,61 +181,59 @@
                 <div class="chat-room-sub">Internal notes</div>
               </button>
 
-              <div class="messages-sidebar-header small">Direct profiles</div>
-
-              <div class="chat-profile">
-                <div class="chat-avatar small role-agent">A1</div>
-                <div class="chat-profile-text">
-                  <div class="chat-profile-name">Agent 01</div>
-                  <div class="chat-profile-role">Agent</div>
+              <!-- ✅ ChatGPT room -->
+              <button class="chat-room" data-room="ai">
+                <div class="chat-room-title">
+                  ChatGPT 5 <span class="room-badge">Coming soon</span>
                 </div>
-              </div>
+                <div class="chat-room-sub">AI assistant room</div>
+              </button>
 
-              <div class="chat-profile">
-                <div class="chat-avatar small role-agent">A2</div>
-                <div class="chat-profile-text">
-                  <div class="chat-profile-name">Agent 02</div>
-                  <div class="chat-profile-role">Agent</div>
-                </div>
-              </div>
+              <div class="messages-sidebar-header small">Direct messages</div>
 
-              <div class="chat-profile">
-                <div class="chat-avatar small role-supervisor">SD</div>
-                <div class="chat-profile-text">
-                  <div class="chat-profile-name">Supervisor Dema</div>
-                  <div class="chat-profile-role">Supervisor</div>
-                </div>
-              </div>
+              <!-- ✅ DM buttons (نربطها بالـ messages.js) -->
+              <button class="chat-dm" data-dm="1001">
+                <div class="chat-room-title">Agent 01</div>
+                <div class="chat-room-sub">Direct chat</div>
+              </button>
 
-              <!-- ChatGPT assistant (personal, not in group) -->
-              <div class="chat-profile">
-                <div class="chat-avatar small role-supervisor">AI</div>
-                <div class="chat-profile-text">
-                  <div class="chat-profile-name">ChatGPT 5</div>
-                  <div class="chat-profile-role">AI assistant (coming soon)</div>
-                </div>
-              </div>
+              <button class="chat-dm" data-dm="1002">
+                <div class="chat-room-title">Agent 02</div>
+                <div class="chat-room-sub">Direct chat</div>
+              </button>
+
+              <button class="chat-dm" data-dm="1003">
+                <div class="chat-room-title">Agent 03</div>
+                <div class="chat-room-sub">Direct chat</div>
+              </button>
+
+              <button class="chat-dm" data-dm="2001">
+                <div class="chat-room-title">Supervisor Dema</div>
+                <div class="chat-room-sub">Direct chat</div>
+              </button>
+
+              <button class="chat-dm" data-dm="2002">
+                <div class="chat-room-title">Supervisor Moustafa</div>
+                <div class="chat-room-sub">Direct chat</div>
+              </button>
             </aside>
 
             <!-- CHAT AREA -->
             <div class="messages-main">
               <header class="chat-header">
                 <div>
-                  <div class="chat-room-name" id="chat-room-name">General chat</div>
-                  <div class="chat-room-desc" id="chat-room-desc">
-                    Be respectful • No customer data
-                  </div>
+                  <div class="chat-room-name" id="chat-room-name">Messages</div>
+                  <div class="chat-room-desc" id="chat-room-desc">Start chatting…</div>
                 </div>
               </header>
 
+              <!-- ✅ Empty state -->
+              <div id="chat-empty" style="padding:10px 2px; font-size:13px; color:#777;">
+                Select a room or a person from the left to start chatting.
+              </div>
+
               <!-- Messages list -->
               <div id="chat-message-list" class="chat-message-list"></div>
-              <div id="chat-typing" class="hidden">typing...</div>
-
-<button id="chat-scroll-down" class="hidden">↓</button>
-
-
-
 
               <!-- Input -->
               <form id="chat-form" class="chat-input-row">
@@ -249,15 +243,12 @@
                   autocomplete="off"
                   placeholder="Type a message…"
                   class="chat-input"
+                  disabled
                 />
-                <button id="float-chat-toggle" class="float-btn hidden" style="position:relative;">
-  💬
-  <span id="float-chat-badge" class="hidden"></span>
-</button>
-
+                <button type="submit" class="chat-send-btn" disabled>Send</button>
               </form>
-            </div>
 
+            </div>
           </div>
         </section>
       </section>
@@ -292,7 +283,7 @@
     </main>
   </div>
 
-  <!-- FLOATING CHAT BUBBLE (يظهر فقط بعد تسجيل الدخول ومن صفحات معيّنة من خلال JS) -->
+  <!-- ✅ FLOATING CHAT BUBBLE (الوحيد في الصفحة) -->
   <button id="float-chat-toggle" class="floating-chat-toggle hidden">💬</button>
 
   <!-- FLOATING MINI CHAT -->
@@ -304,20 +295,12 @@
 
     <div class="floating-chat-body">
       <div class="floating-chat-room-name">General chat</div>
-      <div class="floating-chat-note">
-        Compact mode • ChatGPT 5 coming soon.
-      </div>
-
+      <div class="floating-chat-note">Compact mode • ChatGPT 5 coming soon.</div>
       <div id="float-chat-messages" class="floating-chat-messages"></div>
     </div>
 
     <form id="float-chat-form" class="floating-chat-input-row">
-      <input
-        id="float-chat-input"
-        type="text"
-        autocomplete="off"
-        placeholder="Quick message…"
-      />
+      <input id="float-chat-input" type="text" autocomplete="off" placeholder="Quick message…" />
       <button type="submit">Send</button>
     </form>
   </div>
@@ -326,8 +309,3 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
-
-
-
-
-
