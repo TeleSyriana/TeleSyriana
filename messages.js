@@ -43,10 +43,8 @@ document.addEventListener("DOMContentLoaded", () => {
     supBtn.classList.add("hidden");
   }
 
-  // إظهار زر البالونة فقط إذا في مستخدم داخل
-  if (floatToggle && currentUser) {
-    floatToggle.classList.remove("hidden");
-  }
+  // ملاحظة: هون ما منغير hidden للـ floatToggle
+  // إظهار/إخفاء الأيقونة رح يصير من app.js بس حسب الصفحة
 
   // تعريف وصف الغرف
   const ROOM_META = {
@@ -64,7 +62,15 @@ document.addEventListener("DOMContentLoaded", () => {
   roomButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const room = btn.dataset.room;
-      switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList);
+      switchRoom(
+        room,
+        ROOM_META,
+        roomButtons,
+        roomNameEl,
+        roomDescEl,
+        listEl,
+        floatList
+      );
     });
   });
 
@@ -82,7 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // شات عائم – فتح/إغلاق
+  // شات عائم – فتح/إغلاق (لو الأيقونة ظاهرة من app.js)
   if (floatToggle && floatPanel) {
     floatToggle.addEventListener("click", () => {
       floatPanel.classList.toggle("hidden");
@@ -118,7 +124,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderMainMessages(listEl);
   renderFloatingMessages(floatList);
 
-  // ممكن نضيف رسالة ترحيبية واحدة بالـ General أول مرة:
+  // رسالة ترحيبية أول مرة بالـ General
   if (MESSAGE_STORE.general.length === 0) {
     MESSAGE_STORE.general.push({
       id: Date.now(),
@@ -149,7 +155,15 @@ function loadUserFromStorage() {
   }
 }
 
-function switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList) {
+function switchRoom(
+  room,
+  ROOM_META,
+  roomButtons,
+  roomNameEl,
+  roomDescEl,
+  listEl,
+  floatList
+) {
   if (!MESSAGE_STORE[room]) return;
   currentRoom = room;
   applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
@@ -164,9 +178,10 @@ function switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl
 function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
   const meta = ROOM_META[room] || {};
   if (roomNameEl) roomNameEl.textContent = meta.name || room;
-  if (roomDescEl) roomDescEl.textContent =
-    meta.desc ||
-    "Internal chat room.";
+  if (roomDescEl) {
+    roomDescEl.textContent =
+      meta.desc || "Internal chat room.";
+  }
 }
 
 function setActiveRoomButton(room, roomButtons) {
@@ -267,5 +282,3 @@ function formatTime(ts) {
   const d = ts instanceof Date ? ts : new Date(ts);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
-
-
