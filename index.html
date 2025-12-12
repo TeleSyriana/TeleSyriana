@@ -12,14 +12,17 @@
 
     <!-- HEADER -->
     <header class="app-header">
+      <!-- Main nav – يظهر فقط بعد تسجيل الدخول (من app.js) -->
       <nav id="main-nav" class="main-nav hidden">
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
         <button class="nav-link" data-page="messages">Messages</button>
         <button class="nav-link" data-page="settings">Settings</button>
+
+        <!-- Logout أعلى اليمين -->
         <div class="actions">
-              <button id="logout-btn" class="nav-link">Logout</button>
-            </div>
+          <button id="logout-btn" class="nav-link">Logout</button>
+        </div>
       </nav>
 
       <div class="header-right">
@@ -31,7 +34,6 @@
     <!-- LOGIN SCREEN -->
     <main id="login-screen">
       <div class="login-layout">
-        
         <section class="login-banner">
           <img src="images/event.png" class="banner-img" alt="Event Banner" />
         </section>
@@ -43,11 +45,13 @@
           <div id="login-error" class="alert hidden"></div>
 
           <form id="login-form">
-            <label>CCMS ID
+            <label>
+              CCMS ID
               <input type="text" id="ccmsId" placeholder="e.g. 1001" required />
             </label>
 
-            <label>Password
+            <label>
+              Password
               <input type="password" id="password" placeholder="Password" required />
             </label>
 
@@ -55,17 +59,16 @@
           </form>
 
           <p class="hint">
-            Demo users:<br>
-            <code>1001 / 1002 / 1003 / 1234</code> (Agents)<br>
-            <code>2001 / sup123</code> (Supervisor Dema)<br>
+            Demo users:<br />
+            <code>1001 / 1002 / 1003 / 1234</code> (Agents)<br />
+            <code>2001 / sup123</code> (Supervisor Dema)<br />
             <code>2002 / sup123</code> (Supervisor Moustafa)
           </p>
         </section>
-
       </div>
     </main>
 
-    <!-- DASHBOARD -->
+    <!-- DASHBOARD (بعد تسجيل الدخول) -->
     <main id="dashboard-screen" class="hidden">
 
       <!-- HOME PAGE -->
@@ -90,7 +93,9 @@
                 <option value="meeting">In Meeting</option>
                 <option value="handling">Handling</option>
               </select>
-              <small class="status-note">Break limit: <strong>45 minutes</strong>.</small>
+              <small class="status-note">
+                Break limit: <strong>45 minutes</strong>.
+              </small>
             </div>
 
             <div class="break-box">
@@ -103,7 +108,6 @@
               <div>Meeting: <span id="meet-min">0</span> min</div>
               <div>Handling: <span id="hand-min">0</span> min</div>
             </div>
-
 
             <!-- SUPERVISOR PANEL -->
             <section id="supervisor-panel" class="sup-panel hidden">
@@ -209,18 +213,16 @@
 
               <!-- ChatGPT assistant (personal, not in group) -->
               <div class="chat-profile">
-  <div class="chat-avatar small role-supervisor">AI</div>
-  <div class="chat-profile-text">
-    <div class="chat-profile-name">ChatGPT 5</div>
-    <div class="chat-profile-role">AI assistant (coming soon)</div>
-  </div>
-</div>
-
+                <div class="chat-avatar small role-supervisor">AI</div>
+                <div class="chat-profile-text">
+                  <div class="chat-profile-name">ChatGPT 5</div>
+                  <div class="chat-profile-role">AI assistant (coming soon)</div>
+                </div>
+              </div>
             </aside>
 
             <!-- CHAT AREA -->
             <div class="messages-main">
-
               <header class="chat-header">
                 <div>
                   <div class="chat-room-name" id="chat-room-name">General chat</div>
@@ -244,8 +246,8 @@
                 />
                 <button type="submit" class="chat-send-btn">Send</button>
               </form>
-
             </div>
+
           </div>
         </section>
       </section>
@@ -257,15 +259,18 @@
           <p class="subtitle">Update personal info</p>
 
           <form id="settings-form">
-            <label>Full Name
+            <label>
+              Full Name
               <input type="text" id="set-name" disabled />
             </label>
 
-            <label>Birthday
+            <label>
+              Birthday
               <input type="date" id="set-birthday" />
             </label>
 
-            <label>Notes
+            <label>
+              Notes
               <textarea id="set-notes" placeholder="Report any issue..."></textarea>
             </label>
 
@@ -277,7 +282,7 @@
     </main>
   </div>
 
-  <!-- FLOATING CHAT BUBBLE (يتم التحكم بظهورها من app.js فقط) -->
+  <!-- FLOATING CHAT BUBBLE (يظهر فقط بعد تسجيل الدخول ومن صفحات معيّنة من خلال JS) -->
   <button id="float-chat-toggle" class="floating-chat-toggle hidden">💬</button>
 
   <!-- FLOATING MINI CHAT -->
@@ -297,7 +302,12 @@
     </div>
 
     <form id="float-chat-form" class="floating-chat-input-row">
-      <input id="float-chat-input" type="text" autocomplete="off" placeholder="Quick message…" />
+      <input
+        id="float-chat-input"
+        type="text"
+        autocomplete="off"
+        placeholder="Quick message…"
+      />
       <button type="submit">Send</button>
     </form>
   </div>
@@ -306,9 +316,4 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
-
-
-
-
-
 
