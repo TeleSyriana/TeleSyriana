@@ -547,6 +547,7 @@ input:focus, textarea:focus{
   color:#222;
   white-space:pre-wrap;
   word-wrap:break-word;
+  font-size: 13px;
 }
 
 /* my messages: pink */
@@ -602,7 +603,7 @@ input:focus, textarea:focus{
   cursor:pointer;
   background:linear-gradient(135deg,var(--pink),var(--pink2));
   color:#fff;
-  font-size:15px;
+  font-size:25px;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -700,4 +701,5 @@ input:focus, textarea:focus{
   .messages-layout{ flex-direction:column; }
   .messages-sidebar{ width:100%; border-right:none; border-bottom:1px solid var(--line); }
 }
+
 
