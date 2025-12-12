@@ -12,13 +12,16 @@ let currentRoom = "general";
 let unsubscribeMain = null;
 let unsubscribeFloat = null;
 
-// ====== "بديل limit": نحن منعرض فقط آخر N بالواجهة ======
-const PAGE_SIZE = 50;      // عدد الرسائل اللي منعرضها بالدفعة
-const MAX_RENDER = 600;    // حماية: ما نعرض أكتر من هيك بالواجهة
+// ====== "بديل limit": نعرض فقط آخر N بالواجهة ======
+const PAGE_SIZE = 50;
+const MAX_RENDER = 600;
 
-// مخزن محلي لرسائل الغرفة الحالية (مرتبة تصاعدي: القديم -> الجديد)
+// cache للغرفة الحالية (ASC: القديم -> الجديد)
 let roomCache = [];
-let renderedCount = 0;     // كم رسالة معروضة حالياً
+let renderedCount = 0;
+
+// لمنع تكرار ربط السكرول على نفس list
+let scrollBoundEl = null;
 
 function getUserFromStorage() {
   try {
@@ -40,67 +43,74 @@ function formatTime(ts) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function ensureTopLoader(listEl) {
+  let loader = listEl.querySelector("#chat-top-loader");
+  if (!loader) {
+    loader = document.createElement("div");
+    loader.id = "chat-top-loader";
+    loader.style.display = "none";
+    loader.style.padding = "8px";
+    loader.style.textAlign = "center";
+    loader.style.fontSize = "12px";
+    loader.style.color = "#777";
+    loader.textContent = "Loading older messages…";
+    listEl.prepend(loader);
+  }
+  return loader;
+}
+
+function createMessageNode(m, showRole) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "chat-message";
+  if (currentUser && m.userId === currentUser.id) wrapper.classList.add("me");
+
+  const meta = document.createElement("div");
+  meta.className = "chat-message-meta";
+  meta.textContent = showRole
+    ? `${m.name} (${m.role}) • ${formatTime(m.ts)}`
+    : `${m.name} • ${formatTime(m.ts)}`;
+
+  const text = document.createElement("div");
+  text.className = "chat-message-text";
+  text.textContent = m.text || "";
+
+  wrapper.appendChild(meta);
+  wrapper.appendChild(text);
+  return wrapper;
+}
+
+function renderFresh(listEl, msgs, showRole) {
+  // حافظ على اللودر إذا موجود
+  const loader = ensureTopLoader(listEl);
+
+  // امسح كلشي ما عدا اللودر
+  Array.from(listEl.children).forEach((ch) => {
+    if (ch !== loader) ch.remove();
+  });
+
+  const frag = document.createDocumentFragment();
+  msgs.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
+  listEl.appendChild(frag);
+
+  listEl.scrollTop = listEl.scrollHeight;
+}
+
 function renderChunkToTop(listEl, items, showRole) {
-  // يضيف عناصر فوق بدون ما يضيع مكان السكرول
+  const loader = ensureTopLoader(listEl);
+
   const prevScrollHeight = listEl.scrollHeight;
   const prevScrollTop = listEl.scrollTop;
 
   const frag = document.createDocumentFragment();
+  items.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
 
-  items.forEach((m) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "chat-message";
-    if (currentUser && m.userId === currentUser.id) wrapper.classList.add("me");
+  // ✅ حط الرسائل بعد اللودر مباشرة (مو قبله)
+  const afterLoader = loader.nextSibling;
+  if (afterLoader) listEl.insertBefore(frag, afterLoader);
+  else listEl.appendChild(frag);
 
-    const meta = document.createElement("div");
-    meta.className = "chat-message-meta";
-    meta.textContent = showRole
-      ? `${m.name} (${m.role}) • ${formatTime(m.ts)}`
-      : `${m.name} • ${formatTime(m.ts)}`;
-
-    const text = document.createElement("div");
-    text.className = "chat-message-text";
-    text.textContent = m.text || "";
-
-    wrapper.appendChild(meta);
-    wrapper.appendChild(text);
-    frag.appendChild(wrapper);
-  });
-
-  // حطهم بالبداية
-  listEl.prepend(frag);
-
-  // رجّع نفس مكان السكرول تقريباً
   const newScrollHeight = listEl.scrollHeight;
   listEl.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
-}
-
-function renderFresh(listEl, msgs, showRole) {
-  listEl.innerHTML = "";
-  const frag = document.createDocumentFragment();
-
-  msgs.forEach((m) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "chat-message";
-    if (currentUser && m.userId === currentUser.id) wrapper.classList.add("me");
-
-    const meta = document.createElement("div");
-    meta.className = "chat-message-meta";
-    meta.textContent = showRole
-      ? `${m.name} (${m.role}) • ${formatTime(m.ts)}`
-      : `${m.name} • ${formatTime(m.ts)}`;
-
-    const text = document.createElement("div");
-    text.className = "chat-message-text";
-    text.textContent = m.text || "";
-
-    wrapper.appendChild(meta);
-    wrapper.appendChild(text);
-    frag.appendChild(wrapper);
-  });
-
-  listEl.appendChild(frag);
-  listEl.scrollTop = listEl.scrollHeight;
 }
 
 function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
@@ -113,12 +123,44 @@ function setActiveRoomButton(room, roomButtons) {
   roomButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.room === room));
 }
 
+// ====== تحميل قديم عند scroll up (من الكاش فقط) ======
+function attachScrollLoader(listEl) {
+  if (!listEl) return;
+
+  // ✅ لا تربطه مرتين على نفس الـ element
+  if (scrollBoundEl === listEl) return;
+  scrollBoundEl = listEl;
+
+  const loader = ensureTopLoader(listEl);
+
+  listEl.addEventListener("scroll", () => {
+    if (listEl.scrollTop > 40) return;
+
+    const total = roomCache.length;
+    const alreadyRenderedStartIndex = Math.max(0, total - renderedCount);
+
+    if (alreadyRenderedStartIndex <= 0) return;      // ما في أقدم
+    if (renderedCount >= MAX_RENDER) return;         // حماية
+
+    loader.style.display = "block";
+
+    const addCount = Math.min(PAGE_SIZE, alreadyRenderedStartIndex);
+    const newStart = alreadyRenderedStartIndex - addCount;
+    const chunk = roomCache.slice(newStart, alreadyRenderedStartIndex);
+
+    renderedCount += chunk.length;
+    renderChunkToTop(listEl, chunk, true);
+
+    setTimeout(() => (loader.style.display = "none"), 150);
+  });
+}
+
 // ====== الاشتراك الرئيسي ======
 function subscribeMainToRoom(room, listEl) {
   if (!listEl) return;
   unsubscribeMain?.();
 
-  // ✅ حتى ما يحتاج Index جديد عندك: room ASC + ts DESC كان ظاهر بالصور
+  // ✅ متوافق مع index عندك: room ASC + ts DESC
   const qRoom = query(
     collection(db, MESSAGES_COL),
     where("room", "==", room),
@@ -130,22 +172,19 @@ function subscribeMainToRoom(room, listEl) {
     (snapshot) => {
       setCurrentUser();
 
-      // جيب كل الرسائل من السيرفر (بدون limit) بس رح نتحكم بالعرض فقط
       const all = [];
       snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
 
-      // حالياً all مرتب DESC (الجديد -> القديم) بسبب orderBy desc
-      // نحن بدنا cache ASC (القديم -> الجديد)
+      // query رجّع DESC => نخليه cache ASC
       all.reverse();
       roomCache = all;
 
-      // نعرض آخر PAGE_SIZE فقط (أحدث)
       renderedCount = Math.min(PAGE_SIZE, roomCache.length);
       const startIndex = Math.max(0, roomCache.length - renderedCount);
       const initial = roomCache.slice(startIndex);
 
       renderFresh(listEl, initial, true);
-      attachScrollLoader(listEl); // فعّل التحميل عند السكرول لفوق
+      attachScrollLoader(listEl);
     },
     (err) => {
       console.error("Main snapshot error:", err);
@@ -159,6 +198,7 @@ function subscribeFloatToGeneral(floatList) {
   if (!floatList) return;
   unsubscribeFloat?.();
 
+  // نفس فكرة index
   const qGeneral = query(
     collection(db, MESSAGES_COL),
     where("room", "==", "general"),
@@ -171,55 +211,13 @@ function subscribeFloatToGeneral(floatList) {
     snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
     all.reverse();
 
-    // نعرض فقط آخر 30 بالـ floating (بدون limit)
     const last = all.slice(Math.max(0, all.length - 30));
-    renderFresh(floatList, last, false);
-  });
-}
-
-// ====== تحميل قديم عند scroll up (من الكاش، بدون أي query إضافي) ======
-let scrollBound = false;
-function attachScrollLoader(listEl) {
-  if (scrollBound) return;
-  scrollBound = true;
-
-  // Loading indicator فوق
-  const loader = document.createElement("div");
-  loader.id = "chat-top-loader";
-  loader.style.display = "none";
-  loader.style.padding = "8px";
-  loader.style.textAlign = "center";
-  loader.style.fontSize = "12px";
-  loader.style.color = "#777";
-  loader.textContent = "Loading older messages…";
-  listEl.prepend(loader);
-
-  listEl.addEventListener("scroll", () => {
-    // إذا وصل لفوق تقريباً
-    if (listEl.scrollTop <= 40) {
-      // إذا ما في شي أقدم
-      const total = roomCache.length;
-      const alreadyRenderedStartIndex = Math.max(0, total - renderedCount);
-      if (alreadyRenderedStartIndex <= 0) return;
-
-      // لا تخلّيها تكبر بلا حدود
-      if (renderedCount >= MAX_RENDER) return;
-
-      loader.style.display = "block";
-
-      // حمّل دفعة أقدم من الكاش
-      const addCount = Math.min(PAGE_SIZE, alreadyRenderedStartIndex);
-      const newStart = alreadyRenderedStartIndex - addCount;
-      const chunk = roomCache.slice(newStart, alreadyRenderedStartIndex);
-
-      renderedCount += chunk.length;
-
-      // أضفها فوق مع الحفاظ على مكان السكرول
-      renderChunkToTop(listEl, chunk, true);
-
-      // اخفي اللودر بسرعة
-      setTimeout(() => (loader.style.display = "none"), 150);
-    }
+    // showRole = false في العائم
+    floatList.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    last.forEach((m) => frag.appendChild(createMessageNode(m, false)));
+    floatList.appendChild(frag);
+    floatList.scrollTop = floatList.scrollHeight;
   });
 }
 
@@ -244,10 +242,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setCurrentUser();
 
-  // scroll
+  // scroll styles
   if (listEl) {
     listEl.style.overflowY = "auto";
     listEl.style.maxHeight = "60vh";
+  }
+  if (floatList) {
+    floatList.style.overflowY = "auto";
+    floatList.style.maxHeight = "220px";
   }
 
   const ROOM_META = {
@@ -261,21 +263,21 @@ document.addEventListener("DOMContentLoaded", () => {
     },
   };
 
+  // اخفاء supervisors عن agent
   const supBtn = document.querySelector('.chat-room[data-room="supervisors"]');
   if (supBtn && (!currentUser || currentUser.role !== "supervisor")) supBtn.classList.add("hidden");
 
-  // Floating toggle (إذا بدك تخليه حسب app.js، خليه hidden وطلعوا من app.js)
+  // ✅ pop chat: بس اذا العناصر موجودة
   if (floatToggle && currentUser) floatToggle.classList.remove("hidden");
 
   roomButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const room = btn.dataset.room;
       currentRoom = room;
+
       applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
       setActiveRoomButton(room, roomButtons);
 
-      // reset scroll binding for new list (بس نخليها مرة وحدة)
-      scrollBound = false;
       subscribeMainToRoom(room, listEl);
     });
   });
@@ -288,16 +290,20 @@ document.addEventListener("DOMContentLoaded", () => {
     setCurrentUser();
     if (!currentUser) return alert("Please login first.");
 
-    await addDoc(collection(db, MESSAGES_COL), {
-      room: currentRoom,
-      text,
-      userId: currentUser.id,
-      name: currentUser.name,
-      role: currentUser.role,
-      ts: serverTimestamp(),
-    });
-
-    inputEl.value = "";
+    try {
+      await addDoc(collection(db, MESSAGES_COL), {
+        room: currentRoom,
+        text,
+        userId: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+        ts: serverTimestamp(),
+      });
+      inputEl.value = "";
+    } catch (err) {
+      console.error("Error sending message", err);
+      alert("Error sending message: " + err.message);
+    }
   });
 
   floatToggle?.addEventListener("click", () => floatPanel?.classList.toggle("hidden"));
@@ -311,16 +317,20 @@ document.addEventListener("DOMContentLoaded", () => {
     setCurrentUser();
     if (!currentUser) return alert("Please login first.");
 
-    await addDoc(collection(db, MESSAGES_COL), {
-      room: "general",
-      text,
-      userId: currentUser.id,
-      name: currentUser.name,
-      role: currentUser.role,
-      ts: serverTimestamp(),
-    });
-
-    floatInput.value = "";
+    try {
+      await addDoc(collection(db, MESSAGES_COL), {
+        room: "general",
+        text,
+        userId: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+        ts: serverTimestamp(),
+      });
+      floatInput.value = "";
+    } catch (err) {
+      console.error("Error sending message (float)", err);
+      alert("Error sending message: " + err.message);
+    }
   });
 
   applyRoomMeta(currentRoom, ROOM_META, roomNameEl, roomDescEl);
