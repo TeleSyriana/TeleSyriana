@@ -1,4 +1,11 @@
 // firebase.js – TeleSyriana
+import { limit, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+export const fs = {
+  ...
+  addDoc,
+  limit
+};
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
@@ -42,5 +49,6 @@ export const fs = {
   serverTimestamp,
   addDoc,          // 👈 هون كمان
 };
+
 
 
