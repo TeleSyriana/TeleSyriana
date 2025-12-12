@@ -181,8 +181,7 @@ function subscribeMainToRoom(room, listEl) {
   const qRoom = query(
     collection(db, MESSAGES_COL),
     where("room", "==", room),
-    orderBy("ts", "desc"),
-    limit(100)
+    orderBy("ts", "desc")
   );
 
   unsubscribeMain = onSnapshot(
@@ -208,8 +207,7 @@ function subscribeFloatToGeneral(floatList) {
   const qGeneral = query(
     collection(db, MESSAGES_COL),
     where("room", "==", "general"),
-    orderBy("ts", "asc"),
-    limit(50)
+    orderBy("ts", "asc")
   );
 
   unsubscribeFloat = onSnapshot(
@@ -296,6 +294,7 @@ function formatTime(ts) {
   const dateObj = ts.toDate ? ts.toDate() : new Date(ts);
   return dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
 
 
 
