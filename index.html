@@ -244,7 +244,11 @@
                   placeholder="Type a message…"
                   class="chat-input"
                 />
-                <button type="submit" class="chat-send-btn">Send</button>
+                <button id="float-chat-toggle" class="float-btn hidden" style="position:relative;">
+  💬
+  <span id="float-chat-badge" class="hidden"></span>
+</button>
+
               </form>
             </div>
 
@@ -316,4 +320,5 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
 
