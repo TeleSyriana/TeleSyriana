@@ -442,109 +442,86 @@ textarea:focus {
 .sup-status-pill.status-unavailable { background: #e2e3e5; color: #505050; }
 
 /* =========================
-   Messages / Chat page
-========================= */
-.page-section { margin-top: 10px; }
-.messages-card { padding: 0; }
+/* ========== CHAT FINAL UI ========== */
 
-.messages-layout {
+.chat-message {
   display: flex;
-  min-height: 520px;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: 100%;
 }
 
-/* Sidebar */
-.messages-sidebar {
-  width: 270px;
-  border-right: 1px solid var(--line);
-  padding: 16px 14px;
-  background: var(--soft);
-  border-top-left-radius: 18px;
-  border-bottom-left-radius: 18px;
+.chat-message.me {
+  flex-direction: row-reverse;
 }
 
-.messages-sidebar-header {
+/* avatar */
+.msg-avatar {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #ff2c8b;
+  color: #fff;
   font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #999;
-  margin-bottom: 10px;
-}
-
-.messages-sidebar-header.small { margin-top: 18px; }
-
-.chat-room,
-.chat-dm {
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: transparent;
-  border-radius: 12px;
-  padding: 10px 10px;
-  margin-bottom: 6px;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.chat-room:hover,
-.chat-dm:hover { background: #f0f0f0; }
-
-.chat-room.active,
-.chat-dm.active { background: #ffe5f3; }
-
-.chat-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.chat-row-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.chat-room-title {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.chat-room-sub {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-/* Badge */
-.room-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  background: #fff3cd;
-  color: #856404;
-}
-
-/* Avatar */
-.chat-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 800;
-  color: #fff;
   flex: 0 0 auto;
 }
 
-.chat-avatar.role-agent { background: #4c9fff; }
-.chat-avatar.role-supervisor { background: var(--pink); }
-.chat-avatar.role-ai { background: #6b4cff; }
-.chat-avatar.role-room { background: #8c8c8c; }
+/* status dot (iOS style) */
+.avatar-status-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.status-online { background: #34c759; }
+.status-break { background: #ff9f0a; }
+.status-offline { background: #8e8e93; }
+
+/* body */
+.msg-body {
+  display: flex;
+  flex-direction: column;
+  max-width: 70%;
+}
+
+/* name + time */
+.msg-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 2px;
+}
+
+.msg-name {
+  font-weight: 600;
+  color: #333;
+}
+
+/* bubble */
+.chat-message-text {
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: #f1f1f1;
+  font-size: 13px;
+  color: #222;
+}
+
+/* my messages */
+.chat-message.me .chat-message-text {
+  background: linear-gradient(135deg, #ff2c8b, #ff5db6);
+  color: #fff;
+}
+
 
 /* Status dot (sidebar) */
 .status-dot{
@@ -867,6 +844,7 @@ textarea:focus {
     width: calc(100vw - 20px);
   }
 }
+
 
 
 
