@@ -512,6 +512,20 @@ textarea:focus {
 }
 
 /* ========== Messages / Chat page ========== */
+.status-dot{
+  width:10px;height:10px;border-radius:50%;
+  display:inline-block;
+  margin-right:8px;
+  flex:0 0 auto;
+}
+.dot-online{ background:#26d07c; }
+.dot-warn{ background:#ff9f1a; }
+.dot-offline{ background:#9aa0a6; }
+
+.chat-row{ display:flex; align-items:center; gap:10px; }
+.chat-row-text{ display:flex; flex-direction:column; }
+.chat-empty{ padding:10px 2px; font-size:13px; color:#777; }
+
 .chat-dm{
   width:100%;
   text-align:left;
@@ -1067,6 +1081,7 @@ textarea:focus {
 .messages-card {
   min-height: 260px;
 }
+
 
 
 
