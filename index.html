@@ -176,11 +176,36 @@
 
       <!-- PAGE: MESSAGES -->
       <section id="page-messages" class="page-section hidden">
-        <div class="card">
-          <h2>Messages</h2>
-          <p class="subtitle">Chat system coming soon.</p>
-        </div>
-      </section>
+  <div class="card messages-card">
+    <h2>Messages</h2>
+    <p class="subtitle">Team chat (beta).</p>
+
+    <!-- Banner صغيرة فوق الشات -->
+    <div class="chat-banner">
+      <div class="chat-banner-text">
+        <strong>General room</strong>
+        <span>Be respectful • No customer data • English / Arabic welcome</span>
+      </div>
+    </div>
+
+    <!-- صندوق الرسائل -->
+    <div id="chat-messages" class="chat-messages">
+      <!-- Messages will appear here from Firestore -->
+    </div>
+
+    <!-- فورم إرسال الرسائل -->
+    <form id="chat-form" class="chat-form">
+      <input
+        id="chat-input"
+        type="text"
+        placeholder="Type a message and press Enter…"
+        autocomplete="off"
+      />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+</section>
+
 
       <!-- PAGE: SETTINGS -->
       <section id="page-settings" class="page-section hidden">
@@ -214,5 +239,6 @@
   </div>
 
   <script type="module" src="app.js"></script>
+  <script type="module" src="messages.js"></script>
 </body>
 </html>
