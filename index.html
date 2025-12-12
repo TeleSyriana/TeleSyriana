@@ -6,19 +6,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <div class="app-wrapper">
-    <!-- Header / Logo + Menu -->
+
+    <!-- HEADER -->
     <header class="app-header">
-      <!-- Left: Main nav (shows only after login) hidden -->
-      <nav id="main-nav" class="main-nav">
+      <!-- LEFT MENU (hidden until login) -->
+      <nav id="main-nav" class="main-nav hidden">
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
         <button class="nav-link" data-page="messages">Messages</button>
         <button class="nav-link" data-page="settings">Settings</button>
       </nav>
 
-      <!-- Right: Logo / Tagline -->
+      <!-- RIGHT SIDE -->
       <div class="header-right">
         <div class="logo">Tele<span>Syriana</span></div>
         <div class="tagline">Agent Access Panel</div>
@@ -28,7 +30,13 @@
     <!-- LOGIN SCREEN -->
     <main id="login-screen">
       <div class="login-layout">
-        <!-- Left: login card (same old design) -->
+        
+        <!-- LEFT SIDE BANNER -->
+        <section class="login-banner">
+          <img src="images/event.jpg" class="banner-img" alt="Event Banner" />
+        </section>
+
+        <!-- RIGHT SIDE LOGIN -->
         <section class="card login-card">
           <h1>Login</h1>
           <p class="subtitle">Please sign in with your CCMS ID and password.</p>
@@ -38,169 +46,173 @@
           <form id="login-form">
             <label>
               CCMS ID
-              <input
-                type="text"
-                id="ccmsId"
-                autocomplete="off"
-                placeholder="e.g. 1001"
-                required
-              />
+              <input type="text" id="ccmsId" placeholder="e.g. 1001" required />
             </label>
 
             <label>
               Password
-              <input
-                type="password"
-                id="password"
-                placeholder="Password"
-                required
-              />
+              <input type="password" id="password" placeholder="Password" required />
             </label>
 
             <button type="submit" class="btn-primary">Login</button>
           </form>
 
           <p class="hint">
-            Demo users:<br />
-            <code>1001 / 1002 / 1003 / 1234</code> (Agent)<br />
-            <code>2001 / sup123</code> (Supervisor Dema)<br />
+            Demo users:<br>
+            <code>1001 / 1002 / 1003 / 1234</code> (Agents)<br>
+            <code>2001 / sup123</code> (Supervisor Dema)<br>
             <code>2002 / sup123</code> (Supervisor Moustafa)
           </p>
         </section>
 
-        <!-- Right: event / motivation panel (ready, but hidden) -->
-        <section class="card login-event-panel">
-          <div class="event-inner">
-            <div class="event-image-placeholder">
-              <!-- لاحقاً حط هون صورة كريسماس / عيد لو حبيت -->
-              <section class="login-banner">
-                 <img src="images/event.jpg" alt="Event Banner" class="banner-img">
-              </section>
-            </div>
-            <div class="event-text">
-              <h2>Welcome to TeleSyriana</h2>
-              <p>
-                Stay focused, stay kind, and remember:<br />
-                every call can change someone’s day. 💫
-              </p>
-            </div>
-          </div>
-        </section>
       </div>
     </main>
 
     <!-- DASHBOARD SCREEN -->
     <main id="dashboard-screen" class="hidden">
-      <div class="dashboard-layout">
-        <!-- LEFT: main status panel -->
-        <section class="card dashboard-main">
-          <h1 id="welcome-title">Welcome</h1>
-          <p id="welcome-subtitle" class="subtitle"></p>
 
-          <div class="status-box">
-            <div class="status-label">Current status:</div>
-            <div id="status-value" class="status-value status-in_operation">
-              Operating
-            </div>
-          </div>
+      <!-- PAGE HOME (DEFAULT) -->
+      <section id="page-home" class="page-section">
+        <div class="dashboard-layout">
 
-          <div class="status-controls">
-            <label for="status-select">Change status:</label>
-            <select id="status-select">
-              <option value="in_operation">In Operation</option>
-              <option value="break">In Break</option>
-              <option value="unavailable">Unavailable</option>
-              <option value="meeting">In Meeting</option>
-              <option value="handling">Handling</option>
-            </select>
-            <small class="status-note">
-              Break limit is <strong>45 minutes per day</strong>. After that,
-              status will automatically switch to <strong>Unavailable</strong>
-              only if you didn't switch it manually on time.
-            </small>
-          </div>
+          <!-- LEFT MAIN PANEL -->
+          <section class="card dashboard-main">
+            <h1 id="welcome-title">Welcome</h1>
+            <p id="welcome-subtitle" class="subtitle"></p>
 
-          <div class="break-box">
-            <div>Break used today: <span id="break-used">0</span> / 45 min</div>
-            <div>Remaining: <span id="break-remaining">45</span> min</div>
-          </div>
-
-          <div class="time-box">
-            <div>Operation: <span id="op-min">0</span> min</div>
-            <div>Meeting: <span id="meet-min">0</span> min</div>
-            <div>Handling: <span id="hand-min">0</span> min</div>
-          </div>
-
-          <div class="actions">
-            <button id="logout-btn" class="btn-secondary">Logout</button>
-          </div>
-
-          <!-- SUPERVISOR PANEL -->
-          <section id="supervisor-panel" class="sup-panel hidden">
-            <h2>Team Overview</h2>
-            <p class="sup-note">
-              Latest known status and login time for each agent
-              (local demo – will be global later with Firebase).
-            </p>
-
-            <div class="sup-summary">
-              <span>Operation: <strong id="sum-op">0</strong></span>
-              <span>Break: <strong id="sum-break">0</strong></span>
-              <span>Meeting: <strong id="sum-meet">0</strong></span>
-              <span>Unavailable: <strong id="sum-unavail">0</strong></span>
+            <div class="status-box">
+              <div class="status-label">Current status:</div>
+              <div id="status-value" class="status-value status-in_operation">Operating</div>
             </div>
 
-            <div class="sup-table-wrapper">
-              <table class="sup-table">
-                <thead>
-                  <tr>
-                    <th>Agent</th>
-                    <th>CCMS</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Operation</th>
-                    <th>Break</th>
-                    <th>Meeting</th>
-                    <th>Unavailable</th>
-                    <th>Last login</th>
-                  </tr>
-                </thead>
+            <div class="status-controls">
+              <label for="status-select">Change status:</label>
+              <select id="status-select">
+                <option value="in_operation">In Operation</option>
+                <option value="break">In Break</option>
+                <option value="unavailable">Unavailable</option>
+                <option value="meeting">In Meeting</option>
+                <option value="handling">Handling</option>
+              </select>
+              <small class="status-note">
+                Break limit: <strong>45 minutes per day</strong>.
+              </small>
+            </div>
 
-                <tbody id="sup-table-body">
-                  <!-- Filled by JS -->
-                </tbody>
-              </table>
+            <div class="break-box">
+              <div>Break used: <span id="break-used">0</span> / 45 min</div>
+              <div>Remaining: <span id="break-remaining">45</span> min</div>
+            </div>
+
+            <div class="time-box">
+              <div>Operation: <span id="op-min">0</span> min</div>
+              <div>Meeting: <span id="meet-min">0</span> min</div>
+              <div>Handling: <span id="hand-min">0</span> min</div>
+            </div>
+
+            <div class="actions">
+              <button id="logout-btn" class="btn-secondary">Logout</button>
+            </div>
+
+            <!-- SUPERVISOR ONLY PANEL -->
+            <section id="supervisor-panel" class="sup-panel hidden">
+              <h2>Team Overview</h2>
+              <p class="sup-note">Daily live stats for all agents.</p>
+
+              <div class="sup-summary">
+                <span>Operation: <strong id="sum-op">0</strong></span>
+                <span>Break: <strong id="sum-break">0</strong></span>
+                <span>Meeting: <strong id="sum-meet">0</strong></span>
+                <span>Unavailable: <strong id="sum-unavail">0</strong></span>
+              </div>
+
+              <div class="sup-table-wrapper">
+                <table class="sup-table">
+                  <thead>
+                    <tr>
+                      <th>Agent</th>
+                      <th>CCMS</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Operation</th>
+                      <th>Break</th>
+                      <th>Meeting</th>
+                      <th>Unavailable</th>
+                      <th>Last login</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sup-table-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <!-- RIGHT SIDE INFO -->
+          <section class="card dashboard-side">
+            <h2>Today’s Snapshot</h2>
+            <p class="subtitle">Quick reminders:</p>
+
+            <ul class="side-list">
+              <li>✔ Keep your status updated.</li>
+              <li>✔ Use break time wisely.</li>
+              <li>✔ Stay focused & kind with callers.</li>
+            </ul>
+
+            <div class="side-footer-note">
+              More features coming soon…
             </div>
           </section>
-        </section>
 
-        <!-- RIGHT: Today snapshot / future tasks/messages -->
-        <section class="card dashboard-side">
-          <h2>Today’s Snapshot</h2>
-          <p class="subtitle">
-            This space is ready for tasks, messages, KPIs, or motivational content.
-          </p>
+        </div>
+      </section>
 
-          <ul class="side-list">
-            <li>✔ Keep your status updated at all times.</li>
-            <li>✔ Remember to use your break time wisely.</li>
-            <li>✔ Be kind, patient, and solution-focused with every caller.</li>
-          </ul>
+      <!-- PAGE: TASKS -->
+      <section id="page-tasks" class="page-section hidden">
+        <div class="card">
+          <h2>Tasks</h2>
+          <p class="subtitle">Task management coming soon.</p>
+        </div>
+      </section>
 
-          <div class="side-footer-note">
-            Future idea: team goals, daily target, best performer of the day… 🔥
-          </div>
-        </section>
-      </div>
+      <!-- PAGE: MESSAGES -->
+      <section id="page-messages" class="page-section hidden">
+        <div class="card">
+          <h2>Messages</h2>
+          <p class="subtitle">Chat system coming soon.</p>
+        </div>
+      </section>
+
+      <!-- PAGE: SETTINGS -->
+      <section id="page-settings" class="page-section hidden">
+        <div class="card">
+          <h2>Settings</h2>
+          <p class="subtitle">Update personal info (limited)</p>
+
+          <form id="settings-form">
+            <label>
+              Full Name
+              <input type="text" id="set-name" disabled />
+            </label>
+
+            <label>
+              Birthday
+              <input type="date" id="set-birthday" />
+            </label>
+
+            <label>
+              Notes
+              <textarea id="set-notes" placeholder="Report any issue..."></textarea>
+            </label>
+
+            <button type="submit" class="btn-primary">Save</button>
+          </form>
+
+        </div>
+      </section>
+
     </main>
   </div>
 
   <script type="module" src="app.js"></script>
 </body>
 </html>
-
-
-
-
-
-
