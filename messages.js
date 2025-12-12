@@ -43,8 +43,8 @@ document.addEventListener("DOMContentLoaded", () => {
     supBtn.classList.add("hidden");
   }
 
-  // ملاحظة: هون ما منغير hidden للـ floatToggle
-  // إظهار/إخفاء الأيقونة رح يصير من app.js بس حسب الصفحة
+  // ملاحظة: إظهار/إخفاء زر البالونة صار من app.js
+  // هون بس نضيف الـ listeners لو العناصر موجودة
 
   // تعريف وصف الغرف
   const ROOM_META = {
@@ -62,15 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
   roomButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const room = btn.dataset.room;
-      switchRoom(
-        room,
-        ROOM_META,
-        roomButtons,
-        roomNameEl,
-        roomDescEl,
-        listEl,
-        floatList
-      );
+      switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList);
     });
   });
 
@@ -88,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // شات عائم – فتح/إغلاق (لو الأيقونة ظاهرة من app.js)
+  // شات عائم – فتح/إغلاق (لو البالونة موجودة)
   if (floatToggle && floatPanel) {
     floatToggle.addEventListener("click", () => {
       floatPanel.classList.toggle("hidden");
@@ -124,7 +116,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderMainMessages(listEl);
   renderFloatingMessages(floatList);
 
-  // رسالة ترحيبية أول مرة بالـ General
+  // رسالة ترحيبية واحدة بالـ General بأول مرة
   if (MESSAGE_STORE.general.length === 0) {
     MESSAGE_STORE.general.push({
       id: Date.now(),
@@ -155,21 +147,12 @@ function loadUserFromStorage() {
   }
 }
 
-function switchRoom(
-  room,
-  ROOM_META,
-  roomButtons,
-  roomNameEl,
-  roomDescEl,
-  listEl,
-  floatList
-) {
+function switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList) {
   if (!MESSAGE_STORE[room]) return;
   currentRoom = room;
   applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
   setActiveRoomButton(room, roomButtons);
   renderMainMessages(listEl);
-  // الشات العائم دائماً general، فما منبدل فيه غير لو بدنا مستقبلاً
   if (room === "general") {
     renderFloatingMessages(floatList);
   }
@@ -180,7 +163,8 @@ function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
   if (roomNameEl) roomNameEl.textContent = meta.name || room;
   if (roomDescEl) {
     roomDescEl.textContent =
-      meta.desc || "Internal chat room.";
+      meta.desc ||
+      "Internal chat room.";
   }
 }
 
@@ -242,7 +226,6 @@ function renderMainMessages(listEl) {
     listEl.appendChild(wrapper);
   });
 
-  // Scroll to bottom
   listEl.scrollTop = listEl.scrollHeight;
 }
 
