@@ -138,129 +138,119 @@
             </section>
           </section>
           <!-- ChatGPT On what to do with team's tasks -->
+                    <!-- RIGHT SIDE (Today’s Snapshot) -->
           <section class="card dashboard-side">
-  <h2>Today’s Snapshot</h2>
-  <p class="subtitle">Quick reminders:</p>
+            <h2>Today’s Snapshot</h2>
+            <p class="subtitle">Quick reminders:</p>
 
-  <ul class="side-list">
-    <li>✔ Keep your status updated.</li>
-    <li>✔ Use break time wisely.</li>
-    <li>✔ Be kind with callers.</li>
-  </ul>
+            <ul class="side-list">
+              <li>✔ Keep your status updated.</li>
+              <li>✔ Use break time wisely.</li>
+              <li>✔ Be kind with callers.</li>
+            </ul>
 
-  <!-- ✅ Widgets Grid (same style like your sample) -->
-  <div class="widgets-grid">
+            <div class="widgets-grid">
 
-    <!-- Clock -->
-    <div class="widget-card">
-      <div class="widget-head">
-        <div class="widget-title">Clock</div>
-        <button class="kebab" type="button" aria-label="menu">⋯</button>
-      </div>
-      <div id="widget-clock" class="widget-big">--:--</div>
-      <div id="widget-day" class="widget-sub">—</div>
-    </div>
+              <!-- Clock -->
+              <div class="widget-card">
+                <div class="widget-head">
+                  <div class="widget-title">Clock</div>
+                  <button class="kebab" type="button">⋯</button>
+                </div>
+                <div id="widget-clock" class="widget-big">--:--</div>
+                <div id="widget-day" class="widget-sub">—</div>
+              </div>
 
-    <!-- Today -->
-    <div class="widget-card">
-      <div class="widget-head">
-        <div class="widget-title">Today</div>
-        <button class="kebab" type="button" aria-label="menu">⋯</button>
-      </div>
-      <div id="widget-date" class="widget-big">—</div>
-      <div class="widget-sub">Local date</div>
-    </div>
+              <!-- Today -->
+              <div class="widget-card">
+                <div class="widget-head">
+                  <div class="widget-title">Today</div>
+                  <button class="kebab" type="button">⋯</button>
+                </div>
+                <div id="widget-date" class="widget-big">—</div>
+                <div class="widget-sub">Local date</div>
+              </div>
 
-    <!-- Mini Calendar -->
-    <div class="widget-card widget-calendar">
-      <div class="widget-head">
-        <div id="cal-title" class="widget-title">January, 2025</div>
-        <div class="cal-nav">
-          <button id="cal-prev" class="cal-btn" type="button">‹</button>
-          <button id="cal-next" class="cal-btn" type="button">›</button>
+              <!-- Mini Calendar -->
+              <div class="widget-card widget-calendar">
+                <div class="widget-head">
+                  <div id="cal-title" class="widget-title">January, 2025</div>
+                  <div class="cal-nav">
+                    <button id="cal-prev" class="cal-btn" type="button">‹</button>
+                    <button id="cal-next" class="cal-btn" type="button">›</button>
+                  </div>
+                </div>
+
+                <div class="mini-cal">
+                  <div class="mini-cal-weekdays">
+                    <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                  </div>
+                  <div id="cal-grid" class="mini-cal-grid"></div>
+                </div>
+              </div>
+
+              <!-- Break ring -->
+              <div class="widget-card">
+                <div class="widget-head">
+                  <div class="widget-title">Break</div>
+                  <button class="kebab" type="button">⋯</button>
+                </div>
+
+                <div class="ring-row">
+                  <div class="ring">
+                    <svg viewBox="0 0 36 36">
+                      <path class="ring-bg"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                      <path id="ring-progress" class="ring-fg"
+                        stroke-dasharray="0, 100"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    </svg>
+                    <div id="ring-label" class="ring-label">0%</div>
+                  </div>
+
+                  <div class="ring-text">
+                    <div class="widget-big" id="break-text">0 / 45</div>
+                    <div class="widget-sub">min used</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ✅ Hours worked ring (same style) -->
+              <div class="widget-card">
+                <div class="widget-head">
+                  <div class="widget-title">Hours worked</div>
+                  <button class="kebab" type="button">⋯</button>
+                </div>
+
+                <div class="ring-row">
+                  <div class="ring">
+                    <svg viewBox="0 0 36 36">
+                      <path class="ring-bg"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                      <path id="work-ring-progress" class="ring-fg"
+                        stroke-dasharray="0, 100"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    </svg>
+                    <div id="work-ring-label" class="ring-label">0%</div>
+                  </div>
+
+                  <div class="ring-text">
+                    <div class="widget-big">
+                      <span id="work-text">0 min</span> / <span id="work-target-text">8 hrs</span>
+                    </div>
+                    <div class="widget-sub">time counted (no unavailable)</div>
+                    <div class="widget-sub">Remaining: <span id="work-remaining-text">8 hrs</span></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </section>
+
         </div>
-      </div>
+      </section>
 
-      <div class="mini-cal">
-        <div class="mini-cal-weekdays">
-          <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
-        </div>
-        <div id="cal-grid" class="mini-cal-grid"></div>
-      </div>
-    </div>
-
-    <!-- Optional: Progress ring (مثلاً Break used) -->
-    <div class="widget-card">
-      <div class="widget-head">
-        <div class="widget-title">Break</div>
-        <button class="kebab" type="button" aria-label="menu">⋯</button>
-      </div>
-
-      <div class="ring-row">
-        <div class="ring">
-          <svg viewBox="0 0 36 36">
-            <path class="ring-bg"
-              d="M18 2.0845
-                 a 15.9155 15.9155 0 0 1 0 31.831
-                 a 15.9155 15.9155 0 0 1 0 -31.831"/>
-            <path id="ring-progress" class="ring-fg"
-              stroke-dasharray="0, 100"
-              d="M18 2.0845
-                 a 15.9155 15.9155 0 0 1 0 31.831
-                 a 15.9155 15.9155 0 0 1 0 -31.831"/>
-          </svg>
-          <div id="ring-label" class="ring-label">0%</div>
-        </div>
-
-        <div class="ring-text">
-          <div class="widget-big" id="break-text">0 / 45</div>
-          <div class="widget-sub">min used</div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-<!-- HOURS WORKED (ring like Break) -->
-<div class="break-widget" id="work-widget">
-  <div class="break-head">
-    <div class="break-title">Hours worked</div>
-    <div class="break-more">…</div>
-  </div>
-
-  <div class="break-body">
-    <div class="break-ring">
-      <svg viewBox="0 0 36 36" class="ring">
-        <path
-          class="ring-bg"
-          d="M18 2.0845
-             a 15.9155 15.9155 0 0 1 0 31.831
-             a 15.9155 15.9155 0 0 1 0 -31.831"
-        />
-        <path
-          id="work-ring-progress"
-          class="ring-progress"
-          stroke-dasharray="0, 100"
-          d="M18 2.0845
-             a 15.9155 15.9155 0 0 1 0 31.831
-             a 15.9155 15.9155 0 0 1 0 -31.831"
-        />
-      </svg>
-      <div id="work-ring-label" class="ring-label">0%</div>
-    </div>
-
-    <div class="break-meta">
-      <div class="break-big">
-        <span id="work-text">0 min</span> / <span id="work-target-text">8 hrs</span>
-      </div>
-      <div class="break-sub">time counted (no unavailable)</div>
-      <div class="break-sub">Remaining: <span id="work-remaining-text">8 hrs</span></div>
-    </div>
-  </div>
-</div>
-
-
-</section>
 
 
       <!-- TASKS PAGE -->
@@ -470,6 +460,7 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
 
 
 
