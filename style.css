@@ -102,6 +102,11 @@ body {
   color: #666;
 }
 
+/* نخلي كروت الداشبورد كلها نفس الارتفاع تقريباً */
+#dashboard-screen .card {
+  min-height: 340px;
+}
+
 /* LOGIN LAYOUT */
 /* Layout for login split-screen */
 .login-layout {
@@ -633,6 +638,11 @@ textarea:focus {
   background: #ff2c8b;
 }
 
+/* ChatGPT / AI avatar */
+.chat-avatar.role-ai {
+  background: #6b4cff; /* موف أزرق يفرق عن الباقي */
+}
+
 .chat-profile-text {
   display: flex;
   flex-direction: column;
@@ -762,7 +772,8 @@ textarea:focus {
     border-radius: 0 0 18px 18px;
   }
 }
-/* ========== ChatGPT banner inside Messages ========== */
+
+/* ========== ChatGPT banner (لو احتجناه لاحقاً) ========== */
 
 .chat-ai-banner {
   margin-bottom: 8px;
@@ -802,8 +813,6 @@ textarea:focus {
   transform: translateY(-1px);
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.3);
 }
-
-/* لو حابب تخفيه بالـ JS نستخدم .hidden اللي فوق */
 
 /* صندوق الشات الصغير */
 .floating-chat-panel {
@@ -873,9 +882,6 @@ textarea:focus {
   gap: 4px;
 }
 
-/* نقدر نعيد استخدام نفس ستايل الفقاعات لو حبيت:
-   .chat-message, .chat-message.me ... */
-
 /* شريط الإدخال في الشات الصغير */
 .floating-chat-input-row {
   display: flex;
@@ -924,7 +930,6 @@ textarea:focus {
   }
 }
 
-
 /* ---------------- SETTINGS PAGE ---------------- */
 
 .settings-form {
@@ -971,6 +976,6 @@ textarea:focus {
 /* لكل صفحة من الصفحات الداخلية (home/messages/tasks/settings) */
 .page-view {
   /* ما في شي خاص هون، الـ hidden هو اللي يتحكم */
-
 }
+
 
