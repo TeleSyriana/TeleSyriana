@@ -188,10 +188,11 @@ function subscribeMainToRoom(room, listEl) {
 
   const colRef = collection(db, MESSAGES_COL);
   const qRoom = query(
-    colRef,
-    where("room", "==", room),
-    orderBy("ts", "asc")
-  );
+  colRef,
+  where("room", "==", room),
+  orderBy("ts", "desc")
+);
+
 
   unsubscribeMain = onSnapshot(qRoom, (snapshot) => {
     const msgs = [];
@@ -209,10 +210,11 @@ function subscribeFloatToGeneral(floatList) {
 
   const colRef = collection(db, MESSAGES_COL);
   const qGeneral = query(
-    colRef,
-    where("room", "==", "general"),
-    orderBy("ts", "asc")
-  );
+  colRef,
+  where("room", "==", "general"),
+  orderBy("ts", "desc")
+);
+
 
   unsubscribeFloat = onSnapshot(qGeneral, (snapshot) => {
     const msgs = [];
@@ -335,6 +337,7 @@ function formatTime(ts) {
     minute: "2-digit",
   });
 }
+
 
 
 
