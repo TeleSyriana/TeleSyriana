@@ -27,48 +27,10 @@ body {
   padding: 16px;
 }
 
-/* لما يكون المستخدم مسجّل دخول نوسع العرض عشان الكرتين */
-body.logged-in .app-wrapper {
-  max-width: 1100px;
-}
-
-/* Header */
-
 .app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  text-align: center;
   color: #fff;
   margin-bottom: 16px;
-}
-
-/* Left: nav (after login) */
-
-.main-nav {
-  display: flex;
-  gap: 10px;
-  font-size: 13px;
-}
-
-.nav-link {
-  background: rgba(255, 255, 255, 0.12);
-  border: none;
-  border-radius: 999px;
-  padding: 6px 12px;
-  color: #fff;
-  font-size: 12px;
-  cursor: pointer;
-  backdrop-filter: blur(4px);
-}
-
-.nav-link:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* Right: logo + tagline */
-
-.header-right {
-  text-align: right;
 }
 
 .logo {
@@ -86,8 +48,6 @@ body.logged-in .app-wrapper {
   opacity: 0.9;
 }
 
-/* Card */
-
 .card {
   background: #ffffff;
   border-radius: 18px;
@@ -104,120 +64,6 @@ body.logged-in .app-wrapper {
   margin: 0 0 18px;
   font-size: 13px;
   color: #666;
-}
-
-/* Login layout (two columns: form + optional event panel) */
-
-.login-layout {
-  display: flex;
-  gap: 16px;
-  align-items: stretch;
-}
-
-/* نخلي الكرت تبع اللوغين ياخد حجم أكبر */
-.login-card {
-  flex: 1.1;
-}
-
-/* كرت الإيفنت (يمين) */
-.login-event-panel {
-  flex: 1;
-  display: flex;
-  align-items: stretch;
-}
-
-.event-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.event-image-placeholder {
-  flex: 1;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #ff2c8b22, #ffffff);
-  margin-bottom: 12px;
-  /* لو حطيت صورة، خليها هنا */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: #999;
-}
-
-.event-text h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-}
-
-.event-text p {
-  margin: 0;
-  font-size: 13px;
-  color: #555;
-}
-
-/* Dashboard layout: two cards side by side */
-
-.dashboard-layout {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-/* main panel أوسع */
-.dashboard-main {
-  flex: 1.4;
-}
-
-/* side panel */
-.dashboard-side {
-  flex: 1;
-}
-
-.dashboard-side h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-}
-
-.side-list {
-  margin: 0 0 10px;
-  padding-left: 18px;
-  font-size: 13px;
-  color: #555;
-}
-
-.side-footer-note {
-  font-size: 12px;
-  color: #777;
-  border-top: 1px dashed #eee;
-  padding-top: 8px;
-  margin-top: 6px;
-}
-
-/* Responsive: على الشاشات الصغيرة نخلي كل شيء تحت بعضه */
-
-@media (max-width: 768px) {
-  .login-layout,
-  .dashboard-layout {
-    flex-direction: column;
-  }
-
-  .header-right {
-    text-align: center;
-  }
-
-  .app-header {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .main-nav {
-    order: 2;
-  }
-
-  .header-right {
-    order: 1;
-  }
 }
 
 /* Forms */
@@ -341,7 +187,7 @@ input:focus {
   color: #856404;
 }
 .status-value.status-handling {
-  /* Handling – purple */
+  /* Break / Meeting / Handling – yellow/orange */
   background: #f5cdff;
   color: #85047f;
 }
@@ -409,6 +255,7 @@ input:focus {
   gap: 4px;
 }
 
+
 /* Actions */
 
 .actions {
@@ -446,6 +293,7 @@ input:focus {
 .sup-summary span strong {
   font-weight: 700;
 }
+
 
 .sup-table-wrapper {
   max-height: 220px;
@@ -505,7 +353,6 @@ input:focus {
   background: #e2e3e5;
   color: #505050;
 }
-
 /* Main status value (big box) */
 .status-value {
   padding: 8px 16px;
