@@ -512,6 +512,67 @@ textarea:focus {
 }
 
 /* ========== Messages / Chat page ========== */
+/* ===== CHAT PAGE FIX ===== */
+#page-messages {
+  height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+#chat-message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+#chat-form {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid #ddd;
+}
+
+.chat-message {
+  margin-bottom: 10px;
+  background: #f3f3f3;
+  padding: 8px 12px;
+  border-radius: 10px;
+  max-width: 75%;
+}
+.chat-message.me { margin-left: auto; background: #d9f2ff; }
+.chat-message-meta { font-size: 11px; opacity: .7; margin-bottom: 4px; }
+
+/* floating scroll */
+#float-chat-messages { max-height: 300px; overflow-y: auto; }
+
+/* badge */
+#float-chat-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ff2d55;
+  color: #fff;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+/* typing */
+#chat-typing { font-size: 12px; opacity: .7; padding: 6px 12px; }
+
+/* scroll down button */
+#chat-scroll-down {
+  position: absolute;
+  right: 18px;
+  bottom: 80px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  cursor: pointer;
+}
+.hidden { display:none !important; }
+
 /* ✅ خلي صندوق الرسائل يعمل scrolling بدل ما يكبر الصفحة */
 #chat-message-list {
   height: 52vh;           /* عدّلها إذا بدك أكبر/أصغر */
@@ -994,4 +1055,5 @@ textarea:focus {
 .messages-card {
   min-height: 260px;
 }
+
 
