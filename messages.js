@@ -1,7 +1,4 @@
 // messages.js – TeleSyriana chat UI with Firestore
-// Rooms: general + supervisors
-// Floating chat always shows general only
-
 import { db, fs } from "./firebase.js";
 
 const {
@@ -11,8 +8,7 @@ const {
   where,
   orderBy,
   onSnapshot,
-  serverTimestamp,
-  limit,
+  serverTimestamp, // ✅ من firebase.js
 } = fs;
 
 const USER_KEY = "telesyrianaUser";
@@ -21,28 +17,15 @@ const MESSAGES_COL = "globalMessages";
 let currentUser = null;
 let currentRoom = "general";
 
-// Firestore subscriptions
 let unsubscribeMain = null;
 let unsubscribeFloat = null;
 
-// ---- Scroll helpers (ذكي) ----
-function isNearBottom(el, px = 80) {
-  if (!el) return true;
-  return el.scrollHeight - el.scrollTop - el.clientHeight < px;
-}
-
-function scrollToBottom(el) {
-  if (!el) return;
-  el.scrollTop = el.scrollHeight;
-}
-
-// Load user from localStorage
 function loadUserFromStorage() {
   try {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return;
     const u = JSON.parse(raw);
-    if (u && u.id && u.name && u.role) currentUser = u;
+    if (u?.id && u?.name && u?.role) currentUser = u;
   } catch (e) {
     console.error("Error loading user from localStorage", e);
   }
@@ -52,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const pageMessages = document.getElementById("page-messages");
   if (!pageMessages) return;
 
-  // Main chat elements
+  // عناصر صفحة المسجات
   const roomButtons = document.querySelectorAll(".chat-room");
   const roomNameEl = document.getElementById("chat-room-name");
   const roomDescEl = document.getElementById("chat-room-desc");
@@ -60,7 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
 
-  // Floating chat elements
+  // عناصر الشات العائم
   const floatToggle = document.getElementById("float-chat-toggle");
   const floatPanel = document.getElementById("float-chat-panel");
   const floatClose = document.getElementById("float-chat-close");
@@ -70,17 +53,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadUserFromStorage();
 
-  // Hide supervisors room for agents
+  // إخفاء غرفة المشرفين عن الـ agents
   const supBtn = document.querySelector('.chat-room[data-room="supervisors"]');
   if (supBtn && (!currentUser || currentUser.role !== "supervisor")) {
     supBtn.classList.add("hidden");
   }
 
-  // Show floating toggle only if logged in
+  // إظهار زر البالونة فقط إذا في مستخدم داخل
   if (floatToggle && currentUser) {
     floatToggle.classList.remove("hidden");
   }
 
+  // وصف الغرف
   const ROOM_META = {
     general: {
       name: "General chat",
@@ -92,29 +76,38 @@ document.addEventListener("DOMContentLoaded", () => {
     },
   };
 
-  // Switch room
+  // ✅ تأكد في scroll (حتى لو CSS ناقص)
+  if (listEl) {
+    listEl.style.overflowY = "auto";
+    listEl.style.maxHeight = "60vh";
+  }
+  if (floatList) {
+    floatList.style.overflowY = "auto";
+    floatList.style.maxHeight = "220px";
+  }
+
+  // تبديل الغرف
   roomButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const room = btn.dataset.room;
-      switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl);
+      currentRoom = room;
+      applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
+      setActiveRoomButton(room, roomButtons);
+      subscribeMainToRoom(room, listEl);
     });
   });
 
-  // Send message (main)
+  // إرسال رسالة من الشات الرئيسي
   if (formEl && inputEl) {
     formEl.addEventListener("submit", async (e) => {
       e.preventDefault();
       const text = inputEl.value.trim();
       if (!text) return;
 
-      if (!currentUser) {
-        alert("Please login first.");
-        return;
-      }
+      if (!currentUser) return alert("Please login first.");
 
       try {
-        const colRef = collection(db, MESSAGES_COL);
-        await addDoc(colRef, {
+        await addDoc(collection(db, MESSAGES_COL), {
           room: currentRoom,
           text,
           userId: currentUser.id,
@@ -123,7 +116,6 @@ document.addEventListener("DOMContentLoaded", () => {
           ts: serverTimestamp(),
         });
         inputEl.value = "";
-        // ما منعمل scroll هون، لأن onSnapshot رح يعمل render + scroll ذكي
       } catch (err) {
         console.error("Error sending message", err);
         alert("Error sending message: " + err.message);
@@ -131,38 +123,29 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Floating toggle open/close
+  // شات عائم – فتح/إغلاق
   if (floatToggle && floatPanel) {
     floatToggle.addEventListener("click", () => {
       floatPanel.classList.toggle("hidden");
-      // إذا فتحناها، خلّيها تنزل للآخر
-      if (!floatPanel.classList.contains("hidden")) {
-        setTimeout(() => scrollToBottom(floatList), 0);
-      }
     });
   }
-
   if (floatClose && floatPanel) {
     floatClose.addEventListener("click", () => {
       floatPanel.classList.add("hidden");
     });
   }
 
-  // Send message (floating) always general
+  // إرسال رسالة من الشات العائم (دائماً general)
   if (floatForm && floatInput) {
     floatForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const text = floatInput.value.trim();
       if (!text) return;
 
-      if (!currentUser) {
-        alert("Please login first.");
-        return;
-      }
+      if (!currentUser) return alert("Please login first.");
 
       try {
-        const colRef = collection(db, MESSAGES_COL);
-        await addDoc(colRef, {
+        await addDoc(collection(db, MESSAGES_COL), {
           room: "general",
           text,
           userId: currentUser.id,
@@ -178,96 +161,72 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Subscriptions
-  subscribeMainToRoom(currentRoom, listEl);
-  subscribeFloatToGeneral(floatList);
-
-  // Apply meta + active button
+  // ✅ اشتراكات
   applyRoomMeta(currentRoom, ROOM_META, roomNameEl, roomDescEl);
   setActiveRoomButton(currentRoom, roomButtons);
+
+  subscribeMainToRoom(currentRoom, listEl);
+  subscribeFloatToGeneral(floatList);
 });
 
 /* ------------ Firestore subscriptions ------------ */
 
+// ✅ مهم: نستخدم DESC ليتطابق مع الـ index الموجود عندك (room ASC + ts DESC)
+// وبعدين نعكس بالعرض ليظهر من القديم للجديد
 function subscribeMainToRoom(room, listEl) {
   if (!listEl) return;
+
   if (unsubscribeMain) unsubscribeMain();
 
-  const colRef = collection(db, MESSAGES_COL);
-
-  // ✅ Asc = القديم فوق والجديد تحت
-  // ✅ limit لتخفيف الحمل
   const qRoom = query(
-    colRef,
+    collection(db, MESSAGES_COL),
     where("room", "==", room),
-    orderBy("ts", "asc"),
-    limit(200)
+    orderBy("ts", "desc"),
+    limit(100)
   );
 
   unsubscribeMain = onSnapshot(
     qRoom,
     (snapshot) => {
-      const shouldStickToBottom = isNearBottom(listEl);
-
       const msgs = [];
-      snapshot.forEach((docSnap) => {
-        msgs.push({ id: docSnap.id, ...docSnap.data() });
-      });
-
+      snapshot.forEach((docSnap) => msgs.push({ id: docSnap.id, ...docSnap.data() }));
+      msgs.reverse(); // ✅ يخلي القديم فوق
       renderMainMessages(listEl, msgs);
-
-      // ✅ Scroll ذكي: بس ينزل للآخر إذا المستخدم قريب من آخر القائمة
-      if (shouldStickToBottom) scrollToBottom(listEl);
     },
     (err) => {
-      console.error("Error in room subscription", err);
+      console.error("Main snapshot error:", err);
+      alert("Firestore error: " + err.message);
     }
   );
 }
 
 function subscribeFloatToGeneral(floatList) {
   if (!floatList) return;
+
   if (unsubscribeFloat) unsubscribeFloat();
 
-  const colRef = collection(db, MESSAGES_COL);
   const qGeneral = query(
-    colRef,
+    collection(db, MESSAGES_COL),
     where("room", "==", "general"),
-    orderBy("ts", "asc"),
-    limit(200)
+    orderBy("ts", "desc"),
+    limit(50)
   );
 
   unsubscribeFloat = onSnapshot(
     qGeneral,
     (snapshot) => {
-      const shouldStickToBottom = isNearBottom(floatList);
-
       const msgs = [];
-      snapshot.forEach((docSnap) => {
-        msgs.push({ id: docSnap.id, ...docSnap.data() });
-      });
-
+      snapshot.forEach((docSnap) => msgs.push({ id: docSnap.id, ...docSnap.data() }));
+      msgs.reverse();
       renderFloatingMessages(floatList, msgs);
-
-      if (shouldStickToBottom) scrollToBottom(floatList);
     },
     (err) => {
-      console.error("Error in floating subscription", err);
+      console.error("Float snapshot error:", err);
     }
   );
 }
 
 /* ----------------- Helpers ----------------- */
-
-function switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl) {
-  currentRoom = room;
-  applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
-  setActiveRoomButton(room, roomButtons);
-
-  // لما تبدّل غرفة، نزّل للآخر بعد أول render
-  subscribeMainToRoom(room, listEl);
-  setTimeout(() => scrollToBottom(listEl), 0);
-}
 
 function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
   const meta = ROOM_META[room] || {};
@@ -284,8 +243,6 @@ function setActiveRoomButton(room, roomButtons) {
 /* ----------------- Rendering ----------------- */
 
 function renderMainMessages(listEl, msgs) {
-  if (!listEl) return;
-
   listEl.innerHTML = "";
 
   msgs.forEach((m) => {
@@ -303,14 +260,14 @@ function renderMainMessages(listEl, msgs) {
 
     wrapper.appendChild(meta);
     wrapper.appendChild(text);
-
     listEl.appendChild(wrapper);
   });
+
+  // ✅ auto scroll للأسفل دائماً
+  listEl.scrollTop = listEl.scrollHeight;
 }
 
 function renderFloatingMessages(floatList, msgs) {
-  if (!floatList) return;
-
   floatList.innerHTML = "";
 
   msgs.forEach((m) => {
@@ -328,18 +285,15 @@ function renderFloatingMessages(floatList, msgs) {
 
     wrapper.appendChild(meta);
     wrapper.appendChild(text);
-
     floatList.appendChild(wrapper);
   });
+
+  floatList.scrollTop = floatList.scrollHeight;
 }
 
 function formatTime(ts) {
   if (!ts) return "";
-  let dateObj;
-  if (ts.toDate) dateObj = ts.toDate();
-  else if (ts instanceof Date) dateObj = ts;
-  else dateObj = new Date(ts);
-
+  const dateObj = ts.toDate ? ts.toDate() : new Date(ts);
   return dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
