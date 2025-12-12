@@ -614,5 +614,3 @@ function buildSupervisorTableFromFirestore(rows) {
   if (sumMeet) sumMeet.textContent = totals.meeting;
   if (sumUnavail) sumUnavail.textContent = totals.unavailable;
 }
-
-

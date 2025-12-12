@@ -8,137 +8,199 @@
 </head>
 <body>
   <div class="app-wrapper">
-    <!-- Header / Logo -->
+    <!-- Header / Logo + Menu -->
     <header class="app-header">
-      <div class="logo">Tele<span>Syriana</span></div>
-      <div class="tagline">Agent Access Panel</div>
+      <!-- Left: Main nav (visible only after login) -->
+      <nav id="main-nav" class="main-nav hidden">
+        <button class="nav-link" data-page="home">Home</button>
+        <button class="nav-link" data-page="tasks">Tasks</button>
+        <button class="nav-link" data-page="messages">Messages</button>
+        <button class="nav-link" data-page="settings">Settings</button>
+      </nav>
+
+      <!-- Right: Logo / Tagline -->
+      <div class="header-right">
+        <div class="logo">Tele<span>Syriana</span></div>
+        <div class="tagline">Agent Access Panel</div>
+      </div>
     </header>
 
     <!-- LOGIN SCREEN -->
-    <main id="login-screen" class="card">
-      <h1>Login</h1>
-      <p class="subtitle">Please sign in with your CCMS ID and password.</p>
+    <main id="login-screen">
+      <div class="login-layout">
+        <!-- Left: login card (exactly as before) -->
+        <section class="card login-card">
+          <h1>Login</h1>
+          <p class="subtitle">Please sign in with your CCMS ID and password.</p>
 
-      <div id="login-error" class="alert hidden"></div>
+          <div id="login-error" class="alert hidden"></div>
 
-      <form id="login-form">
-        <label>
-          CCMS ID
-          <input
-            type="text"
-            id="ccmsId"
-            autocomplete="off"
-            placeholder="e.g. 1001"
-            required
-          />
-        </label>
+          <form id="login-form">
+            <label>
+              CCMS ID
+              <input
+                type="text"
+                id="ccmsId"
+                autocomplete="off"
+                placeholder="e.g. 1001"
+                required
+              />
+            </label>
 
-        <label>
-          Password
-          <input
-            type="password"
-            id="password"
-            placeholder="Password"
-            required
-          />
-        </label>
+            <label>
+              Password
+              <input
+                type="password"
+                id="password"
+                placeholder="Password"
+                required
+              />
+            </label>
 
-        <button type="submit" class="btn-primary">Login</button>
-      </form>
+            <button type="submit" class="btn-primary">Login</button>
+          </form>
 
-      <p class="hint">
-        Demo users:<br />
-        <code>1001 / 1002 / 1003 / 1234</code> (Agent)<br />
-        <code>2001 / sup123</code> (Supervisor Dema)<br />
-        <code>2002 / sup123</code> (Supervisor Moustafa)
-      </p>
+          <p class="hint">
+            Demo users:<br />
+            <code>1001 / 1002 / 1003 / 1234</code> (Agent)<br />
+            <code>2001 / sup123</code> (Supervisor Dema)<br />
+            <code>2002 / sup123</code> (Supervisor Moustafa)
+          </p>
+        </section>
+
+        <!-- Right: event / motivation panel (hidden by default) -->
+        <!--
+          ملاحظة:
+          - لما تحب تحط صورة عيد / كريسماس / رسالة تحفيزية:
+            * شيل class="hidden"
+            * وعدّل محتوى هذا البوكس
+        -->
+        <section class="card login-event-panel hidden">
+          <div class="event-inner">
+            <!-- مكان للصورة -->
+            <!-- استبدل src لاحقاً بصورة محلية أو URL -->
+            <div class="event-image-placeholder">
+              <!-- لو ما بدك صورة، فيك تشيل هذا القسم وتخلي بس النص -->
+              <!-- <img src="event.jpg" alt="Event" /> -->
+            </div>
+            <div class="event-text">
+              <h2>Welcome to TeleSyriana</h2>
+              <p>
+                Stay focused, stay kind, and remember:<br />
+                every call can change someone’s day. 💫
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
 
     <!-- DASHBOARD SCREEN -->
-    <main id="dashboard-screen" class="card hidden">
-      <h1 id="welcome-title">Welcome</h1>
-      <p id="welcome-subtitle" class="subtitle"></p>
+    <main id="dashboard-screen" class="hidden">
+      <div class="dashboard-layout">
+        <!-- Left: main agent panel (original content) -->
+        <section class="card dashboard-main">
+          <h1 id="welcome-title">Welcome</h1>
+          <p id="welcome-subtitle" class="subtitle"></p>
 
-      <div class="status-box">
-        <div class="status-label">Current status:</div>
-        <div id="status-value" class="status-value status-in_operation">
-          Operating
-        </div>
+          <div class="status-box">
+            <div class="status-label">Current status:</div>
+            <div id="status-value" class="status-value status-in_operation">
+              Operating
+            </div>
+          </div>
+
+          <div class="status-controls">
+            <label for="status-select">Change status:</label>
+            <select id="status-select">
+              <option value="in_operation">In Operation</option>
+              <option value="break">In Break</option>
+              <option value="unavailable">Unavailable</option>
+              <option value="meeting">In Meeting</option>
+              <option value="handling">Handling</option>
+            </select>
+            <small class="status-note">
+              Break limit is <strong>45 minutes per day</strong>. After that, status
+              will automatically switch to <strong>Unavailable</strong> only if you
+              didn't switch it manually on time.
+            </small>
+          </div>
+
+          <div class="break-box">
+            <div>Break used today: <span id="break-used">0</span> / 45 min</div>
+            <div>Remaining: <span id="break-remaining">45</span> min</div>
+          </div>
+
+          <div class="time-box">
+            <div>Operation: <span id="op-min">0</span> min</div>
+            <div>Meeting: <span id="meet-min">0</span> min</div>
+            <div>Handling: <span id="hand-min">0</span> min</div>
+          </div>
+
+          <div class="actions">
+            <button id="logout-btn" class="btn-secondary">Logout</button>
+          </div>
+
+          <!-- SUPERVISOR PANEL -->
+          <section id="supervisor-panel" class="sup-panel hidden">
+            <h2>Team Overview</h2>
+            <p class="sup-note">
+              Latest known status and login time for each agent
+              (local demo – will be global later with Firebase).
+            </p>
+
+            <!-- NEW: totals summary -->
+            <div class="sup-summary">
+              <span>Operation: <strong id="sum-op">0</strong></span>
+              <span>Break: <strong id="sum-break">0</strong></span>
+              <span>Meeting: <strong id="sum-meet">0</strong></span>
+              <span>Unavailable: <strong id="sum-unavail">0</strong></span>
+            </div>
+
+            <div class="sup-table-wrapper">
+              <table class="sup-table">
+                <thead>
+                  <tr>
+                    <th>Agent</th>
+                    <th>CCMS</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Operation</th>
+                    <th>Break</th>
+                    <th>Meeting</th>
+                    <th>Unavailable</th>
+                    <th>Last login</th>
+                  </tr>
+                </thead>
+                <tbody id="sup-table-body">
+                  <!-- Filled by JS -->
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- Right: secondary panel (wide to edge, ready for tasks / messages / KPIs) -->
+        <section class="card dashboard-side">
+          <h2>Today’s Snapshot</h2>
+          <p class="subtitle">
+            This space is ready for tasks, messages, KPIs, or motivational content.
+          </p>
+
+          <ul class="side-list">
+            <li>✔ Keep your status updated at all times.</li>
+            <li>✔ Remember to use your break time wisely.</li>
+            <li>✔ Be kind, patient, and solution-focused with every caller.</li>
+          </ul>
+
+          <div class="side-footer-note">
+            Future idea: team goals, daily target, best performer of the day… 🔥
+          </div>
+        </section>
       </div>
-
-      <div class="status-controls">
-        <label for="status-select">Change status:</label>
-        <select id="status-select">
-          <option value="in_operation">In Operation</option>
-          <option value="break">In Break</option>
-          <option value="unavailable">Unavailable</option>
-          <option value="meeting">In Meeting</option>
-          <option value="handling">Handling</option>
-        </select>
-        <small class="status-note">
-          Break limit is <strong>45 minutes per day</strong>. After that, status
-          will automatically switch to <strong>Unavailable</strong> only if you didn't switch it manually on time.
-        </small>
-      </div>
-
-      <div class="break-box">
-        <div>Break used today: <span id="break-used">0</span> / 45 min</div>
-        <div>Remaining: <span id="break-remaining">45</span> min</div>
-      </div>
-      <div class="time-box">
-        <div>Operation: <span id="op-min">0</span> min</div>
-        <div>Meeting: <span id="meet-min">0</span> min</div>
-        <div>Handling: <span id="hand-min">0</span> min</div>
-      </div>
-
-      <div class="actions">
-        <button id="logout-btn" class="btn-secondary">Logout</button>
-      </div>
-
-      <!-- SUPERVISOR PANEL -->
-      <section id="supervisor-panel" class="sup-panel hidden">
-        <h2>Team Overview</h2>
-        <p class="sup-note">
-          Latest known status and login time for each agent
-          (local demo – will be global later with Firebase).
-        </p>
-
-        <!-- NEW: totals summary -->
-        <div class="sup-summary">
-          <span>Operation: <strong id="sum-op">0</strong></span>
-          <span>Break: <strong id="sum-break">0</strong></span>
-          <span>Meeting: <strong id="sum-meet">0</strong></span>
-          <span>Unavailable: <strong id="sum-unavail">0</strong></span>
-        </div>
-        <div class="sup-table-wrapper">
-          <table class="sup-table">
-            <thead>
-               <tr>
-               <th>Agent</th>
-               <th>CCMS</th>
-               <th>Role</th>
-               <th>Status</th>
-               <th>Operation</th>
-               <th>Break</th>
-               <th>Meeting</th>
-               <th>Unavailable</th>
-               <th>Last login</th>
-               </tr>
-             </thead>
-
-            <tbody id="sup-table-body">
-              <!-- Filled by JS -->
-            </tbody>
-          </table>
-        </div>
-      </section>
     </main>
   </div>
-<script type="module" src="app.js"></script>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>
-
-
-
-
-
