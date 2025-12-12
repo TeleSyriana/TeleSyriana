@@ -1,36 +1,33 @@
-// messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + Status dots
+// messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots
 import { db, fs } from "./firebase.js";
 
-const {
-  collection,
-  addDoc,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-} = fs;
+const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } = fs;
 
 const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
-const AGENT_DAYS_COL = "agentDays"; // ✅ status source (from app.js)
-const PAGE_SIZE = 50;
-const MAX_RENDER = 600;
+const AGENT_DAYS_COL = "agentDays"; // status source (today docs)
 
 let currentUser = null;
 
-// selected conversation
-let currentConversation = null; // { type:'room'|'dm'|'ai', roomId, title, desc, canSend }
+// نوع المحادثة الحالية:
+let activeChat = null; // { type: "room"|"dm"|"ai", roomId, title, desc }
 
-// subscriptions
 let unsubscribeMain = null;
 let unsubscribeFloat = null;
-let unsubscribeStatuses = null;
+let unsubscribeStatus = null;
 
-// cache for main list
+// "بديل limit": نعرض فقط آخر N بالواجهة
+const PAGE_SIZE = 50;
+const MAX_RENDER = 600;
+
+// cache للغرفة الحالية (ASC: القديم -> الجديد)
 let roomCache = [];
 let renderedCount = 0;
+
+// لمنع تكرار ربط السكرول على نفس list
 let scrollBoundEl = null;
+
+// ----------------------------- helpers -----------------------------
 
 function getUserFromStorage() {
   try {
@@ -41,13 +38,9 @@ function getUserFromStorage() {
   } catch {}
   return null;
 }
+
 function setCurrentUser() {
   currentUser = getUserFromStorage();
-}
-
-function getTodayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function formatTime(ts) {
@@ -56,56 +49,26 @@ function formatTime(ts) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// ====== Floating visibility rule ======
-// hide always on messages page
-function isMessagesPageActive() {
-  const pg = document.querySelector(".page-section:not(.hidden)");
-  return pg?.id === "page-messages";
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
 }
 
-function updateFloatingVisibility() {
-  const floatToggle = document.getElementById("float-chat-toggle");
-  if (!floatToggle) return;
-
-  setCurrentUser();
-
-  if (!currentUser) {
-    floatToggle.classList.add("hidden");
-    return;
-  }
-
-  if (isMessagesPageActive()) {
-    floatToggle.classList.add("hidden");
-    return;
-  }
-
-  floatToggle.classList.remove("hidden");
+function dmRoomId(a, b) {
+  const x = String(a);
+  const y = String(b);
+  return x < y ? `dm_${x}_${y}` : `dm_${y}_${x}`;
 }
 
-// ====== UI helpers ======
-function setHeader(title, desc) {
-  const roomNameEl = document.getElementById("chat-room-name");
-  const roomDescEl = document.getElementById("chat-room-desc");
-  if (roomNameEl) roomNameEl.textContent = title || "Messages";
-  if (roomDescEl) roomDescEl.textContent = desc || "Start chatting…";
-}
-
-function setEmptyStateVisible(isVisible) {
-  const empty = document.getElementById("chat-empty");
-  const listEl = document.getElementById("chat-message-list");
-  if (empty) empty.style.display = isVisible ? "block" : "none";
-  if (listEl) listEl.style.display = isVisible ? "none" : "block";
-}
-
-function setInputEnabled(enabled) {
-  const inputEl = document.getElementById("chat-input");
-  const btn = document.querySelector("#chat-form button[type='submit']");
-  if (inputEl) inputEl.disabled = !enabled;
-  if (btn) btn.disabled = !enabled;
-}
-
-function clearActiveButtons() {
-  document.querySelectorAll(".chat-room, .chat-dm").forEach((b) => b.classList.remove("active"));
+function statusToDotClass(status) {
+  // Operating/Handling => online
+  if (status === "in_operation" || status === "handling") return "dot-online";
+  // Meeting/Break => orange
+  if (status === "meeting" || status === "break") return "dot-warn";
+  // Other => grey
+  return "dot-offline";
 }
 
 function ensureTopLoader(listEl) {
@@ -147,6 +110,7 @@ function createMessageNode(m, showRole) {
 function renderFresh(listEl, msgs, showRole) {
   const loader = ensureTopLoader(listEl);
 
+  // امسح كلشي ما عدا اللودر
   Array.from(listEl.children).forEach((ch) => {
     if (ch !== loader) ch.remove();
   });
@@ -167,6 +131,7 @@ function renderChunkToTop(listEl, items, showRole) {
   const frag = document.createDocumentFragment();
   items.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
 
+  // حط الرسائل بعد اللودر مباشرة
   const afterLoader = loader.nextSibling;
   if (afterLoader) listEl.insertBefore(frag, afterLoader);
   else listEl.appendChild(frag);
@@ -175,8 +140,29 @@ function renderChunkToTop(listEl, items, showRole) {
   listEl.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
 }
 
+function setHeader(roomNameEl, roomDescEl, title, desc) {
+  if (roomNameEl) roomNameEl.textContent = title || "Messages";
+  if (roomDescEl) roomDescEl.textContent = desc || "Start chatting…";
+}
+
+function setEmptyState(emptyEl, listEl, on) {
+  if (!emptyEl || !listEl) return;
+  emptyEl.style.display = on ? "block" : "none";
+  listEl.style.display = on ? "none" : "block";
+}
+
+function setInputEnabled(formEl, inputEl, enabled) {
+  if (!formEl || !inputEl) return;
+  const btn = formEl.querySelector("button[type='submit']");
+  inputEl.disabled = !enabled;
+  if (btn) btn.disabled = !enabled;
+}
+
+// ----------------------- scroll lazy load -----------------------
+
 function attachScrollLoader(listEl) {
   if (!listEl) return;
+
   if (scrollBoundEl === listEl) return;
   scrollBoundEl = listEl;
 
@@ -204,18 +190,19 @@ function attachScrollLoader(listEl) {
   });
 }
 
-// ====== RoomId builders ======
-function makeDmRoomId(a, b) {
-  const x = String(a);
-  const y = String(b);
-  const [min, max] = x < y ? [x, y] : [y, x];
-  return `dm_${min}_${max}`;
+// ----------------------- Firestore subscriptions -----------------------
+
+function unsubscribeAllMain() {
+  unsubscribeMain?.();
+  unsubscribeMain = null;
+  roomCache = [];
+  renderedCount = 0;
+  scrollBoundEl = null;
 }
 
-// ====== Firestore subscriptions ======
 function subscribeMainToRoom(roomId, listEl) {
   if (!listEl) return;
-  unsubscribeMain?.();
+  unsubscribeAllMain();
 
   const qRoom = query(
     collection(db, MESSAGES_COL),
@@ -231,14 +218,13 @@ function subscribeMainToRoom(roomId, listEl) {
       const all = [];
       snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
 
-      all.reverse();
+      all.reverse(); // ASC
       roomCache = all;
 
       renderedCount = Math.min(PAGE_SIZE, roomCache.length);
       const startIndex = Math.max(0, roomCache.length - renderedCount);
       const initial = roomCache.slice(startIndex);
 
-      setEmptyStateVisible(false);
       renderFresh(listEl, initial, true);
       attachScrollLoader(listEl);
     },
@@ -259,119 +245,80 @@ function subscribeFloatToGeneral(floatList) {
     orderBy("ts", "desc")
   );
 
-  unsubscribeFloat = onSnapshot(
-    qGeneral,
-    (snapshot) => {
-      setCurrentUser();
+  unsubscribeFloat = onSnapshot(qGeneral, (snapshot) => {
+    setCurrentUser();
+    const all = [];
+    snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
+    all.reverse();
 
-      const all = [];
-      snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
-      all.reverse();
+    const last = all.slice(Math.max(0, all.length - 30));
+    floatList.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    last.forEach((m) => frag.appendChild(createMessageNode(m, false)));
+    floatList.appendChild(frag);
+    floatList.scrollTop = floatList.scrollHeight;
+  });
+}
 
-      const last = all.slice(Math.max(0, all.length - 30));
+// ----------------------- Status dots (sidebar) -----------------------
 
-      floatList.innerHTML = "";
-      const frag = document.createDocumentFragment();
-      last.forEach((m) => frag.appendChild(createMessageNode(m, false)));
-      floatList.appendChild(frag);
-      floatList.scrollTop = floatList.scrollHeight;
-    },
-    (err) => console.error("Float snapshot error:", err)
+function subscribeStatusDots() {
+  unsubscribeStatus?.();
+  unsubscribeStatus = null;
+
+  const q = query(
+    collection(db, AGENT_DAYS_COL),
+    where("day", "==", getTodayKey())
   );
+
+  unsubscribeStatus = onSnapshot(q, (snap) => {
+    // default all offline
+    const dots = document.querySelectorAll("[data-status-dot]");
+    dots.forEach((d) => {
+      d.classList.remove("dot-online", "dot-warn", "dot-offline");
+      d.classList.add("dot-offline");
+    });
+
+    snap.forEach((docu) => {
+      const d = docu.data();
+      const userId = String(d.userId || "");
+      if (!userId) return;
+      const dot = document.querySelector(`[data-status-dot="${userId}"]`);
+      if (!dot) return;
+
+      const cls = statusToDotClass(d.status || "unavailable");
+      dot.classList.remove("dot-online", "dot-warn", "dot-offline");
+      dot.classList.add(cls);
+
+      // optional: subtitle text
+      const sub = document.querySelector(`[data-sub="${userId}"]`);
+      if (sub) sub.textContent = d.status ? d.status.replaceAll("_", " ") : "unavailable";
+    });
+  });
 }
 
-// ====== Status dots from agentDays ======
-function mapStatusToDotClass(status) {
-  // green: in_operation / handling
-  if (status === "in_operation" || status === "handling") return "status-online";
-  // orange: break / meeting
-  if (status === "break" || status === "meeting") return "status-busy";
-  // gray: unavailable / missing
-  return "status-offline";
+// ----------------------- Active selection UI -----------------------
+
+function clearActiveButtons() {
+  document.querySelectorAll(".chat-room, .chat-dm").forEach((b) => b.classList.remove("active"));
 }
 
-function subscribeTodayStatuses() {
-  unsubscribeStatuses?.();
-
-  const today = getTodayKey();
-  const q = query(collection(db, AGENT_DAYS_COL), where("day", "==", today));
-
-  unsubscribeStatuses = onSnapshot(
-    q,
-    (snap) => {
-      const byId = {};
-      snap.forEach((d) => {
-        const row = d.data();
-        if (row?.userId) byId[String(row.userId)] = row.status || "unavailable";
-      });
-
-      document.querySelectorAll("[data-status]").forEach((el) => {
-        const uid = el.getAttribute("data-status");
-        const st = byId[String(uid)] || "unavailable";
-
-        el.classList.remove("status-online", "status-busy", "status-offline");
-        el.classList.add(mapStatusToDotClass(st));
-      });
-    },
-    (err) => console.error("Statuses snapshot error:", err)
-  );
-}
-
-// ====== Selection logic ======
-function selectConversation(conv, activeButtonEl) {
-  const listEl = document.getElementById("chat-message-list");
-  const formEl = document.getElementById("chat-form");
-  const inputEl = document.getElementById("chat-input");
-
-  currentConversation = conv;
-
+function setActiveButton(el) {
   clearActiveButtons();
-  if (activeButtonEl) activeButtonEl.classList.add("active");
-
-  // reset scroll binding when switching
-  scrollBoundEl = null;
-
-  if (conv.type === "ai") {
-    unsubscribeMain?.();
-    roomCache = [];
-    renderedCount = 0;
-
-    setHeader("ChatGPT 5", "Coming soon…");
-    setEmptyStateVisible(false);
-
-    if (listEl) {
-      listEl.innerHTML = `
-        <div style="padding:14px 4px; color:#777; font-size:13px;">
-          🤖 ChatGPT assistant is coming soon.
-        </div>
-      `;
-    }
-
-    setInputEnabled(false);
-    if (inputEl) inputEl.placeholder = "Coming soon…";
-    return;
-  }
-
-  // normal rooms + dm
-  setHeader(conv.title, conv.desc);
-  setInputEnabled(conv.canSend);
-
-  if (inputEl) inputEl.placeholder = "Type a message…";
-
-  if (!currentUser) {
-    setEmptyStateVisible(true);
-    setInputEnabled(false);
-    return;
-  }
-
-  subscribeMainToRoom(conv.roomId, listEl);
+  if (el) el.classList.add("active");
 }
 
-// ====== Init ======
-document.addEventListener("DOMContentLoaded", () => {
-  setCurrentUser();
+// ----------------------------- init -----------------------------
 
-  const hasMainChat = !!document.getElementById("page-messages");
+document.addEventListener("DOMContentLoaded", () => {
+  const hasMainChat = !!document.getElementById("chat-message-list");
+
+  const roomButtons = document.querySelectorAll(".chat-room");
+  const dmButtons = document.querySelectorAll(".chat-dm");
+
+  const roomNameEl = document.getElementById("chat-room-name");
+  const roomDescEl = document.getElementById("chat-room-desc");
+  const emptyEl = document.getElementById("chat-empty");
   const listEl = document.getElementById("chat-message-list");
 
   const formEl = document.getElementById("chat-form");
@@ -384,6 +331,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const floatForm = document.getElementById("float-chat-form");
   const floatInput = document.getElementById("float-chat-input");
 
+  setCurrentUser();
+
   // styles
   if (listEl) {
     listEl.style.overflowY = "auto";
@@ -394,14 +343,13 @@ document.addEventListener("DOMContentLoaded", () => {
     floatList.style.maxHeight = "220px";
   }
 
-  // Floating open/close
+  // ---------- Floating: hide on messages page (app.js handles), we just wire open/close/send ----------
   floatToggle?.addEventListener("click", () => floatPanel?.classList.toggle("hidden"));
   floatClose?.addEventListener("click", () => floatPanel?.classList.add("hidden"));
 
-  // Floating send (always general)
   floatForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const text = floatInput.value.trim();
+    const text = floatInput?.value?.trim();
     if (!text) return;
 
     setCurrentUser();
@@ -419,53 +367,64 @@ document.addEventListener("DOMContentLoaded", () => {
     floatInput.value = "";
   });
 
-  // Main chat only on messages page
-  if (hasMainChat) {
-    // default empty
-    setHeader("Messages", "Start chatting…");
-    setEmptyStateVisible(true);
-    setInputEnabled(false);
+  // Always keep floating list live (even if hidden)
+  subscribeFloatToGeneral(floatList);
+
+  // ---------- Main Messages page logic ----------
+  if (hasMainChat && listEl) {
+    // default: empty state
+    activeChat = null;
+    setHeader(roomNameEl, roomDescEl, "Messages", "Start chatting…");
+    setEmptyState(emptyEl, listEl, true);
+    setInputEnabled(formEl, inputEl, false);
 
     // Rooms
-    document.querySelectorAll(".chat-room").forEach((btn) => {
+    roomButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
+        setCurrentUser();
+        if (!currentUser) return alert("Please login first.");
+
         const room = btn.dataset.room;
 
-        // Supervisor room visibility rule (optional safeguard)
-        setCurrentUser();
-        if (room === "supervisors" && currentUser?.role !== "supervisor") {
-          return alert("Supervisor only.");
-        }
-
+        // AI room -> coming soon only
         if (room === "ai") {
-          return selectConversation(
-            { type: "ai", roomId: "ai", title: "ChatGPT 5", desc: "Coming soon…", canSend: false },
-            btn
-          );
+          activeChat = { type: "ai", roomId: "ai", title: "ChatGPT 5", desc: "Coming soon…" };
+          setActiveButton(btn);
+          unsubscribeAllMain();
+          listEl.innerHTML = "";
+          setHeader(roomNameEl, roomDescEl, "ChatGPT 5", "Coming soon…");
+          setEmptyState(emptyEl, listEl, true);
+          setInputEnabled(formEl, inputEl, false);
+          return;
         }
 
-        const ROOM_META = {
-          general: {
-            title: "General chat",
-            desc: "All agents & supervisors • Be respectful • No customer data.",
-          },
-          supervisors: {
-            title: "Supervisors",
-            desc: "Supervisor-only space for internal notes and coordination.",
-          },
+        // supervisors room visible only to supervisors (extra safety)
+        if (room === "supervisors" && currentUser.role !== "supervisor") {
+          alert("Supervisor only room.");
+          return;
+        }
+
+        activeChat = {
+          type: "room",
+          roomId: room,
+          title: room === "general" ? "General chat" : "Supervisors",
+          desc:
+            room === "general"
+              ? "All agents & supervisors • Be respectful • No customer data."
+              : "Supervisor-only space for internal notes and coordination.",
         };
 
-        const meta = ROOM_META[room] || { title: room, desc: "" };
+        setActiveButton(btn);
+        setHeader(roomNameEl, roomDescEl, activeChat.title, activeChat.desc);
+        setEmptyState(emptyEl, listEl, false);
+        setInputEnabled(formEl, inputEl, true);
 
-        selectConversation(
-          { type: "room", roomId: room, title: meta.title, desc: meta.desc, canSend: true },
-          btn
-        );
+        subscribeMainToRoom(activeChat.roomId, listEl);
       });
     });
 
     // DMs
-    document.querySelectorAll(".chat-dm").forEach((btn) => {
+    dmButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         setCurrentUser();
         if (!currentUser) return alert("Please login first.");
@@ -473,37 +432,39 @@ document.addEventListener("DOMContentLoaded", () => {
         const otherId = btn.dataset.dm;
         if (!otherId) return;
 
-        const otherName = btn.dataset.name || `User ${otherId}`;
-        const roomId = makeDmRoomId(currentUser.id, otherId);
+        const roomId = dmRoomId(currentUser.id, otherId);
 
-        selectConversation(
-          {
-            type: "dm",
-            roomId,
-            title: otherName,
-            desc: "Direct message",
-            canSend: true,
-          },
-          btn
-        );
+        const nameEl = btn.querySelector(".chat-room-title");
+        const otherName = nameEl ? nameEl.textContent.trim() : `User ${otherId}`;
+
+        activeChat = {
+          type: "dm",
+          roomId,
+          title: otherName,
+          desc: `Direct message • CCMS ${otherId}`,
+        };
+
+        setActiveButton(btn);
+        setHeader(roomNameEl, roomDescEl, activeChat.title, activeChat.desc);
+        setEmptyState(emptyEl, listEl, false);
+        setInputEnabled(formEl, inputEl, true);
+
+        subscribeMainToRoom(activeChat.roomId, listEl);
       });
     });
 
-    // Send from main chat
+    // Send (main)
     formEl?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const text = inputEl.value.trim();
+      const text = inputEl?.value?.trim();
       if (!text) return;
 
       setCurrentUser();
       if (!currentUser) return alert("Please login first.");
-
-      if (!currentConversation || !currentConversation.roomId || !currentConversation.canSend) {
-        return;
-      }
+      if (!activeChat || activeChat.type === "ai") return;
 
       await addDoc(collection(db, MESSAGES_COL), {
-        room: currentConversation.roomId,
+        room: activeChat.roomId,
         text,
         userId: currentUser.id,
         name: currentUser.name,
@@ -514,24 +475,33 @@ document.addEventListener("DOMContentLoaded", () => {
       inputEl.value = "";
     });
 
-    // statuses
-    subscribeTodayStatuses();
+    // Status dots
+    subscribeStatusDots();
   }
-
-  // Floating subscription always
-  subscribeFloatToGeneral(floatList);
-
-  // Initial visibility
-  updateFloatingVisibility();
 });
 
-// app.js will dispatch page-changed; but we also handle user-changed
+// login/logout without refresh
 window.addEventListener("telesyriana:user-changed", () => {
   setCurrentUser();
-  updateFloatingVisibility();
-});
 
-window.addEventListener("telesyriana:page-changed", () => {
-  updateFloatingVisibility();
-});
+  // update status dots subscription
+  subscribeStatusDots();
 
+  // if user logged out while in messages page, reset
+  const listEl = document.getElementById("chat-message-list");
+  const emptyEl = document.getElementById("chat-empty");
+  const roomNameEl = document.getElementById("chat-room-name");
+  const roomDescEl = document.getElementById("chat-room-desc");
+  const formEl = document.getElementById("chat-form");
+  const inputEl = document.getElementById("chat-input");
+
+  if (!currentUser) {
+    unsubscribeAllMain();
+    clearActiveButtons();
+    activeChat = null;
+    if (listEl) listEl.innerHTML = "";
+    setHeader(roomNameEl, roomDescEl, "Messages", "Start chatting…");
+    setEmptyState(emptyEl, listEl, true);
+    setInputEnabled(formEl, inputEl, false);
+  }
+});
