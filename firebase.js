@@ -12,8 +12,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  addDoc,
-  limit
+  addDoc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -28,7 +27,6 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// 🔹 كل شي بدنا نستخدمه بمكان واحد
 export const fs = {
   doc,
   setDoc,
@@ -40,6 +38,6 @@ export const fs = {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  addDoc,
-  limit,
+  addDoc
 };
+
