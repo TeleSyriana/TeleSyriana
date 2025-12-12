@@ -80,7 +80,6 @@ function createMessageNode(m, showRole) {
 }
 
 function renderFresh(listEl, msgs, showRole) {
-  // حافظ على اللودر إذا موجود
   const loader = ensureTopLoader(listEl);
 
   // امسح كلشي ما عدا اللودر
@@ -104,7 +103,7 @@ function renderChunkToTop(listEl, items, showRole) {
   const frag = document.createDocumentFragment();
   items.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
 
-  // ✅ حط الرسائل بعد اللودر مباشرة (مو قبله)
+  // ✅ حط الرسائل بعد اللودر مباشرة
   const afterLoader = loader.nextSibling;
   if (afterLoader) listEl.insertBefore(frag, afterLoader);
   else listEl.appendChild(frag);
@@ -139,8 +138,8 @@ function attachScrollLoader(listEl) {
     const total = roomCache.length;
     const alreadyRenderedStartIndex = Math.max(0, total - renderedCount);
 
-    if (alreadyRenderedStartIndex <= 0) return;      // ما في أقدم
-    if (renderedCount >= MAX_RENDER) return;         // حماية
+    if (alreadyRenderedStartIndex <= 0) return; // ما في أقدم
+    if (renderedCount >= MAX_RENDER) return; // حماية
 
     loader.style.display = "block";
 
@@ -160,7 +159,7 @@ function subscribeMainToRoom(room, listEl) {
   if (!listEl) return;
   unsubscribeMain?.();
 
-  // ✅ متوافق مع index عندك: room ASC + ts DESC
+  // ✅ متوافق مع index: room + ts DESC
   const qRoom = query(
     collection(db, MESSAGES_COL),
     where("room", "==", room),
@@ -175,7 +174,7 @@ function subscribeMainToRoom(room, listEl) {
       const all = [];
       snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
 
-      // query رجّع DESC => نخليه cache ASC
+      // DESC => نخليه cache ASC
       all.reverse();
       roomCache = all;
 
@@ -198,32 +197,39 @@ function subscribeFloatToGeneral(floatList) {
   if (!floatList) return;
   unsubscribeFloat?.();
 
-  // نفس فكرة index
   const qGeneral = query(
     collection(db, MESSAGES_COL),
     where("room", "==", "general"),
     orderBy("ts", "desc")
   );
 
-  unsubscribeFloat = onSnapshot(qGeneral, (snapshot) => {
-    setCurrentUser();
-    const all = [];
-    snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
-    all.reverse();
+  unsubscribeFloat = onSnapshot(
+    qGeneral,
+    (snapshot) => {
+      setCurrentUser();
 
-    const last = all.slice(Math.max(0, all.length - 30));
-    // showRole = false في العائم
-    floatList.innerHTML = "";
-    const frag = document.createDocumentFragment();
-    last.forEach((m) => frag.appendChild(createMessageNode(m, false)));
-    floatList.appendChild(frag);
-    floatList.scrollTop = floatList.scrollHeight;
-  });
+      const all = [];
+      snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
+      all.reverse();
+
+      const last = all.slice(Math.max(0, all.length - 30));
+
+      floatList.innerHTML = "";
+      const frag = document.createDocumentFragment();
+      last.forEach((m) => frag.appendChild(createMessageNode(m, false)));
+      floatList.appendChild(frag);
+      floatList.scrollTop = floatList.scrollHeight;
+    },
+    (err) => {
+      console.error("Float snapshot error:", err);
+    }
+  );
 }
 
 // ====== init ======
 document.addEventListener("DOMContentLoaded", () => {
-  const hasMainChat = !!document.getElementByID("chat-message-list")
+  // ✅ تصحيح: getElementById (مو ByID)
+  const hasMainChat = !!document.getElementById("chat-message-list");
 
   const roomButtons = document.querySelectorAll(".chat-room");
   const roomNameEl = document.getElementById("chat-room-name");
@@ -266,48 +272,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const supBtn = document.querySelector('.chat-room[data-room="supervisors"]');
   if (supBtn && (!currentUser || currentUser.role !== "supervisor")) supBtn.classList.add("hidden");
 
-  // ✅ pop chat: بس اذا العناصر موجودة
+  // ✅ pop chat: شغّله بكل الصفحات إذا المستخدم موجود
   if (floatToggle && currentUser) floatToggle.classList.remove("hidden");
 
-  roomButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const room = btn.dataset.room;
-      currentRoom = room;
-
-      applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
-      setActiveRoomButton(room, roomButtons);
-
-      subscribeMainToRoom(room, listEl);
-    });
-  });
-
-  formEl?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const text = inputEl.value.trim();
-    if (!text) return;
-
-    setCurrentUser();
-    if (!currentUser) return alert("Please login first.");
-
-    try {
-      await addDoc(collection(db, MESSAGES_COL), {
-        room: currentRoom,
-        text,
-        userId: currentUser.id,
-        name: currentUser.name,
-        role: currentUser.role,
-        ts: serverTimestamp(),
-      });
-      inputEl.value = "";
-    } catch (err) {
-      console.error("Error sending message", err);
-      alert("Error sending message: " + err.message);
-    }
-  });
-
+  // floating open/close
   floatToggle?.addEventListener("click", () => floatPanel?.classList.toggle("hidden"));
   floatClose?.addEventListener("click", () => floatPanel?.classList.add("hidden"));
 
+  // floating send
   floatForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = floatInput.value.trim();
@@ -332,10 +304,60 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  applyRoomMeta(currentRoom, ROOM_META, roomNameEl, roomDescEl);
-  setActiveRoomButton(currentRoom, roomButtons);
+  // ✅ main chat: فقط إذا الصفحة فيها عناصر المسجات
+  if (hasMainChat && listEl) {
+    applyRoomMeta(currentRoom, ROOM_META, roomNameEl, roomDescEl);
+    setActiveRoomButton(currentRoom, roomButtons);
 
-  subscribeMainToRoom(currentRoom, listEl);
+    roomButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const room = btn.dataset.room;
+        currentRoom = room;
+
+        applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
+        setActiveRoomButton(room, roomButtons);
+
+        // reset binding when switching room
+        scrollBoundEl = null;
+
+        subscribeMainToRoom(room, listEl);
+      });
+    });
+
+    formEl?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = inputEl.value.trim();
+      if (!text) return;
+
+      setCurrentUser();
+      if (!currentUser) return alert("Please login first.");
+
+      try {
+        await addDoc(collection(db, MESSAGES_COL), {
+          room: currentRoom,
+          text,
+          userId: currentUser.id,
+          name: currentUser.name,
+          role: currentUser.role,
+          ts: serverTimestamp(),
+        });
+        inputEl.value = "";
+      } catch (err) {
+        console.error("Error sending message", err);
+        alert("Error sending message: " + err.message);
+      }
+    });
+
+    subscribeMainToRoom(currentRoom, listEl);
+  }
+
+  // ✅ floating subscription دائماً
   subscribeFloatToGeneral(floatList);
 });
 
+// ✅ إذا بتعمل login بدون refresh: نقدر نحدّث زر 💬
+window.addEventListener("telesyriana:user-changed", () => {
+  setCurrentUser();
+  const floatToggle = document.getElementById("float-chat-toggle");
+  if (floatToggle && currentUser) floatToggle.classList.remove("hidden");
+});
