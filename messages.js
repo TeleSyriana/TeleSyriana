@@ -1,19 +1,35 @@
-// messages.js – TeleSyriana chat UI (local demo)
-// - غرف: General + Supervisors
-// - إخفاء Supervisors عن الـ agents
-// - استخدام currentUser من localStorage
-// - شات أساسي + شات عائم (floating)
+// messages.js – TeleSyriana chat UI (Firestore realtime)
+// - Rooms: general + supervisors
+// - Hide supervisors room for non-supervisors
+// - Uses currentUser from localStorage (same key as app.js)
+// - Realtime sync عبر Firestore + floating mini chat
+
+import { db, fs } from "./firebase.js";
+
+const {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+} = fs;
 
 const USER_KEY = "telesyrianaUser";
-
-// تخزين بسيط بالذاكرة (لسا بدون Firestore)
-const MESSAGE_STORE = {
-  general: [],
-  supervisors: [],
-};
+const CHAT_COL = "chatMessages";
 
 let currentUser = null;
 let currentRoom = "general";
+let unsubscribeChat = null;
+
+// نخزّن آخر رسائل معمول لها render بالذاكرة بس (للسكرول وغيره)
+let lastMessagesForRoom = {
+  general: [],
+  supervisors: [],
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   const pageMessages = document.getElementById("page-messages");
@@ -27,7 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
 
-  // عناصر الشات العائم (floating)
+  // عناصر الشات العائم
   const floatToggle = document.getElementById("float-chat-toggle");
   const floatPanel = document.getElementById("float-chat-panel");
   const floatClose = document.getElementById("float-chat-close");
@@ -43,9 +59,6 @@ document.addEventListener("DOMContentLoaded", () => {
     supBtn.classList.add("hidden");
   }
 
-  // ملاحظة: إظهار/إخفاء زر البالونة صار من app.js
-  // هون بس نضيف الـ listeners لو العناصر موجودة
-
   // تعريف وصف الغرف
   const ROOM_META = {
     general: {
@@ -58,34 +71,71 @@ document.addEventListener("DOMContentLoaded", () => {
     },
   };
 
+  // لو في مستخدم محفوظ من قبل (auto-login) فعّل الاشتراك فوراً
+  if (currentUser) {
+    subscribeToRoom(currentRoom, {
+      roomNameEl,
+      roomDescEl,
+      listEl,
+      floatList,
+      ROOM_META,
+    });
+  } else {
+    // ما في مستخدم → نعطّل الـ form بس (احتياط)
+    if (formEl) formEl.classList.add("hidden");
+    if (floatToggle) floatToggle.classList.add("hidden");
+  }
+
   // تبديل الغرف من القائمة الجانبية
   roomButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (!ensureUser()) return;
       const room = btn.dataset.room;
-      switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList);
+      switchRoom(room, {
+        ROOM_META,
+        roomButtons,
+        roomNameEl,
+        roomDescEl,
+        listEl,
+        floatList,
+      });
     });
   });
 
   // إرسال رسالة من الشات الرئيسي
   if (formEl && inputEl) {
-    formEl.addEventListener("submit", (e) => {
+    formEl.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!ensureUser()) return;
+
       const text = inputEl.value.trim();
       if (!text) return;
 
-      appendMessage(currentRoom, text);
+      await sendMessage(currentRoom, text);
       inputEl.value = "";
-      renderMainMessages(listEl);
-      renderFloatingMessages(floatList); // الشات العائم يعرض الـ general فقط
+      // ما في داعي نعمل render يدوي، onSnapshot رح يحدّث لوحده
     });
   }
 
-  // شات عائم – فتح/إغلاق (لو البالونة موجودة)
+  // شات عائم – فتح/إغلاق
   if (floatToggle && floatPanel) {
     floatToggle.addEventListener("click", () => {
+      if (!ensureUser()) return;
+
       floatPanel.classList.toggle("hidden");
+
+      // أول ما يفتح، نتأكد المشتركين بالغرفة العامة
       if (!floatPanel.classList.contains("hidden")) {
-        renderFloatingMessages(floatList);
+        subscribeToRoom("general", {
+          ROOM_META,
+          roomButtons,
+          roomNameEl,
+          roomDescEl,
+          listEl,
+          floatList,
+        });
+        // عرض آخر رسائل محفوظة
+        renderFloatingMessages(floatList, lastMessagesForRoom.general);
       }
     });
   }
@@ -96,40 +146,23 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // إرسال رسالة من الشات العائم (دائماً على general)
+  // إرسال رسالة من الشات العائم (دائماً general)
   if (floatForm && floatInput) {
-    floatForm.addEventListener("submit", (e) => {
+    floatForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!ensureUser()) return;
+
       const text = floatInput.value.trim();
       if (!text) return;
 
-      appendMessage("general", text); // نثبّت إنها للغرفة العامة
+      await sendMessage("general", text);
       floatInput.value = "";
-      renderMainMessages(listEl);      // لو فاتح صفحة Messages
-      renderFloatingMessages(floatList);
     });
   }
 
-  // أول رندر
+  // أول meta
   applyRoomMeta(currentRoom, ROOM_META, roomNameEl, roomDescEl);
   setActiveRoomButton(currentRoom, roomButtons);
-  renderMainMessages(listEl);
-  renderFloatingMessages(floatList);
-
-  // رسالة ترحيبية واحدة بالـ General بأول مرة
-  if (MESSAGE_STORE.general.length === 0) {
-    MESSAGE_STORE.general.push({
-      id: Date.now(),
-      room: "general",
-      userId: "system",
-      name: "System",
-      role: "system",
-      text: "Welcome to the TeleSyriana general chat 👋",
-      ts: new Date(),
-    });
-    renderMainMessages(listEl);
-    renderFloatingMessages(floatList);
-  }
 });
 
 // ----------------- Helpers -----------------
@@ -147,25 +180,109 @@ function loadUserFromStorage() {
   }
 }
 
-function switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList) {
-  if (!MESSAGE_STORE[room]) return;
+function ensureUser() {
+  if (!currentUser) {
+    loadUserFromStorage();
+  }
+  if (!currentUser) {
+    alert("Please login first to use chat.");
+    return false;
+  }
+  return true;
+}
+
+function switchRoom(room, ctx) {
+  if (!room || currentRoom === room) return;
   currentRoom = room;
+
+  applyRoomMeta(room, ctx.ROOM_META, ctx.roomNameEl, ctx.roomDescEl);
+  setActiveRoomButton(room, ctx.roomButtons);
+
+  subscribeToRoom(room, ctx);
+}
+
+// اشتراك Firestore بالغرفة الحالية
+async function subscribeToRoom(
+  room,
+  { ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList }
+) {
+  if (!ensureUser()) return;
+
+  // أوقف الاشتراك القديم
+  if (unsubscribeChat) {
+    unsubscribeChat();
+    unsubscribeChat = null;
+  }
+
+  const colRef = collection(db, CHAT_COL);
+  const qRoom = query(
+    colRef,
+    where("room", "==", room),
+    orderBy("ts", "asc")
+  );
+
+  // تأمين رسالة system welcome لكل غرفة (doc ثابت ID)
+  await ensureSystemWelcome(room);
+
+  unsubscribeChat = onSnapshot(qRoom, (snapshot) => {
+    const msgs = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      msgs.push({
+        ...data,
+        id: docSnap.id,
+      });
+    });
+
+    lastMessagesForRoom[room] = msgs;
+
+    // إذا هاي الغرفة هي المفتوحة في الصفحة الرئيسية
+    if (room === currentRoom) {
+      renderMainMessages(listEl, msgs);
+    }
+
+    // الشات العائم يقرأ دائماً general
+    if (room === "general" && floatList) {
+      renderFloatingMessages(floatList, msgs);
+    }
+  });
+
+  // حدّث الهيدر للغرفة
   applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
   setActiveRoomButton(room, roomButtons);
-  renderMainMessages(listEl);
+}
+
+async function ensureSystemWelcome(room) {
+  const id = `system_welcome_${room}`;
+  const ref = doc(collection(db, CHAT_COL), id);
+  const snap = await getDoc(ref);
+  if (snap.exists()) return;
+
+  let text = "";
   if (room === "general") {
-    renderFloatingMessages(floatList);
+    text = "Welcome to the TeleSyriana general chat 👋";
+  } else if (room === "supervisors") {
+    text = "Supervisor room – internal coordination only.";
+  } else {
+    text = "Welcome to this chat room.";
   }
+
+  await setDoc(ref, {
+    room,
+    userId: "system",
+    name: "System",
+    role: "system",
+    text,
+    ts: serverTimestamp(),
+  });
 }
 
 function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
   const meta = ROOM_META[room] || {};
   if (roomNameEl) roomNameEl.textContent = meta.name || room;
-  if (roomDescEl) {
+  if (roomDescEl)
     roomDescEl.textContent =
-      meta.desc ||
-      "Internal chat room.";
-  }
+      meta.desc || "Internal chat room.";
 }
 
 function setActiveRoomButton(room, roomButtons) {
@@ -178,30 +295,26 @@ function setActiveRoomButton(room, roomButtons) {
   });
 }
 
-function appendMessage(room, text) {
-  const now = new Date();
-  const msg = {
-    id: now.getTime(),
-    room,
-    userId: currentUser ? currentUser.id : "guest",
-    name: currentUser ? currentUser.name : "Unknown",
-    role: currentUser ? currentUser.role : "agent",
-    text,
-    ts: now,
-  };
+async function sendMessage(room, text) {
+  if (!currentUser) return;
 
-  if (!MESSAGE_STORE[room]) {
-    MESSAGE_STORE[room] = [];
-  }
-  MESSAGE_STORE[room].push(msg);
+  const colRef = collection(db, CHAT_COL);
+  const ref = doc(colRef); // auto ID
+
+  await setDoc(ref, {
+    room,
+    userId: currentUser.id,
+    name: currentUser.name,
+    role: currentUser.role,
+    text,
+    ts: serverTimestamp(),
+  });
 }
 
 // ----------------- Rendering -----------------
 
-function renderMainMessages(listEl) {
+function renderMainMessages(listEl, msgs) {
   if (!listEl) return;
-  const msgs = MESSAGE_STORE[currentRoom] || [];
-
   listEl.innerHTML = "";
 
   msgs.forEach((m) => {
@@ -222,17 +335,14 @@ function renderMainMessages(listEl) {
 
     wrapper.appendChild(meta);
     wrapper.appendChild(text);
-
     listEl.appendChild(wrapper);
   });
 
   listEl.scrollTop = listEl.scrollHeight;
 }
 
-function renderFloatingMessages(floatList) {
+function renderFloatingMessages(floatList, msgs) {
   if (!floatList) return;
-  const msgs = MESSAGE_STORE.general || [];
-
   floatList.innerHTML = "";
 
   msgs.forEach((m) => {
@@ -253,7 +363,6 @@ function renderFloatingMessages(floatList) {
 
     wrapper.appendChild(meta);
     wrapper.appendChild(text);
-
     floatList.appendChild(wrapper);
   });
 
@@ -262,6 +371,14 @@ function renderFloatingMessages(floatList) {
 
 function formatTime(ts) {
   if (!ts) return "";
-  const d = ts instanceof Date ? ts : new Date(ts);
+  let d;
+  // Firestore Timestamp
+  if (ts.toDate && typeof ts.toDate === "function") {
+    d = ts.toDate();
+  } else if (ts instanceof Date) {
+    d = ts;
+  } else {
+    d = new Date(ts);
+  }
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
