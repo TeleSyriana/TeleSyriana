@@ -168,7 +168,7 @@
             <aside class="messages-sidebar">
               <div class="messages-sidebar-header">Rooms</div>
 
-              <!-- ✅ ما في active افتراضي -->
+              <!-- No active by default -->
               <button class="chat-room" data-room="general">
                 <div class="chat-room-title">General chat</div>
                 <div class="chat-room-sub">All agents &amp; supervisors</div>
@@ -181,7 +181,7 @@
                 <div class="chat-room-sub">Internal notes</div>
               </button>
 
-              <!-- ✅ ChatGPT room -->
+              <!-- ChatGPT room -->
               <button class="chat-room" data-room="ai">
                 <div class="chat-room-title">
                   ChatGPT 5 <span class="room-badge">Coming soon</span>
@@ -191,7 +191,7 @@
 
               <div class="messages-sidebar-header small">Direct messages</div>
 
-              <!-- ✅ DM buttons (نربطها بالـ messages.js) -->
+              <!-- DM buttons -->
               <button class="chat-dm" data-dm="1001">
                 <div class="chat-room-title">Agent 01</div>
                 <div class="chat-room-sub">Direct chat</div>
@@ -227,15 +227,13 @@
                 </div>
               </header>
 
-              <!-- ✅ Empty state -->
+              <!-- Empty state -->
               <div id="chat-empty" style="padding:10px 2px; font-size:13px; color:#777;">
                 Select a room or a person from the left to start chatting.
               </div>
 
-              <!-- Messages list -->
               <div id="chat-message-list" class="chat-message-list"></div>
 
-              <!-- Input -->
               <form id="chat-form" class="chat-input-row">
                 <input
                   id="chat-input"
@@ -283,10 +281,9 @@
     </main>
   </div>
 
-  <!-- ✅ FLOATING CHAT BUBBLE (الوحيد في الصفحة) -->
+  <!-- ✅ FLOATING CHAT BUBBLE (ONE ONLY) -->
   <button id="float-chat-toggle" class="floating-chat-toggle hidden">💬</button>
 
-  <!-- FLOATING MINI CHAT -->
   <div id="float-chat-panel" class="floating-chat-panel hidden">
     <div class="floating-chat-header">
       <div class="floating-chat-title">TeleSyriana chat</div>
