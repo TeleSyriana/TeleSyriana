@@ -160,96 +160,96 @@
       </section>
 
       <!-- MESSAGES PAGE -->
-      <section id="page-messages" class="page-section hidden">
-        <section class="card messages-card">
-          <div class="messages-layout">
+<section id="page-messages" class="page-section hidden">
+  <section class="card messages-card">
+    <div class="messages-layout">
 
-            <!-- SIDEBAR -->
-            <aside class="messages-sidebar">
-              <div class="messages-sidebar-header">Rooms</div>
+      <!-- SIDEBAR -->
+      <aside class="messages-sidebar">
+        <div class="messages-sidebar-header">Rooms</div>
 
-              <!-- No active by default -->
-              <button class="chat-room" data-room="general">
-                <div class="chat-room-title">General chat</div>
-                <div class="chat-room-sub">All agents &amp; supervisors</div>
-              </button>
+        <!-- ✅ no active by default -->
+        <button class="chat-room" data-room="general">
+          <div class="chat-room-title">General chat</div>
+          <div class="chat-room-sub">All agents &amp; supervisors</div>
+        </button>
 
-              <button class="chat-room" data-room="supervisors">
-                <div class="chat-room-title">
-                  Supervisors <span class="room-badge">Supervisor only</span>
-                </div>
-                <div class="chat-room-sub">Internal notes</div>
-              </button>
-
-              <!-- ChatGPT room -->
-              <button class="chat-room" data-room="ai">
-                <div class="chat-room-title">
-                  ChatGPT 5 <span class="room-badge">Coming soon</span>
-                </div>
-                <div class="chat-room-sub">AI assistant room</div>
-              </button>
-
-              <div class="messages-sidebar-header small">Direct messages</div>
-
-              <!-- DM buttons -->
-              <button class="chat-dm" data-dm="1001">
-                <div class="chat-room-title">Agent 01</div>
-                <div class="chat-room-sub">Direct chat</div>
-              </button>
-
-              <button class="chat-dm" data-dm="1002">
-                <div class="chat-room-title">Agent 02</div>
-                <div class="chat-room-sub">Direct chat</div>
-              </button>
-
-              <button class="chat-dm" data-dm="1003">
-                <div class="chat-room-title">Agent 03</div>
-                <div class="chat-room-sub">Direct chat</div>
-              </button>
-
-              <button class="chat-dm" data-dm="2001">
-                <div class="chat-room-title">Supervisor Dema</div>
-                <div class="chat-room-sub">Direct chat</div>
-              </button>
-
-              <button class="chat-dm" data-dm="2002">
-                <div class="chat-room-title">Supervisor Moustafa</div>
-                <div class="chat-room-sub">Direct chat</div>
-              </button>
-            </aside>
-
-            <!-- CHAT AREA -->
-            <div class="messages-main">
-              <header class="chat-header">
-                <div>
-                  <div class="chat-room-name" id="chat-room-name">Messages</div>
-                  <div class="chat-room-desc" id="chat-room-desc">Start chatting…</div>
-                </div>
-              </header>
-
-              <!-- Empty state -->
-              <div id="chat-empty" style="padding:10px 2px; font-size:13px; color:#777;">
-                Select a room or a person from the left to start chatting.
-              </div>
-
-              <div id="chat-message-list" class="chat-message-list"></div>
-
-              <form id="chat-form" class="chat-input-row">
-                <input
-                  id="chat-input"
-                  type="text"
-                  autocomplete="off"
-                  placeholder="Type a message…"
-                  class="chat-input"
-                  disabled
-                />
-                <button type="submit" class="chat-send-btn" disabled>Send</button>
-              </form>
-
-            </div>
+        <button class="chat-room" data-room="supervisors">
+          <div class="chat-room-title">
+            Supervisors <span class="room-badge">Supervisor only</span>
           </div>
-        </section>
-      </section>
+          <div class="chat-room-sub">Internal notes</div>
+        </button>
+
+        <button class="chat-room" data-room="ai">
+          <div class="chat-room-title">
+            ChatGPT 5 <span class="room-badge">Coming soon</span>
+          </div>
+          <div class="chat-room-sub">AI assistant room</div>
+        </button>
+
+        <div class="messages-sidebar-header small">Direct messages</div>
+
+        <!-- ✅ DM buttons -->
+        <button class="chat-dm" data-dm="1001">
+          <div class="chat-room-title">Agent 01</div>
+          <div class="chat-room-sub">Direct chat</div>
+        </button>
+
+        <button class="chat-dm" data-dm="1002">
+          <div class="chat-room-title">Agent 02</div>
+          <div class="chat-room-sub">Direct chat</div>
+        </button>
+
+        <button class="chat-dm" data-dm="1003">
+          <div class="chat-room-title">Agent 03</div>
+          <div class="chat-room-sub">Direct chat</div>
+        </button>
+
+        <button class="chat-dm" data-dm="2001">
+          <div class="chat-room-title">Supervisor Dema</div>
+          <div class="chat-room-sub">Direct chat</div>
+        </button>
+
+        <button class="chat-dm" data-dm="2002">
+          <div class="chat-room-title">Supervisor Moustafa</div>
+          <div class="chat-room-sub">Direct chat</div>
+        </button>
+      </aside>
+
+      <!-- CHAT AREA -->
+      <div class="messages-main">
+        <header class="chat-header">
+          <div>
+            <div class="chat-room-name" id="chat-room-name">Messages</div>
+            <div class="chat-room-desc" id="chat-room-desc">Start chatting…</div>
+          </div>
+        </header>
+
+        <!-- ✅ Empty state -->
+        <div id="chat-empty" style="padding:10px 2px; font-size:13px; color:#777;">
+          Select a room or a person from the left to start chatting.
+        </div>
+
+        <div id="chat-message-list" class="chat-message-list"></div>
+
+        <form id="chat-form" class="chat-input-row">
+          <input
+            id="chat-input"
+            type="text"
+            autocomplete="off"
+            placeholder="Type a message…"
+            class="chat-input"
+            disabled
+          />
+          <button type="submit" class="chat-send-btn" disabled>Send</button>
+        </form>
+      </div>
+
+    </div>
+  </section>
+</section>
+
 
       <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
@@ -306,3 +306,4 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
