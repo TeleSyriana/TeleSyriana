@@ -86,6 +86,34 @@ function recomputeLiveUsage(now) {
   if (!state) {
     return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
   }
+function pad2(n){ return String(n).padStart(2, "0"); }
+
+function renderClockAndDate(){
+  const dateEl = document.getElementById("today-date");
+  const dayEl  = document.getElementById("today-day");
+  const clockEl = document.getElementById("live-clock");
+
+  if (!dateEl || !dayEl || !clockEl) return;
+
+  const now = new Date();
+
+  // Example: 12 Dec 2025
+  const dateText = now.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  // Example: Thursday
+  const dayText = now.toLocaleDateString(undefined, { weekday: "long" });
+
+  // Example: 16:34
+  const timeText = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+
+  dateEl.textContent = dateText;
+  dayEl.textContent = dayText;
+  clockEl.textContent = timeText;
+}
 
   const elapsedMin = (now - state.lastStatusChange) / 60000;
 
@@ -564,3 +592,4 @@ function showDashboard() {
   switchPage("home");
   updateDashboardUI();
 }
+
