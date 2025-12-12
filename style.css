@@ -531,7 +531,7 @@ input:focus, textarea:focus{
   display:flex;
   align-items:center;
   gap:8px;
-  font-size:9px;
+  font-size:10px;
   color:#7a7a7a;
   line-height:1.1;
 }
@@ -702,6 +702,7 @@ input:focus, textarea:focus{
   .messages-layout{ flex-direction:column; }
   .messages-sidebar{ width:100%; border-right:none; border-bottom:1px solid var(--line); }
 }
+
 
 
 
