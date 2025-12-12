@@ -274,6 +274,50 @@ input:focus, textarea:focus{
   gap:4px;
 }
 
+/* ✅ Dashboard side widgets (Date + Clock) */
+.side-widgets{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+  margin-top:12px;
+}
+
+.side-widget{
+  background:#f7f7f7;
+  border:1px solid #eee;
+  border-radius:14px;
+  padding:12px 12px;
+}
+
+.side-widget-title{
+  font-size:11px;
+  font-weight:800;
+  color:#777;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  margin-bottom:6px;
+}
+
+.side-widget-value{
+  font-size:16px;
+  font-weight:900;
+  color:#222;
+}
+
+.side-widget-clock{
+  font-size:20px;
+  font-weight:900;
+  color:#222;
+  letter-spacing:.02em;
+}
+
+.side-widget-sub{
+  margin-top:4px;
+  font-size:11px;
+  color:#888;
+}
+
+
 /* =========================
    Supervisor table
 ========================= */
@@ -702,6 +746,7 @@ input:focus, textarea:focus{
   .messages-layout{ flex-direction:column; }
   .messages-sidebar{ width:100%; border-right:none; border-bottom:1px solid var(--line); }
 }
+
 
 
 
