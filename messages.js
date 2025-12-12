@@ -1,19 +1,17 @@
-// messages.js – TeleSyriana chat UI (Firestore realtime, no composite index)
-// - Rooms: general + supervisors
-// - Direct profiles لسا ديكور، ما في private chat حالياً
-// - Hide supervisors room for non-supervisors
-// - Uses currentUser from localStorage
-// - Realtime sync + floating mini chat
+// messages.js – TeleSyriana chat UI (Firestore realtime)
+// - غرف: general + supervisors
+// - إخفاء supervisors عن الـ agents
+// - استخدام currentUser من localStorage
+// - شات أساسي + شات عائم (floating) لنفس الـ collection
 
 import { db, fs } from "./firebase.js";
 
 const {
   collection,
-  doc,
-  setDoc,
-  getDoc,
+  addDoc,
   query,
   where,
+  orderBy,
   onSnapshot,
   serverTimestamp,
 } = fs;
@@ -23,10 +21,15 @@ const CHAT_COL = "chatMessages";
 
 let currentUser = null;
 let currentRoom = "general";
-let unsubscribeChat = null;
 
-// نخزّن آخر رسائل معمول لها render بالذاكرة بس
-let lastMessagesForRoom = {
+// unsub لكل غرفة
+const roomUnsub = {
+  general: null,
+  supervisors: null,
+};
+
+// كاش للرسائل
+const messagesCache = {
   general: [],
   supervisors: [],
 };
@@ -43,7 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
 
-  // عناصر الشات العائم
+  // عناصر الشات العائم (floating)
   const floatToggle = document.getElementById("float-chat-toggle");
   const floatPanel = document.getElementById("float-chat-panel");
   const floatClose = document.getElementById("float-chat-close");
@@ -59,6 +62,11 @@ document.addEventListener("DOMContentLoaded", () => {
     supBtn.classList.add("hidden");
   }
 
+  // بالونة الشات العائم تظهر فقط إذا في مستخدم
+  if (floatToggle && currentUser) {
+    floatToggle.classList.remove("hidden");
+  }
+
   // تعريف وصف الغرف
   const ROOM_META = {
     general: {
@@ -71,46 +79,26 @@ document.addEventListener("DOMContentLoaded", () => {
     },
   };
 
-  // لو في مستخدم محفوظ من قبل
-  if (currentUser) {
-    subscribeToRoom(currentRoom, {
-      ROOM_META,
-      roomButtons,
-      roomNameEl,
-      roomDescEl,
-      listEl,
-      floatList,
-    });
-
-    // أظهر زر البالونة
-    if (floatToggle) floatToggle.classList.remove("hidden");
-  } else {
-    if (formEl) formEl.classList.add("hidden");
-    if (floatToggle) floatToggle.classList.add("hidden");
-  }
-
-  // تبديل الغرف
+  // تبديل الغرف من القائمة الجانبية
   roomButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (!ensureUser()) return;
       const room = btn.dataset.room;
-      switchRoom(room, {
+      switchRoom(
+        room,
         ROOM_META,
         roomButtons,
         roomNameEl,
         roomDescEl,
         listEl,
-        floatList,
-      });
+        floatList
+      );
     });
   });
 
-  // إرسال من الشات الرئيسي
+  // إرسال رسالة من الشات الرئيسي
   if (formEl && inputEl) {
     formEl.addEventListener("submit", async (e) => {
       e.preventDefault();
-      if (!ensureUser()) return;
-
       const text = inputEl.value.trim();
       if (!text) return;
 
@@ -122,21 +110,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // شات عائم – فتح/إغلاق
   if (floatToggle && floatPanel) {
     floatToggle.addEventListener("click", () => {
-      if (!ensureUser()) return;
-
       floatPanel.classList.toggle("hidden");
-
       if (!floatPanel.classList.contains("hidden")) {
-        // نتأكد مشتركين بالـ general
-        subscribeToRoom("general", {
-          ROOM_META,
-          roomButtons,
-          roomNameEl,
-          roomDescEl,
-          listEl,
-          floatList,
-        });
-        renderFloatingMessages(floatList, lastMessagesForRoom.general);
+        renderFloatingMessages(floatList, messagesCache.general);
       }
     });
   }
@@ -147,12 +123,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // إرسال من الشات العائم (دائماً general)
+  // إرسال رسالة من الشات العائم (دائماً على general)
   if (floatForm && floatInput) {
     floatForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      if (!ensureUser()) return;
-
       const text = floatInput.value.trim();
       if (!text) return;
 
@@ -161,9 +135,17 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // أول meta
-  applyRoomMeta(currentRoom, ROOM_META, roomNameEl, roomDescEl);
-  setActiveRoomButton(currentRoom, roomButtons);
+  // أول تشغيل: اشترك بغرفة general واعرضها
+  subscribeRoom("general", listEl, floatList);
+  switchRoom(
+    "general",
+    ROOM_META,
+    roomButtons,
+    roomNameEl,
+    roomDescEl,
+    listEl,
+    floatList
+  );
 });
 
 // ----------------- Helpers -----------------
@@ -181,97 +163,51 @@ function loadUserFromStorage() {
   }
 }
 
-function ensureUser() {
-  if (!currentUser) loadUserFromStorage();
-  if (!currentUser) {
-    alert("Please login first to use chat.");
-    return false;
+async function sendMessage(room, text) {
+  const u = currentUser || {
+    id: "guest",
+    name: "Unknown",
+    role: "agent",
+  };
+
+  try {
+    await addDoc(collection(db, CHAT_COL), {
+      room,
+      userId: u.id,
+      name: u.name,
+      role: u.role,
+      text,
+      createdAt: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("Error sending message", e);
   }
-  return true;
 }
 
-function switchRoom(room, ctx) {
-  if (!room || currentRoom === room) return;
-  currentRoom = room;
-
-  applyRoomMeta(room, ctx.ROOM_META, ctx.roomNameEl, ctx.roomDescEl);
-  setActiveRoomButton(room, ctx.roomButtons);
-  subscribeToRoom(room, ctx);
-}
-
-// اشتراك Firestore بالغرفة
-async function subscribeToRoom(
+function switchRoom(
   room,
-  { ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList }
+  ROOM_META,
+  roomButtons,
+  roomNameEl,
+  roomDescEl,
+  listEl,
+  floatList
 ) {
-  if (!ensureUser()) return;
+  if (!["general", "supervisors"].includes(room)) return;
 
-  if (unsubscribeChat) {
-    unsubscribeChat();
-    unsubscribeChat = null;
-  }
-
-  const colRef = collection(db, CHAT_COL);
-  // بدون orderBy لحتى ما يطلب index مركّب
-  const qRoom = query(colRef, where("room", "==", room));
-
-  await ensureSystemWelcome(room);
-
-  unsubscribeChat = onSnapshot(qRoom, (snapshot) => {
-    const msgs = [];
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      msgs.push({
-        ...data,
-        id: docSnap.id,
-      });
-    });
-
-    // نرتّب حسب ts بالـ JS
-    msgs.sort((a, b) => {
-      const ta = tsToMillis(a.ts);
-      const tb = tsToMillis(b.ts);
-      return ta - tb;
-    });
-
-    lastMessagesForRoom[room] = msgs;
-
-    if (room === currentRoom) {
-      renderMainMessages(listEl, msgs);
-    }
-
-    if (room === "general" && floatList) {
-      renderFloatingMessages(floatList, msgs);
-    }
-  });
-
+  currentRoom = room;
   applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
   setActiveRoomButton(room, roomButtons);
-}
 
-async function ensureSystemWelcome(room) {
-  const id = `system_welcome_${room}`;
-  const ref = doc(collection(db, CHAT_COL), id);
-  const snap = await getDoc(ref);
-  if (snap.exists()) return;
+  // تأكد إنو في subscription لها الغرفة
+  subscribeRoom(room, listEl, floatList);
 
-  let text = "";
+  // ارسم اللي موجود بالكاش
+  renderMainMessages(listEl, messagesCache[room] || []);
+
   if (room === "general") {
-    text = "Welcome to the TeleSyriana general chat 👋";
-  } else if (room === "supervisors") {
-    text = "Supervisor room – internal coordination only.";
-  } else {
-    text = "Welcome to this chat room.";
+    renderFloatingMessages(floatList, messagesCache.general || []);
   }
-
-  await setDoc(ref, {
-    room,
-    userId: "system",
-    name: "System",
-    role: "system",
-    text,
-    ts: serverTimestamp(),
-  });
 }
 
 function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
@@ -291,20 +227,41 @@ function setActiveRoomButton(room, roomButtons) {
   });
 }
 
-async function sendMessage(room, text) {
-  if (!currentUser) return;
+function subscribeRoom(room, listEl, floatList) {
+  if (roomUnsub[room]) {
+    // already subscribed
+    return;
+  }
 
-  const colRef = collection(db, CHAT_COL);
-  const ref = doc(colRef); // auto ID
+  const q = query(
+    collection(db, CHAT_COL),
+    where("room", "==", room),
+    orderBy("createdAt", "asc")
+  );
 
-  await setDoc(ref, {
-    room,
-    userId: currentUser.id,
-    name: currentUser.name,
-    role: currentUser.role,
-    text,
-    ts: serverTimestamp(),
-  });
+  roomUnsub[room] = onSnapshot(
+    q,
+    (snapshot) => {
+      const arr = [];
+      snapshot.forEach((doc) => {
+        arr.push({ id: doc.id, ...doc.data() });
+      });
+      messagesCache[room] = arr;
+
+      // إذا هاي الغرفة حالياً مفتوحة، ارسمها
+      if (currentRoom === room) {
+        renderMainMessages(listEl, arr);
+      }
+
+      // دائماً حدّث الشات العائم للـ general
+      if (room === "general") {
+        renderFloatingMessages(floatList, arr);
+      }
+    },
+    (err) => {
+      console.error("Error in room subscription", room, err);
+    }
+  );
 }
 
 // ----------------- Rendering -----------------
@@ -313,7 +270,7 @@ function renderMainMessages(listEl, msgs) {
   if (!listEl) return;
   listEl.innerHTML = "";
 
-  msgs.forEach((m) => {
+  (msgs || []).forEach((m) => {
     const wrapper = document.createElement("div");
     wrapper.className = "chat-message";
     if (currentUser && m.userId === currentUser.id) {
@@ -322,7 +279,7 @@ function renderMainMessages(listEl, msgs) {
 
     const meta = document.createElement("div");
     meta.className = "chat-message-meta";
-    const timeStr = formatTime(m.ts);
+    const timeStr = formatTime(m.createdAt);
     meta.textContent = `${m.name} (${m.role}) • ${timeStr}`;
 
     const text = document.createElement("div");
@@ -331,6 +288,7 @@ function renderMainMessages(listEl, msgs) {
 
     wrapper.appendChild(meta);
     wrapper.appendChild(text);
+
     listEl.appendChild(wrapper);
   });
 
@@ -341,7 +299,7 @@ function renderFloatingMessages(floatList, msgs) {
   if (!floatList) return;
   floatList.innerHTML = "";
 
-  msgs.forEach((m) => {
+  (msgs || []).forEach((m) => {
     const wrapper = document.createElement("div");
     wrapper.className = "chat-message";
     if (currentUser && m.userId === currentUser.id) {
@@ -350,7 +308,7 @@ function renderFloatingMessages(floatList, msgs) {
 
     const meta = document.createElement("div");
     meta.className = "chat-message-meta";
-    const timeStr = formatTime(m.ts);
+    const timeStr = formatTime(m.createdAt);
     meta.textContent = `${m.name} • ${timeStr}`;
 
     const text = document.createElement("div");
@@ -359,29 +317,24 @@ function renderFloatingMessages(floatList, msgs) {
 
     wrapper.appendChild(meta);
     wrapper.appendChild(text);
+
     floatList.appendChild(wrapper);
   });
 
   floatList.scrollTop = floatList.scrollHeight;
 }
 
-function tsToMillis(ts) {
-  if (!ts) return 0;
-  if (ts.toMillis && typeof ts.toMillis === "function") {
-    return ts.toMillis();
+function formatTime(val) {
+  if (!val) return "";
+  let d;
+  // Firestore Timestamp
+  if (val.toDate) {
+    d = val.toDate();
+  } else if (val instanceof Date) {
+    d = val;
+  } else {
+    d = new Date(val);
   }
-  if (ts.toDate && typeof ts.toDate === "function") {
-    return ts.toDate().getTime();
-  }
-  if (ts instanceof Date) {
-    return ts.getTime();
-  }
-  return new Date(ts).getTime();
-}
-
-function formatTime(ts) {
-  const ms = tsToMillis(ts);
-  if (!ms) return "";
-  const d = new Date(ms);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
