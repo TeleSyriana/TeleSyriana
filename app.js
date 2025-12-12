@@ -389,6 +389,12 @@ function handleLogin(e) {
 
   initStateForUser();
   showDashboard();
+
+  renderClockWidget();
+buildMiniCalendar();
+hookCalendarButtons();
+setInterval(renderClockWidget, 1000);
+
 }
 
 async function handleLogout() {
@@ -459,6 +465,7 @@ async function initStateForUser() {
   if (local) {
     state = local;
     finishInit(now);
+
     return;
   }
 
@@ -689,6 +696,7 @@ function showDashboard() {
   hookCalendarButtons();
   setInterval(renderClockWidget, 1000);
 }
+
 
 
 
