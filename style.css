@@ -442,7 +442,7 @@ input:focus, textarea:focus{
   color:#444;
 }
 
-.ring-text .widget-big{ font-size:18px; }
+.ring-text .widget-big{ font-size:12px; }
 
 /* Mobile */
 @media (max-width:768px){
@@ -878,6 +878,7 @@ input:focus, textarea:focus{
   .messages-layout{ flex-direction:column; }
   .messages-sidebar{ width:100%; border-right:none; border-bottom:1px solid var(--line); }
 }
+
 
 
 
