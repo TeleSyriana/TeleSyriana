@@ -523,6 +523,7 @@ input:focus, textarea:focus{
   gap:4px;
   min-width:0;
   max-width:70%;
+  font-size: 13px;
 }
 
 /* name beside avatar */
@@ -530,7 +531,7 @@ input:focus, textarea:focus{
   display:flex;
   align-items:center;
   gap:8px;
-  font-size:11px;
+  font-size:9px;
   color:#7a7a7a;
   line-height:1.1;
 }
@@ -701,5 +702,6 @@ input:focus, textarea:focus{
   .messages-layout{ flex-direction:column; }
   .messages-sidebar{ width:100%; border-right:none; border-bottom:1px solid var(--line); }
 }
+
 
 
