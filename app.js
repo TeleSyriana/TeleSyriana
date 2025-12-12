@@ -197,7 +197,7 @@ function loadStateForToday(userId) {
 // --------------------------- UI init -----------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
-  const navButtons = document.querySelectorAll(".nav-link");
+  const navButtons = document.querySelectorAll(".nav-link[data-page]");
 
   navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -567,6 +567,7 @@ function showDashboard() {
   switchPage("home");
   updateDashboardUI();
 }
+
 
 
 
