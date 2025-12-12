@@ -221,25 +221,44 @@
 
   </div>
 
-  <div class="work-box">
-  <div>Hours worked: <span id="work-used">0</span> / 8 hrs</div>
-  <div>Remaining: <span id="work-remaining">8</span> hrs</div>
+<!-- HOURS WORKED (ring like Break) -->
+<div class="break-widget" id="work-widget">
+  <div class="break-head">
+    <div class="break-title">Hours worked</div>
+    <div class="break-more">…</div>
+  </div>
+
+  <div class="break-body">
+    <div class="break-ring">
+      <svg viewBox="0 0 36 36" class="ring">
+        <path
+          class="ring-bg"
+          d="M18 2.0845
+             a 15.9155 15.9155 0 0 1 0 31.831
+             a 15.9155 15.9155 0 0 1 0 -31.831"
+        />
+        <path
+          id="work-ring-progress"
+          class="ring-progress"
+          stroke-dasharray="0, 100"
+          d="M18 2.0845
+             a 15.9155 15.9155 0 0 1 0 31.831
+             a 15.9155 15.9155 0 0 1 0 -31.831"
+        />
+      </svg>
+      <div id="work-ring-label" class="ring-label">0%</div>
+    </div>
+
+    <div class="break-meta">
+      <div class="break-big">
+        <span id="work-text">0 min</span> / <span id="work-target-text">8 hrs</span>
+      </div>
+      <div class="break-sub">time counted (no unavailable)</div>
+      <div class="break-sub">Remaining: <span id="work-remaining-text">8 hrs</span></div>
+    </div>
+  </div>
 </div>
 
-<!-- Optional ring widget (if you want) -->
-<!--
-<div class="work-ring">
-  <svg viewBox="0 0 36 36" class="ring">
-    <path class="ring-bg" d="M18 2.0845
-      a 15.9155 15.9155 0 0 1 0 31.831
-      a 15.9155 15.9155 0 0 1 0 -31.831" />
-    <path id="work-ring-progress" class="ring-prog" stroke-dasharray="0, 100" d="M18 2.0845
-      a 15.9155 15.9155 0 0 1 0 31.831
-      a 15.9155 15.9155 0 0 1 0 -31.831" />
-  </svg>
-  <div id="work-ring-label" class="ring-label">0%</div>
-</div>
--->
 
 </section>
 
@@ -451,6 +470,7 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
 
 
 
