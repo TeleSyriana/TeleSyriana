@@ -60,6 +60,28 @@ function statusLabel(code) {
   }
 }
 
+/**
+ * ✅ Minutes -> "xx min" OR "1 hr" OR "2 hrs 13 min"
+ * Rules:
+ *  - < 60: "59 min"
+ *  - 60: "1 hr"
+ *  - 61: "1 hr 1 min"
+ *  - 120: "2 hrs"
+ *  - 121: "2 hrs 1 min"
+ */
+function formatDuration(mins) {
+  const m = Math.max(0, Math.floor(Number(mins) || 0));
+  if (m < 60) return `${m} min`;
+
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+
+  const hrLabel = h === 1 ? "1 hr" : `${h} hrs`;
+  if (r === 0) return hrLabel;
+
+  return `${hrLabel} ${r} min`;
+}
+
 function recomputeLiveUsage(now) {
   if (!state) {
     return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
@@ -432,6 +454,7 @@ function updateDashboardUI() {
 }
 
 function updateBreakUI(used) {
+  // keep break counter as minutes (because limit is 45 and it's clearer)
   document.getElementById("break-used").textContent = Math.floor(used);
   document.getElementById("break-remaining").textContent = Math.max(
     0,
@@ -440,9 +463,10 @@ function updateBreakUI(used) {
 }
 
 function updateStatusMinutesUI(live) {
-  document.getElementById("op-min").textContent = Math.floor(live.operation);
-  document.getElementById("meet-min").textContent = Math.floor(live.meeting);
-  document.getElementById("hand-min").textContent = Math.floor(live.handling);
+  // ✅ NEW: show in hr/min format
+  document.getElementById("op-min").textContent = formatDuration(live.operation);
+  document.getElementById("meet-min").textContent = formatDuration(live.meeting);
+  document.getElementById("hand-min").textContent = formatDuration(live.handling);
 }
 
 // -------------------------- Supervisor Table ----------------------------
@@ -465,10 +489,10 @@ function buildSupervisorTableFromFirestore(rows) {
         <td>${r.userId}</td>
         <td>${r.role.toUpperCase()}</td>
         <td><span class="sup-status-pill status-${status}">${statusLabel(status)}</span></td>
-        <td>${Math.floor(r.operationMinutes || 0)} min</td>
+        <td>${formatDuration(r.operationMinutes || 0)}</td>
         <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
-        <td>${Math.floor(r.meetingMinutes || 0)} min</td>
-        <td>${Math.floor(r.unavailableMinutes || 0)} min</td>
+        <td>${formatDuration(r.meetingMinutes || 0)}</td>
+        <td>${formatDuration(r.unavailableMinutes || 0)}</td>
         <td>${r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"}</td>
       `;
       body.appendChild(tr);
