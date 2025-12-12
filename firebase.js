@@ -13,7 +13,7 @@ import {
   onSnapshot,
   serverTimestamp,
   addDoc,
-  limit, // ✅ مهم
+  limit
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -28,7 +28,7 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// نصدّر كل شيء نحتاجه
+// 🔹 كل شي بدنا نستخدمه بمكان واحد
 export const fs = {
   doc,
   setDoc,
@@ -41,9 +41,5 @@ export const fs = {
   onSnapshot,
   serverTimestamp,
   addDoc,
-  limit, // ✅ هون كمان
+  limit,
 };
-
-
-
-
