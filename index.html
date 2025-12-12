@@ -174,37 +174,98 @@
         </div>
       </section>
 
-      <!-- PAGE: MESSAGES -->
-      <section id="page-messages" class="page-section hidden">
-  <div class="card messages-card">
-    <h2>Messages</h2>
-    <p class="subtitle">Team chat (beta).</p>
+      <!-- MESSAGES PAGE -->
+<section id="page-messages" class="page-section hidden">
+  <section class="card messages-card">
+    <div class="messages-layout">
+      <!-- Left: rooms / people list -->
+      <aside class="messages-sidebar">
+        <div class="messages-sidebar-header">
+          Rooms
+        </div>
 
-    <!-- Banner صغيرة فوق الشات -->
-    <div class="chat-banner">
-      <div class="chat-banner-text">
-        <strong>General room</strong>
-        <span>Be respectful • No customer data • English / Arabic welcome</span>
+        <!-- غرفة عامة -->
+        <button class="chat-room active" data-room="general">
+          <div class="chat-room-title">General chat</div>
+          <div class="chat-room-sub">
+            All agents &amp; supervisors
+          </div>
+        </button>
+
+        <!-- غرفة خاصة بالمشرفين -->
+        <button class="chat-room" data-room="supervisors">
+          <div class="chat-room-title">
+            Supervisors
+            <span class="room-badge">Supervisor only</span>
+          </div>
+          <div class="chat-room-sub">
+            Internal supervisor notes
+          </div>
+        </button>
+
+        <!-- مثال على “Direct message” ثابتة حالياً -->
+        <div class="messages-sidebar-header small">
+          Direct profiles (demo)
+        </div>
+
+        <div class="chat-profile">
+          <div class="chat-avatar small role-agent">A1</div>
+          <div class="chat-profile-text">
+            <div class="chat-profile-name">Agent 01</div>
+            <div class="chat-profile-role">Agent</div>
+          </div>
+        </div>
+
+        <div class="chat-profile">
+          <div class="chat-avatar small role-agent">A2</div>
+          <div class="chat-profile-text">
+            <div class="chat-profile-name">Agent 02</div>
+            <div class="chat-profile-role">Agent</div>
+          </div>
+        </div>
+
+        <div class="chat-profile">
+          <div class="chat-avatar small role-supervisor">SD</div>
+          <div class="chat-profile-text">
+            <div class="chat-profile-name">Supervisor Dema</div>
+            <div class="chat-profile-role">Supervisor</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Right: chat area -->
+      <div class="messages-main">
+        <!-- Header فوق الشات -->
+        <header class="chat-header">
+          <div>
+            <div class="chat-room-name" id="chat-room-name">General chat</div>
+            <div class="chat-room-desc" id="chat-room-desc">
+              Be respectful • No customer data • English / Arabic welcome
+            </div>
+          </div>
+        </header>
+
+        <!-- قائمة الرسائل -->
+        <div id="chat-message-list" class="chat-message-list">
+          <!-- رح تتعبّى بالـ JS -->
+        </div>
+
+        <!-- شريط الكتابة -->
+        <form id="chat-form" class="chat-input-row">
+          <input
+            id="chat-input"
+            type="text"
+            autocomplete="off"
+            placeholder="Type a message…"
+            class="chat-input"
+          />
+          <button type="submit" class="chat-send-btn">Send</button>
+        </form>
       </div>
     </div>
-
-    <!-- صندوق الرسائل -->
-    <div id="chat-messages" class="chat-messages">
-      <!-- Messages will appear here from Firestore -->
-    </div>
-
-    <!-- فورم إرسال الرسائل -->
-    <form id="chat-form" class="chat-form">
-      <input
-        id="chat-input"
-        type="text"
-        placeholder="Type a message and press Enter…"
-        autocomplete="off"
-      />
-      <button type="submit">Send</button>
-    </form>
-  </div>
+  </section>
 </section>
+
 
 
       <!-- PAGE: SETTINGS -->
@@ -241,4 +302,5 @@
   <script type="module" src="app.js"></script>
   <script type="module" src="messages.js"></script>
 </body>
+
 </html>
