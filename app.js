@@ -25,6 +25,7 @@ const USERS = {
 const USER_KEY = "telesyrianaUser";
 const STATE_KEY = "telesyrianaState";
 const BREAK_LIMIT_MIN = 45;
+
 const AGENT_DAYS_COL = "agentDays";
 const USER_PROFILE_COL = "userProfiles";
 
@@ -37,10 +38,9 @@ let supUnsub = null;
 
 function getTodayKey() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
 }
 
 function statusLabel(code) {
@@ -62,13 +62,7 @@ function statusLabel(code) {
 
 function recomputeLiveUsage(now) {
   if (!state) {
-    return {
-      breakUsed: 0,
-      operation: 0,
-      meeting: 0,
-      handling: 0,
-      unavailable: 0,
-    };
+    return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
   }
 
   const elapsedMin = (now - state.lastStatusChange) / 60000;
@@ -113,10 +107,7 @@ function applyElapsedToState(now) {
       state.operationMinutes += elapsedMin;
       break;
     case "break":
-      state.breakUsedMinutes = Math.min(
-        BREAK_LIMIT_MIN,
-        state.breakUsedMinutes + elapsedMin
-      );
+      state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin);
       break;
     case "meeting":
       state.meetingMinutes += elapsedMin;
@@ -164,10 +155,7 @@ function subscribeSupervisorDashboard() {
   if (!currentUser || currentUser.role !== "supervisor") return;
   if (supUnsub) return;
 
-  const q = query(
-    collection(db, AGENT_DAYS_COL),
-    where("day", "==", getTodayKey())
-  );
+  const q = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
 
   supUnsub = onSnapshot(q, (snapshot) => {
     const rows = [];
@@ -200,19 +188,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const navButtons = document.querySelectorAll(".nav-link[data-page]");
 
   navButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      switchPage(btn.dataset.page);
-    });
+    btn.addEventListener("click", () => switchPage(btn.dataset.page));
   });
 
   document.getElementById("login-form").addEventListener("submit", handleLogin);
   document.getElementById("logout-btn").addEventListener("click", handleLogout);
-  document
-    .getElementById("status-select")
-    .addEventListener("change", handleStatusChange);
-  document
-    .getElementById("settings-form")
-    .addEventListener("submit", handleSettingsSave);
+  document.getElementById("status-select").addEventListener("change", handleStatusChange);
+  document.getElementById("settings-form").addEventListener("submit", handleSettingsSave);
 
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
@@ -232,15 +214,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function switchPage(pageId) {
   // أخفي كل الصفحات
-  document
-    .querySelectorAll(".page-section")
-    .forEach((pg) => pg.classList.add("hidden"));
+  document.querySelectorAll(".page-section").forEach((pg) => pg.classList.add("hidden"));
   document.getElementById(`page-${pageId}`).classList.remove("hidden");
 
   // فعل زر الـ nav
-  document.querySelectorAll(".nav-link").forEach((btn) => {
-    if (btn.dataset.page === pageId) btn.classList.add("active");
-    else btn.classList.remove("active");
+  document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.page === pageId);
   });
 
   // تحكم بأيقونة الشات العائم
@@ -268,6 +247,9 @@ function handleLogin(e) {
   currentUser = { id, name: USERS[id].name, role: USERS[id].role };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
+  // ✅ خلي messages.js يعرف إنو في user جديد (بدون Refresh)
+  window.dispatchEvent(new Event("telesyriana:user-changed"));
+
   document.getElementById("login-error").classList.add("hidden");
 
   initStateForUser();
@@ -281,11 +263,14 @@ async function handleLogout() {
     state.status = "unavailable";
     state.lastStatusChange = now;
     saveState();
-
     await syncStateToFirestore(recomputeLiveUsage(now));
   }
 
   localStorage.removeItem(USER_KEY);
+
+  // ✅ خلي messages.js يعرف إنو ما عاد في user
+  window.dispatchEvent(new Event("telesyriana:user-changed"));
+
   if (timerId) clearInterval(timerId);
   if (supUnsub) supUnsub();
 
@@ -310,10 +295,7 @@ async function handleStatusChange(e) {
   const now = Date.now();
 
   // لو خلص البريك
-  if (
-    newStatus === "break" &&
-    state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01
-  ) {
+  if (newStatus === "break" && state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01) {
     alert("Daily break limit (45 minutes) already reached.");
     e.target.value = state.status;
     return;
@@ -384,7 +366,6 @@ async function initStateForUser() {
 
 function finishInit(now) {
   if (currentUser.role === "supervisor") subscribeSupervisorDashboard();
-
   loadUserProfile();
   startTimer();
   syncStateToFirestore(recomputeLiveUsage(now));
@@ -444,11 +425,10 @@ function updateDashboardUI() {
   updateBreakUI(live.breakUsed);
   updateStatusMinutesUI(live);
 
-  if (currentUser.role === "supervisor") {
-    document.getElementById("supervisor-panel").classList.remove("hidden");
-  } else {
-    document.getElementById("supervisor-panel").classList.add("hidden");
-  }
+  document.getElementById("supervisor-panel").classList.toggle(
+    "hidden",
+    currentUser.role !== "supervisor"
+  );
 }
 
 function updateBreakUI(used) {
@@ -471,13 +451,7 @@ function buildSupervisorTableFromFirestore(rows) {
   const body = document.getElementById("sup-table-body");
   body.innerHTML = "";
 
-  const totals = {
-    in_operation: 0,
-    break: 0,
-    meeting: 0,
-    handling: 0,
-    unavailable: 0,
-  };
+  const totals = { in_operation: 0, break: 0, meeting: 0, handling: 0, unavailable: 0 };
 
   rows
     .filter((r) => r.role === "agent")
@@ -487,20 +461,16 @@ function buildSupervisorTableFromFirestore(rows) {
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-      <td>${r.name}</td>
-      <td>${r.userId}</td>
-      <td>${r.role.toUpperCase()}</td>
-      <td><span class="sup-status-pill status-${status}">${statusLabel(
-        status
-      )}</span></td>
-      <td>${Math.floor(r.operationMinutes || 0)} min</td>
-      <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
-      <td>${Math.floor(r.meetingMinutes || 0)} min</td>
-      <td>${Math.floor(r.unavailableMinutes || 0)} min</td>
-      <td>${
-        r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"
-      }</td>
-    `;
+        <td>${r.name}</td>
+        <td>${r.userId}</td>
+        <td>${r.role.toUpperCase()}</td>
+        <td><span class="sup-status-pill status-${status}">${statusLabel(status)}</span></td>
+        <td>${Math.floor(r.operationMinutes || 0)} min</td>
+        <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
+        <td>${Math.floor(r.meetingMinutes || 0)} min</td>
+        <td>${Math.floor(r.unavailableMinutes || 0)} min</td>
+        <td>${r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"}</td>
+      `;
       body.appendChild(tr);
     });
 
@@ -513,6 +483,8 @@ function buildSupervisorTableFromFirestore(rows) {
 // ----------------------------- Settings --------------------------------
 
 async function loadUserProfile() {
+  if (!currentUser) return;
+
   const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
   const snap = await getDoc(ref);
 
@@ -527,6 +499,7 @@ async function loadUserProfile() {
 
 async function handleSettingsSave(e) {
   e.preventDefault();
+  if (!currentUser) return;
 
   const birthday = document.getElementById("set-birthday").value;
   const notes = document.getElementById("set-notes").value;
@@ -567,7 +540,3 @@ function showDashboard() {
   switchPage("home");
   updateDashboardUI();
 }
-
-
-
-
