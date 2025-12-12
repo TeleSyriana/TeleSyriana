@@ -96,12 +96,28 @@ body {
 }
 
 /* LOGIN LAYOUT */
+/* Layout for login split-screen */
 .login-layout {
   display: flex;
-  gap: 16px;
-  align-items: stretch;
-  max-width: 520px;        /* نخلي login ضيق ومركز */
-  margin: 0 auto;
+  width: 100%;
+  max-width: 1400px;
+  margin: auto;
+  gap: 20px;
+}
+.login-banner {
+  flex: 1; /* ياخذ 50% من الشاشة */
+  height: 100%;
+  max-height: 500px; /* نفس ارتفاع اللوجين تقريبا */
+  overflow: hidden;
+  border-radius: 18px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+.banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top; /* قص الأسفل وخلّي الأعلى ظاهر */
+  display: block;
 }
 
 .login-card {
@@ -471,3 +487,4 @@ input:focus {
 .hidden {
   display: none;
 }
+
