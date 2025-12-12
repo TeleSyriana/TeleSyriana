@@ -978,4 +978,12 @@ textarea:focus {
   /* ما في شي خاص هون، الـ hidden هو اللي يتحكم */
 }
 
+/* حد أدنى موحّد لارتفاع الكروت الأساسية */
+.page-section > .card,
+.dashboard-main,
+.dashboard-side,
+.messages-card {
+  min-height: 260px;
+}
+
 
