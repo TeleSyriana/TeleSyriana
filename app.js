@@ -253,29 +253,60 @@ function updateFloatingChatVisibility(pageId) {
 // -------------------------- Pages switching -----------------------------
 
 function switchPage(pageId) {
-  // إخفاء كل الصفحات
-  document
-    .querySelectorAll(".page-section")
-    .forEach((pg) => pg.classList.add("hidden"));
-
+  // إظهار الصفحة المطلوبة
+  document.querySelectorAll(".page-section").forEach((pg) =>
+    pg.classList.add("hidden")
+  );
   const pageEl = document.getElementById(`page-${pageId}`);
-  if (pageEl) {
-    pageEl.classList.remove("hidden");
-  }
+  if (pageEl) pageEl.classList.remove("hidden");
 
-  // تحديث الحالة للأزرار في الـ nav
-  const navButtons = document.querySelectorAll(".nav-link");
-  navButtons.forEach((btn) => {
-    if (btn.dataset.page === pageId) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
+  // تفعيل زر الـ Nav
+  document.querySelectorAll(".nav-link").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.page === pageId);
   });
 
-  // تحديث ظهور بالونة الشات حسب الصفحة
-  updateFloatingChatVisibility(pageId);
+  // البالونة: ما تظهر على صفحة الرسائل
+  const floatToggle = document.getElementById("float-chat-toggle");
+  const floatPanel = document.getElementById("float-chat-panel");
+  if (floatToggle) {
+    if (pageId === "messages") {
+      floatToggle.classList.add("hidden");
+      if (floatPanel) floatPanel.classList.add("hidden");
+    } else if (currentUser) {
+      floatToggle.classList.remove("hidden");
+    }
+  }
 }
+
+// --------------------------- View switching ----------------------------
+
+function showLogin() {
+  document.getElementById("dashboard-screen").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
+  document.getElementById("main-nav").classList.add("hidden");
+
+  // أخفي البالونة و البانل كلياً
+  const floatToggle = document.getElementById("float-chat-toggle");
+  const floatPanel = document.getElementById("float-chat-panel");
+  if (floatToggle) floatToggle.classList.add("hidden");
+  if (floatPanel) floatPanel.classList.add("hidden");
+}
+
+function showDashboard() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("dashboard-screen").classList.remove("hidden");
+  document.getElementById("main-nav").classList.remove("hidden");
+
+  switchPage("home");
+  updateDashboardUI();
+
+  // إظهار البالونة لما يكون في مستخدم داخل
+  const floatToggle = document.getElementById("float-chat-toggle");
+  if (floatToggle && currentUser) {
+    floatToggle.classList.remove("hidden");
+  }
+}
+
 
 // -------------------------- Login / Logout ------------------------------
 
@@ -563,3 +594,4 @@ function showDashboard() {
   switchPage("home"); // هذا كمان بينادي updateFloatingChatVisibility("home")
   updateDashboardUI();
 }
+
