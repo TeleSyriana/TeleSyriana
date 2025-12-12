@@ -1,9 +1,8 @@
-// messages.js — TeleSyriana Chat System (Rooms + DM + Floating)
-// ✅ No default room
-// ✅ No duplication
-// ✅ Floating disabled inside Messages page
-// ✅ Direct Messages supported
-// ✅ AI room (Coming soon)
+// messages.js — TeleSyriana Chat (Rooms + DM + Floating)
+// ✅ No default open
+// ✅ Input disabled until selection
+// ✅ AI room "Coming soon"
+// ✅ DM uses roomId: dm_<small>_<big>
 
 import { db, fs } from "./firebase.js";
 const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } = fs;
@@ -12,11 +11,9 @@ const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 
 let currentUser = null;
-let currentRoom = null; // ✅ no default
+let currentRoom = null;
 let unsubscribeMain = null;
 let unsubscribeFloat = null;
-
-/* ---------------- helpers ---------------- */
 
 function getUser() {
   try {
@@ -28,30 +25,23 @@ function getUser() {
   }
 }
 
+function setInputEnabled(on) {
+  const input = document.getElementById("chat-input");
+  const btn = document.querySelector(".chat-send-btn");
+  if (input) input.disabled = !on;
+  if (btn) btn.disabled = !on;
+}
+
 function formatTime(ts) {
   if (!ts) return "";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function clearMessages(listEl) {
-  listEl.innerHTML = "";
-}
-
-function setInputEnabled(enabled) {
-  const input = document.getElementById("chat-input");
-  const btn = document.querySelector(".chat-send-btn");
-  if (!input || !btn) return;
-  input.disabled = !enabled;
-  btn.disabled = !enabled;
-}
-
-/* ---------------- rendering ---------------- */
-
 function renderMessages(listEl, docs, showRole = true) {
-  clearMessages(listEl);
-
+  listEl.innerHTML = "";
   const frag = document.createDocumentFragment();
+
   docs.forEach((m) => {
     const wrap = document.createElement("div");
     wrap.className = "chat-message";
@@ -65,7 +55,7 @@ function renderMessages(listEl, docs, showRole = true) {
 
     const text = document.createElement("div");
     text.className = "chat-message-text";
-    text.textContent = m.text;
+    text.textContent = m.text || "";
 
     wrap.appendChild(meta);
     wrap.appendChild(text);
@@ -76,12 +66,8 @@ function renderMessages(listEl, docs, showRole = true) {
   listEl.scrollTop = listEl.scrollHeight;
 }
 
-/* ---------------- subscriptions ---------------- */
-
-function subscribeToRoom(roomId, listEl, showRole = true) {
+function subscribeRoom(roomId, listEl, showRole = true) {
   unsubscribeMain?.();
-  clearMessages(listEl);
-
   const q = query(
     collection(db, MESSAGES_COL),
     where("room", "==", roomId),
@@ -95,19 +81,18 @@ function subscribeToRoom(roomId, listEl, showRole = true) {
   });
 }
 
-/* ---------------- init ---------------- */
-
 document.addEventListener("DOMContentLoaded", () => {
   currentUser = getUser();
 
+  // Main chat elements
   const listEl = document.getElementById("chat-message-list");
   const emptyEl = document.getElementById("chat-empty");
+  const roomNameEl = document.getElementById("chat-room-name");
+  const roomDescEl = document.getElementById("chat-room-desc");
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
 
-  const roomNameEl = document.getElementById("chat-room-name");
-  const roomDescEl = document.getElementById("chat-room-desc");
-
+  // Floating
   const floatToggle = document.getElementById("float-chat-toggle");
   const floatPanel = document.getElementById("float-chat-panel");
   const floatClose = document.getElementById("float-chat-close");
@@ -115,66 +100,72 @@ document.addEventListener("DOMContentLoaded", () => {
   const floatForm = document.getElementById("float-chat-form");
   const floatInput = document.getElementById("float-chat-input");
 
-  /* ---------- floating visibility ---------- */
-  const isMessagesPage = document.getElementById("page-messages")?.classList.contains("hidden") === false;
-  if (floatToggle) {
-    if (!currentUser || isMessagesPage) floatToggle.classList.add("hidden");
-    else floatToggle.classList.remove("hidden");
-  }
+  // Initial state: nothing selected
+  if (listEl) listEl.innerHTML = "";
+  if (emptyEl) emptyEl.style.display = "block";
+  setInputEnabled(false);
 
-  /* ---------- rooms ---------- */
+  // Rooms
   document.querySelectorAll(".chat-room").forEach((btn) => {
     btn.addEventListener("click", () => {
       const room = btn.dataset.room;
 
-      document.getElementById("chat-empty").style.display = "none";
-      setInputEnabled(room !== "ai");
+      // active UI
+      document.querySelectorAll(".chat-room, .chat-dm").forEach((x) => x.classList.remove("active"));
+      btn.classList.add("active");
 
+      if (emptyEl) emptyEl.style.display = "none";
+
+      // AI room
       if (room === "ai") {
         unsubscribeMain?.();
-        clearMessages(listEl);
+        currentRoom = null;
+        setInputEnabled(false);
         roomNameEl.textContent = "ChatGPT 5";
         roomDescEl.textContent = "Coming soon…";
-        const msg = document.createElement("div");
-        msg.style.padding = "12px";
-        msg.style.color = "#777";
-        msg.textContent = "🤖 ChatGPT assistant is coming soon.";
-        listEl.appendChild(msg);
+        listEl.innerHTML = `<div style="padding:12px;color:#777;">🤖 ChatGPT assistant is coming soon.</div>`;
         return;
       }
 
       currentRoom = room;
-      roomNameEl.textContent = btn.querySelector(".chat-room-title").textContent;
-      roomDescEl.textContent = btn.querySelector(".chat-room-sub").textContent;
+      setInputEnabled(true);
 
-      subscribeToRoom(room, listEl, true);
+      roomNameEl.textContent = btn.querySelector(".chat-room-title")?.textContent || room;
+      roomDescEl.textContent = btn.querySelector(".chat-room-sub")?.textContent || "";
+
+      subscribeRoom(room, listEl, true);
     });
   });
 
-  /* ---------- direct messages ---------- */
+  // Direct Messages
   document.querySelectorAll(".chat-dm").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (!currentUser) return;
+      if (!currentUser) return alert("Please login first.");
+
+      document.querySelectorAll(".chat-room, .chat-dm").forEach((x) => x.classList.remove("active"));
+      btn.classList.add("active");
+
+      if (emptyEl) emptyEl.style.display = "none";
 
       const otherId = btn.dataset.dm;
       const ids = [currentUser.id, otherId].sort();
       const roomId = `dm_${ids[0]}_${ids[1]}`;
 
-      document.getElementById("chat-empty").style.display = "none";
+      currentRoom = roomId;
       setInputEnabled(true);
 
-      currentRoom = roomId;
-      roomNameEl.textContent = btn.querySelector(".chat-room-title").textContent;
-      roomDescEl.textContent = "Direct message";
+      roomNameEl.textContent = btn.querySelector(".chat-room-title")?.textContent || "Direct message";
+      roomDescEl.textContent = "Direct chat";
 
-      subscribeToRoom(roomId, listEl, false);
+      subscribeRoom(roomId, listEl, false);
     });
   });
 
-  /* ---------- send (main chat) ---------- */
+  // Send (main chat)
   formEl?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!currentRoom || !currentUser) return;
+    if (!currentUser) return alert("Please login first.");
+    if (!currentRoom) return;
 
     const text = inputEl.value.trim();
     if (!text) return;
@@ -191,11 +182,12 @@ document.addEventListener("DOMContentLoaded", () => {
     inputEl.value = "";
   });
 
-  /* ---------- floating chat ---------- */
-  floatToggle?.addEventListener("click", () => floatPanel.classList.toggle("hidden"));
-  floatClose?.addEventListener("click", () => floatPanel.classList.add("hidden"));
+  // Floating open/close (app.js هو اللي بيخفيه بصفحة messages)
+  floatToggle?.addEventListener("click", () => floatPanel?.classList.toggle("hidden"));
+  floatClose?.addEventListener("click", () => floatPanel?.classList.add("hidden"));
 
-  if (floatForm && floatList) {
+  // Floating subscription (General only)
+  if (floatList) {
     const q = query(
       collection(db, MESSAGES_COL),
       where("room", "==", "general"),
@@ -207,27 +199,31 @@ document.addEventListener("DOMContentLoaded", () => {
       snap.forEach((d) => rows.push(d.data()));
       renderMessages(floatList, rows.slice(-30), false);
     });
-
-    floatForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (!currentUser) return;
-
-      const text = floatInput.value.trim();
-      if (!text) return;
-
-      await addDoc(collection(db, MESSAGES_COL), {
-        room: "general",
-        text,
-        userId: currentUser.id,
-        name: currentUser.name,
-        role: currentUser.role,
-        ts: serverTimestamp(),
-      });
-
-      floatInput.value = "";
-    });
   }
 
-  /* ---------- initial state ---------- */
-  setInputEnabled(false);
+  // Floating send
+  floatForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!currentUser) return alert("Please login first.");
+
+    const text = floatInput.value.trim();
+    if (!text) return;
+
+    await addDoc(collection(db, MESSAGES_COL), {
+      room: "general",
+      text,
+      userId: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+      ts: serverTimestamp(),
+    });
+
+    floatInput.value = "";
+  });
 });
+
+// Update user without refresh
+window.addEventListener("telesyriana:user-changed", () => {
+  currentUser = getUser();
+});
+
