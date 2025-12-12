@@ -12,7 +12,6 @@
 
     <!-- HEADER -->
     <header class="app-header">
-      <!-- LEFT MENU (hidden until login) -->
       <nav id="main-nav" class="main-nav hidden">
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
@@ -20,7 +19,6 @@
         <button class="nav-link" data-page="settings">Settings</button>
       </nav>
 
-      <!-- RIGHT SIDE -->
       <div class="header-right">
         <div class="logo">Tele<span>Syriana</span></div>
         <div class="tagline">Agent Access Panel</div>
@@ -31,12 +29,10 @@
     <main id="login-screen">
       <div class="login-layout">
         
-        <!-- LEFT SIDE BANNER -->
         <section class="login-banner">
           <img src="images/event.jpg" class="banner-img" alt="Event Banner" />
         </section>
 
-        <!-- RIGHT SIDE LOGIN -->
         <section class="card login-card">
           <h1>Login</h1>
           <p class="subtitle">Please sign in with your CCMS ID and password.</p>
@@ -44,13 +40,11 @@
           <div id="login-error" class="alert hidden"></div>
 
           <form id="login-form">
-            <label>
-              CCMS ID
+            <label>CCMS ID
               <input type="text" id="ccmsId" placeholder="e.g. 1001" required />
             </label>
 
-            <label>
-              Password
+            <label>Password
               <input type="password" id="password" placeholder="Password" required />
             </label>
 
@@ -68,14 +62,13 @@
       </div>
     </main>
 
-    <!-- DASHBOARD SCREEN -->
+    <!-- DASHBOARD -->
     <main id="dashboard-screen" class="hidden">
 
-      <!-- PAGE HOME (DEFAULT) -->
+      <!-- HOME PAGE -->
       <section id="page-home" class="page-section">
         <div class="dashboard-layout">
 
-          <!-- LEFT MAIN PANEL -->
           <section class="card dashboard-main">
             <h1 id="welcome-title">Welcome</h1>
             <p id="welcome-subtitle" class="subtitle"></p>
@@ -94,9 +87,7 @@
                 <option value="meeting">In Meeting</option>
                 <option value="handling">Handling</option>
               </select>
-              <small class="status-note">
-                Break limit: <strong>45 minutes per day</strong>.
-              </small>
+              <small class="status-note">Break limit: <strong>45 minutes</strong>.</small>
             </div>
 
             <div class="break-box">
@@ -114,10 +105,10 @@
               <button id="logout-btn" class="btn-secondary">Logout</button>
             </div>
 
-            <!-- SUPERVISOR ONLY PANEL -->
+            <!-- SUPERVISOR PANEL -->
             <section id="supervisor-panel" class="sup-panel hidden">
               <h2>Team Overview</h2>
-              <p class="sup-note">Daily live stats for all agents.</p>
+              <p class="sup-note">Live status for all agents today.</p>
 
               <div class="sup-summary">
                 <span>Operation: <strong id="sum-op">0</strong></span>
@@ -147,30 +138,25 @@
             </section>
           </section>
 
-          <!-- RIGHT SIDE INFO -->
           <section class="card dashboard-side">
             <h2>Today’s Snapshot</h2>
             <p class="subtitle">Quick reminders:</p>
-
             <ul class="side-list">
               <li>✔ Keep your status updated.</li>
               <li>✔ Use break time wisely.</li>
-              <li>✔ Stay focused & kind with callers.</li>
+              <li>✔ Be kind with callers.</li>
             </ul>
-
-            <div class="side-footer-note">
-              More features coming soon…
-            </div>
+            <div class="side-footer-note">More features coming soon…</div>
           </section>
 
         </div>
       </section>
 
-      <!-- PAGE: TASKS -->
+      <!-- TASKS PAGE -->
       <section id="page-tasks" class="page-section hidden">
         <div class="card">
           <h2>Tasks</h2>
-          <p class="subtitle">Task management coming soon.</p>
+          <p class="subtitle">Task system coming soon.</p>
         </div>
       </section>
 
@@ -178,35 +164,24 @@
       <section id="page-messages" class="page-section hidden">
         <section class="card messages-card">
           <div class="messages-layout">
-            <!-- Left: rooms / people list -->
-            <aside class="messages-sidebar">
-              <div class="messages-sidebar-header">
-                Rooms
-              </div>
 
-              <!-- غرفة عامة -->
+            <!-- ROOMS SIDEBAR -->
+            <aside class="messages-sidebar">
+              <div class="messages-sidebar-header">Rooms</div>
+
               <button class="chat-room active" data-room="general">
                 <div class="chat-room-title">General chat</div>
-                <div class="chat-room-sub">
-                  All agents &amp; supervisors
-                </div>
+                <div class="chat-room-sub">All agents & supervisors</div>
               </button>
 
-              <!-- غرفة خاصة بالمشرفين -->
               <button class="chat-room" data-room="supervisors">
                 <div class="chat-room-title">
-                  Supervisors
-                  <span class="room-badge">Supervisor only</span>
+                  Supervisors <span class="room-badge">Supervisor only</span>
                 </div>
-                <div class="chat-room-sub">
-                  Internal supervisor notes
-                </div>
+                <div class="chat-room-sub">Internal notes</div>
               </button>
 
-              <!-- مثال على “Direct message” ثابتة حالياً -->
-              <div class="messages-sidebar-header small">
-                Direct profiles (demo)
-              </div>
+              <div class="messages-sidebar-header small">Direct profiles</div>
 
               <div class="chat-profile">
                 <div class="chat-avatar small role-agent">A1</div>
@@ -233,140 +208,89 @@
               </div>
             </aside>
 
-            <!-- Right: chat area -->
+            <!-- CHAT AREA -->
             <div class="messages-main">
-  <!-- Header فوق الشات -->
-  <header class="chat-header">
-    <div>
-      <div class="chat-room-name" id="chat-room-name">General chat</div>
-      <div class="chat-room-desc" id="chat-room-desc">
-        Be respectful • No customer data • English / Arabic welcome
-      </div>
-    </div>
-  </header>
 
-  <!-- قائمة الرسائل -->
-  <div id="chat-message-list" class="chat-message-list">
-    <!-- رح تتعبّى بالـ JS -->
-  </div>
-
+              <header class="chat-header">
+                <div>
+                  <div class="chat-room-name" id="chat-room-name">General chat</div>
+                  <div class="chat-room-desc" id="chat-room-desc">
+                    Be respectful • No customer data
+                  </div>
+                </div>
+              </header>
 
               <!-- ChatGPT banner -->
               <div class="chat-ai-banner">
-    <strong>ChatGPT 5 (coming soon)</strong><br>
-    Soon you’ll be able to ask AI for tips, quality checks and quick learning while you work.
-  </div>
-
-              <!-- قائمة الرسائل -->
-              <div id="chat-message-list" class="chat-message-list">
-                <!-- رح تتعبّى بالـ JS -->
+                <strong>ChatGPT 5 (coming soon)</strong><br>
+                AI learning assistant will be integrated here.
               </div>
 
-              <!-- شريط الكتابة -->
+              <div id="chat-message-list" class="chat-message-list"></div>
+
               <form id="chat-form" class="chat-input-row">
-                <input
-                  id="chat-input"
-                  type="text"
-                  autocomplete="off"
-                  placeholder="Type a message…"
-                  class="chat-input"
-                />
+                <input id="chat-input" type="text" autocomplete="off" placeholder="Type a message…" class="chat-input" />
                 <button type="submit" class="chat-send-btn">Send</button>
               </form>
+
             </div>
           </div>
         </section>
       </section>
 
-      <!-- PAGE: SETTINGS -->
+      <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
         <div class="card">
           <h2>Settings</h2>
-          <p class="subtitle">Update personal info (limited)</p>
+          <p class="subtitle">Update personal info</p>
 
           <form id="settings-form">
-            <label>
-              Full Name
+            <label>Full Name
               <input type="text" id="set-name" disabled />
             </label>
 
-            <label>
-              Birthday
+            <label>Birthday
               <input type="date" id="set-birthday" />
             </label>
 
-            <label>
-              Notes
+            <label>Notes
               <textarea id="set-notes" placeholder="Report any issue..."></textarea>
             </label>
 
             <button type="submit" class="btn-primary">Save</button>
           </form>
-
         </div>
       </section>
 
     </main>
   </div>
 
-  <!-- Floating chat bubble (bottom-right) -->
-  <button
-    id="floating-chat-toggle"
-    class="floating-chat-toggle hidden"
-    aria-label="Open chat"
-  >
-    💬
-  </button>
+  <!-- FLOATING CHAT BUBBLE -->
+  <button id="float-chat-toggle" class="floating-chat-toggle hidden">💬</button>
 
-    <!-- Floating chat toggle & mini panel -->
-  <button
-    id="float-chat-toggle"
-    class="floating-chat-toggle hidden"
-    aria-label="Open chat"
-  >
-    💬
-  </button>
-
+  <!-- FLOATING MINI CHAT -->
   <div id="float-chat-panel" class="floating-chat-panel hidden">
     <div class="floating-chat-header">
       <div class="floating-chat-title">TeleSyriana chat</div>
-      <button
-        id="float-chat-close"
-        class="floating-chat-close"
-        aria-label="Close"
-      >
-        ×
-      </button>
+      <button id="float-chat-close" class="floating-chat-close">×</button>
     </div>
 
     <div class="floating-chat-body">
       <div class="floating-chat-room-name">General chat</div>
       <div class="floating-chat-note">
-        Compact view of the <strong>General</strong> room.<br />
-        ChatGPT 5 (coming soon) will also appear here to help agents learn faster.
+        Compact mode • ChatGPT 5 coming soon.
       </div>
 
-      <div id="float-chat-messages" class="floating-chat-messages">
-        <!-- filled by messages.js -->
-      </div>
+      <div id="float-chat-messages" class="floating-chat-messages"></div>
     </div>
 
     <form id="float-chat-form" class="floating-chat-input-row">
-      <input
-        id="float-chat-input"
-        type="text"
-        autocomplete="off"
-        placeholder="Quick message…"
-      />
+      <input id="float-chat-input" type="text" autocomplete="off" placeholder="Quick message…" />
       <button type="submit">Send</button>
     </form>
   </div>
 
-
   <script type="module" src="app.js"></script>
   <script type="module" src="messages.js"></script>
 </body>
-
 </html>
-
-
