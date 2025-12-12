@@ -13,7 +13,6 @@ import {
   onSnapshot,
   serverTimestamp,
   addDoc,         
-  limit,// 👈 مهم للشات
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -41,8 +40,8 @@ export const fs = {
   onSnapshot,
   serverTimestamp,
   addDoc,   
-  limit // 👈 هون كمان
 };
+
 
 
 
