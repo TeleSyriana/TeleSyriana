@@ -1,6 +1,9 @@
 // messages.js – TeleSyriana chat UI with Firestore
 
 import { db, fs } from "./firebase.js";
+import {
+  limit
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const {
   collection,
@@ -10,7 +13,6 @@ const {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  limit,
 } = fs;
 
 const USER_KEY = "telesyrianaUser";
@@ -20,94 +22,39 @@ let currentUser = null;
 let currentRoom = "general";
 let unsubscribeMain = null;
 
-/* ------------------ helpers ------------------ */
+/* ---------------- USER ---------------- */
 
 function loadUserFromStorage() {
-  const raw = localStorage.getItem(USER_KEY);
-  if (!raw) return;
   try {
-    currentUser = JSON.parse(raw);
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return;
+    const u = JSON.parse(raw);
+    if (u?.id && u?.name && u?.role) currentUser = u;
   } catch {}
 }
 
-function formatTime(ts) {
-  if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-/* ------------------ Firestore ------------------ */
-
-function subscribeMainToRoom(room, listEl) {
-  if (unsubscribeMain) unsubscribeMain();
-
-  const colRef = collection(db, MESSAGES_COL);
-
-  const q = query(
-    colRef,
-    where("room", "==", room),
-    orderBy("ts", "desc"),
-    limit(50)
-  );
-
-  unsubscribeMain = onSnapshot(q, (snap) => {
-    const msgs = [];
-    snap.forEach((d) => msgs.push({ id: d.id, ...d.data() }));
-
-    // 🔄 نقلبهم ليصير الأقدم فوق
-    renderMessages(listEl, msgs.reverse());
-  });
-}
-
-/* ------------------ UI ------------------ */
-
-function renderMessages(listEl, msgs) {
-  listEl.innerHTML = "";
-
-  msgs.forEach((m) => {
-    const wrap = document.createElement("div");
-    wrap.className = "chat-message";
-    if (currentUser && m.userId === currentUser.id) {
-      wrap.classList.add("me");
-    }
-
-    wrap.innerHTML = `
-      <div class="chat-message-meta">
-        ${m.name} (${m.role}) • ${formatTime(m.ts)}
-      </div>
-      <div class="chat-message-text">${m.text}</div>
-    `;
-
-    listEl.appendChild(wrap);
-  });
-
-  // ⬇️ دايماً نزول لآخر رسالة
-  listEl.scrollTop = listEl.scrollHeight;
-}
-
-/* ------------------ Init ------------------ */
+/* ---------------- INIT ---------------- */
 
 document.addEventListener("DOMContentLoaded", () => {
-  const page = document.getElementById("page-messages");
-  if (!page) return;
-
   loadUserFromStorage();
 
   const listEl = document.getElementById("chat-message-list");
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
 
-  // اشتراك أولي
-  subscribeMainToRoom(currentRoom, listEl);
+  if (!listEl || !formEl || !inputEl) return;
 
-  // إرسال رسالة
+  subscribeMainToRoom("general", listEl);
+
   formEl.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (!currentUser) return alert("Login first");
+
     const text = inputEl.value.trim();
-    if (!text || !currentUser) return;
+    if (!text) return;
 
     await addDoc(collection(db, MESSAGES_COL), {
-      room: currentRoom,
+      room: "general",
       text,
       userId: currentUser.id,
       name: currentUser.name,
@@ -119,4 +66,49 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+/* ---------------- FIRESTORE ---------------- */
+
+function subscribeMainToRoom(room, listEl) {
+  if (unsubscribeMain) unsubscribeMain();
+
+  const q = query(
+    collection(db, MESSAGES_COL),
+    where("room", "==", room),
+    orderBy("ts", "asc"),
+    limit(100)
+  );
+
+  unsubscribeMain = onSnapshot(q, (snap) => {
+    const msgs = [];
+    snap.forEach(d => msgs.push(d.data()));
+    renderMessages(listEl, msgs);
+  });
+}
+
+/* ---------------- RENDER ---------------- */
+
+function renderMessages(listEl, msgs) {
+  listEl.innerHTML = "";
+
+  msgs.forEach(m => {
+    const div = document.createElement("div");
+    div.className = "chat-message" + (m.userId === currentUser?.id ? " me" : "");
+
+    div.innerHTML = `
+      <div class="chat-message-meta">
+        ${m.name} (${m.role}) • ${formatTime(m.ts)}
+      </div>
+      <div class="chat-message-text">${m.text}</div>
+    `;
+
+    listEl.appendChild(div);
+  });
+
+  listEl.scrollTop = listEl.scrollHeight;
+}
+
+function formatTime(ts) {
+  if (!ts?.toDate) return "";
+  return ts.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
