@@ -181,7 +181,7 @@ function subscribeMainToRoom(room, listEl) {
   const qRoom = query(
     collection(db, MESSAGES_COL),
     where("room", "==", room),
-    orderBy("ts", "asc"),
+    orderBy("ts", "desc"),
     limit(100)
   );
 
@@ -296,6 +296,7 @@ function formatTime(ts) {
   const dateObj = ts.toDate ? ts.toDate() : new Date(ts);
   return dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
 
 
 
