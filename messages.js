@@ -12,8 +12,8 @@ const {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  limit,
 } = fs;
-const { ..., limit } = fs;
 
 const qRoom = query(
   colRef,
@@ -345,6 +345,7 @@ function formatTime(ts) {
     minute: "2-digit",
   });
 }
+
 
 
 
