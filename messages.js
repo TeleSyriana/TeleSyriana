@@ -1480,6 +1480,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
+  // Dropdown Menu 
+  function makeCollapsible(headerText, listId) {
+  const headers = Array.from(document.querySelectorAll(".messages-sidebar-header"));
+  const h = headers.find(x => x.textContent.trim().toLowerCase() === headerText.toLowerCase());
+  const list = document.getElementById(listId);
+  if (!h || !list) return;
+
+  h.style.cursor = "pointer";
+  h.style.userSelect = "none";
+  h.dataset.open = "1";
+
+  h.addEventListener("click", () => {
+    const open = h.dataset.open === "1";
+    h.dataset.open = open ? "0" : "1";
+    list.style.display = open ? "none" : "";
+  });
+}
+
+makeCollapsible("Rooms", "rooms-list");
+makeCollapsible("Groups", "groups-list");
+makeCollapsible("Recent", "recent-list");
+makeCollapsible("Direct messages", "dm-list");
 
   // ✅ Hide Back button (no need)
   const backBtn = document.getElementById("chat-back");
@@ -1673,5 +1695,6 @@ window.addEventListener("telesyriana:user-changed", () => {
     renderRecentsList();
   }
 });
+
 
 
