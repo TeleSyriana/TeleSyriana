@@ -1,5 +1,6 @@
 // messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots
 // ✅ Recents (AFTER SEND ONLY) + Search by name/room/CCMS + Glass sidebar support
+// ✅ Groups open via events (telesyriana:open-group / telesyriana:open-room)
 import { db, fs } from "./firebase.js";
 
 const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } = fs;
@@ -15,7 +16,7 @@ const RECENTS_KEY_PREFIX = "telesyrianaChatRecents"; // `${prefix}:${userId}`
 let currentUser = null;
 
 // active chat:
-let activeChat = null; // { type: "room"|"dm"|"ai", roomId, title, desc }
+let activeChat = null; // { type: "room"|"dm"|"ai"|"group", roomId, title, desc }
 
 let unsubscribeMain = null;
 let unsubscribeFloat = null;
@@ -345,7 +346,7 @@ function subscribeStatusDots() {
 // ----------------------- Active selection UI -----------------------
 
 function clearActiveButtons() {
-  document.querySelectorAll(".chat-room, .chat-dm, .chat-recent").forEach((b) => {
+  document.querySelectorAll(".chat-room, .chat-dm, .chat-recent, .chat-group").forEach((b) => {
     b.classList.remove("active");
     b.classList.remove("chat-item-active");
   });
@@ -404,9 +405,6 @@ function makeRecentButtonFromDm(dmBtn) {
   const clone = dmBtn.cloneNode(true);
   clone.classList.add("chat-recent");
   clone.classList.remove("chat-dm");
-
-  // keep dataset.dm
-  // ensure click works
   return clone;
 }
 
@@ -420,7 +418,6 @@ function renderRecentsList() {
     .filter(([id, t]) => id && t)
     .sort((a, b) => (b[1] || 0) - (a[1] || 0));
 
-  // clear recents list (but keep the empty label element outside)
   recentListEl.innerHTML = "";
 
   if (!entries.length) {
@@ -433,11 +430,10 @@ function renderRecentsList() {
 
   entries.forEach(([otherId]) => {
     const dmBtn = findDmButton(otherId);
-    if (!dmBtn) return; // if not found in DM list, skip
+    if (!dmBtn) return;
 
     const recBtn = makeRecentButtonFromDm(dmBtn);
 
-    // IMPORTANT: attach a fresh click handler (so it doesn't keep old listeners)
     recBtn.addEventListener("click", () => {
       openDmChatByOtherId(otherId, recBtn);
     });
@@ -452,7 +448,6 @@ function renderRecentsList() {
 
 function hookSearch() {
   const input = document.getElementById("chat-search");
-  // your HTML has: id="chat-search-clear"
   const clearBtn =
     document.getElementById("chat-search-clear") || document.getElementById("chat-search-x");
 
@@ -461,7 +456,7 @@ function hookSearch() {
   const run = () => {
     const q = input.value.trim().toLowerCase();
 
-    const items = document.querySelectorAll(".chat-room, .chat-dm, .chat-recent");
+    const items = document.querySelectorAll(".chat-room, .chat-dm, .chat-recent, .chat-group");
     items.forEach((btn) => {
       const titleEl = btn.querySelector(".chat-room-title");
       const subEl = btn.querySelector(".chat-room-sub");
@@ -470,7 +465,7 @@ function hookSearch() {
       const sub = (subEl?.textContent || "").toLowerCase();
 
       // ✅ allow searching by CCMS id from dataset
-      const ccms = String(btn.dataset.dm || btn.dataset.room || "").toLowerCase();
+      const ccms = String(btn.dataset.dm || btn.dataset.room || btn.dataset.groupId || "").toLowerCase();
 
       const hit = !q || title.includes(q) || sub.includes(q) || ccms.includes(q);
       btn.style.display = hit ? "" : "none";
@@ -503,7 +498,6 @@ function openDmChatByOtherId(otherId, clickedEl) {
 
   const roomId = dmRoomId(currentUser.id, otherId);
 
-  // get name from original DM button (preferred)
   const dmBtn = findDmButton(otherId);
   const nameEl = dmBtn?.querySelector(".chat-room-title");
   const otherName = nameEl ? nameEl.textContent.trim() : `User ${otherId}`;
@@ -520,9 +514,50 @@ function openDmChatByOtherId(otherId, clickedEl) {
   setEmptyState(emptyEl, listEl, false);
   setInputEnabled(formEl, inputEl, true);
 
-  // ❌ IMPORTANT: NO bump here (per your request)
   subscribeMainToRoom(activeChat.roomId, listEl);
 }
+
+// ----------------------- ✅ Open room/group by event (from groups.js) -----------------------
+
+function openRoomByEvent(detail, clickedEl = null) {
+  const { roomId, title, desc, type } = detail || {};
+  if (!roomId) return;
+
+  setCurrentUser();
+  if (!currentUser) return alert("Please login first.");
+
+  const listEl = document.getElementById("chat-message-list");
+  const emptyEl = document.getElementById("chat-empty");
+  const roomNameEl = document.getElementById("chat-room-name");
+  const roomDescEl = document.getElementById("chat-room-desc");
+  const formEl = document.getElementById("chat-form");
+  const inputEl = document.getElementById("chat-input");
+
+  activeChat = {
+    type: type || "room", // "group" or "room"
+    roomId,
+    title: title || "Room",
+    desc: desc || "Start chatting…",
+  };
+
+  setActiveButton(clickedEl);
+  setHeader(roomNameEl, roomDescEl, activeChat.title, activeChat.desc);
+  setEmptyState(emptyEl, listEl, false);
+  setInputEnabled(formEl, inputEl, true);
+
+  // ✅ group/room both stored in same messages collection by "room" field
+  subscribeMainToRoom(activeChat.roomId, listEl);
+}
+
+window.addEventListener("telesyriana:open-group", (e) => {
+  // groups.js should send: { roomId, title, desc }
+  openRoomByEvent({ ...(e.detail || {}), type: "group" });
+});
+
+window.addEventListener("telesyriana:open-room", (e) => {
+  // generic: { roomId, title, desc, type? }
+  openRoomByEvent(e.detail || {});
+});
 
 // ----------------------------- init -----------------------------
 
@@ -545,17 +580,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
 
-  // Create Group test
-window.addEventListener("telesyriana:open-room", (e) => {
-  const detail = e.detail || {};
-  const { roomId, title, desc, type } = detail;
-  if (!roomId) return;
-
-  // call your existing open-room logic:
-  // activeChat = { type: type || "room", roomId, title, desc }
-  // set header, enable input, subscribe, etc...
-});
-
   // ✅ Hide Back button (no need)
   const backBtn = document.getElementById("chat-back");
   if (backBtn) backBtn.style.display = "none";
@@ -577,7 +601,6 @@ window.addEventListener("telesyriana:open-room", (e) => {
   }
 
   // ✅ Sidebar scrolling (agents + recents)
-  // make DM list scrollable and take remaining space
   if (dmListEl) {
     dmListEl.style.overflowY = "auto";
     dmListEl.style.minHeight = "0";
@@ -586,7 +609,7 @@ window.addEventListener("telesyriana:open-room", (e) => {
   if (recentListEl) {
     recentListEl.style.overflowY = "auto";
     recentListEl.style.minHeight = "0";
-    recentListEl.style.maxHeight = "180px"; // keeps it tidy above DM
+    recentListEl.style.maxHeight = "180px";
   }
 
   // ✅ search
@@ -596,7 +619,6 @@ window.addEventListener("telesyriana:open-room", (e) => {
   renderRecentsList();
 
   // ---------- Floating ----------
-  // NOTE: your floating UI is injected by another function in your build, so these may not exist.
   floatToggle?.addEventListener("click", () => floatPanel?.classList.toggle("hidden"));
   floatClose?.addEventListener("click", () => floatPanel?.classList.add("hidden"));
 
@@ -738,4 +760,6 @@ window.addEventListener("telesyriana:user-changed", () => {
     setInputEnabled(formEl, inputEl, false);
   }
 });
+
+
 
