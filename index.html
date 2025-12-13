@@ -524,25 +524,52 @@
   </div>
 
   <!-- FLOATING CHAT -->
-  <button id="float-chat-toggle" class="floating-chat-toggle hidden">💬</button>
-
   <div id="float-chat-panel" class="floating-chat-panel hidden">
-    <div class="floating-chat-header">
-      <div class="floating-chat-title">TeleSyriana chat</div>
-      <button id="float-chat-close" class="floating-chat-close">×</button>
-    </div>
 
-    <div class="floating-chat-body">
-      <div class="floating-chat-room-name">General chat</div>
-      <div class="floating-chat-note">Compact mode • ChatGPT 5 coming soon.</div>
-      <div id="float-chat-messages" class="floating-chat-messages"></div>
-    </div>
-
-    <form id="float-chat-form" class="floating-chat-input-row">
-      <input id="float-chat-input" type="text" autocomplete="off" placeholder="Quick message…" />
-      <button type="submit">Send</button>
-    </form>
+  <div class="floating-chat-header">
+    <div class="floating-chat-title">TeleSyriana</div>
+    <button id="float-chat-close" class="floating-chat-close">×</button>
   </div>
+
+  <div class="floating-mini">
+
+    <!-- LEFT: mini sidebar -->
+    <aside class="floating-mini-side">
+      <input id="float-search" class="floating-mini-search" placeholder="Search…" autocomplete="off" />
+
+      <div class="floating-mini-section">Rooms</div>
+      <div class="floating-mini-list" id="float-rooms">
+        <button class="float-item" data-froom="general"># General</button>
+        <button class="float-item" data-froom="supervisors">S Supervisors</button>
+      </div>
+
+      <div class="floating-mini-section">DM</div>
+      <div class="floating-mini-list" id="float-dms">
+        <button class="float-item" data-fdm="1001">Agent 01</button>
+        <button class="float-item" data-fdm="1002">Agent 02</button>
+        <button class="float-item" data-fdm="1003">Agent 03</button>
+        <button class="float-item" data-fdm="2001">Supervisor Dema</button>
+        <button class="float-item" data-fdm="2002">Supervisor Moustafa</button>
+      </div>
+    </aside>
+
+    <!-- RIGHT: chat -->
+    <section class="floating-mini-chat">
+      <div class="floating-chat-body">
+        <div id="float-room-name" class="floating-chat-room-name">Select chat</div>
+        <div id="float-room-note" class="floating-chat-note">Choose a room or DM</div>
+        <div id="float-chat-messages" class="floating-chat-messages"></div>
+      </div>
+
+      <form id="float-chat-form" class="floating-chat-input-row">
+        <input id="float-chat-input" type="text" autocomplete="off" placeholder="Quick message…" disabled />
+        <button id="float-send-btn" type="submit" disabled>Send</button>
+      </form>
+    </section>
+
+  </div>
+</div>
+
 
   <!-- scripts -->
   <script type="module" src="app.js"></script>
@@ -550,3 +577,4 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
