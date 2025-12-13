@@ -1,8 +1,9 @@
-// messages.js – TeleSyriana Firestore chat
+// messages.js – TeleSyriana Firestore chat (FIXED FULL)
 // ✅ Main Messages: Rooms + DMs + Search + Recents + Status dots
-// ✅ Lazy load (Limit + Scroll up) if firebase.js exports limit/getDocs/startAfter
-// ✅ Fallback if not available
-// ✅ Floating Chat: Rooms + DMs + Search + Lazy load (same logic) — UI injected if missing
+// ✅ Chat-only mode + Back button behavior
+// ✅ Lazy load (limit/startAfter/getDocs) if available, fallback if not
+// ✅ Floating Chat: Toggle + Rooms + DMs + Search + Lazy load (same logic)
+// ✅ Defensive selectors (if HTML got messy)
 
 import { db, fs } from "./firebase.js";
 
@@ -30,7 +31,6 @@ const PAGE_SIZE = 50;
 const MAX_RENDER = 600;
 
 // -------------------- shared state --------------------
-
 let currentUser = null;
 
 // main (page) ui refs
@@ -42,6 +42,9 @@ let main = {
   formEl: null,
   inputEl: null,
   dmListEl: null,
+  pageEl: null,
+  sidebarEl: null,
+  rootEl: null, // #page-messages
 };
 
 // floating ui refs (built/injected)
@@ -49,8 +52,8 @@ let floating = {
   toggleBtn: null,
   panelEl: null,
   closeBtn: null,
-  // injected containers:
   built: false,
+
   searchEl: null,
   roomsEl: null,
   dmsEl: null,
@@ -118,13 +121,8 @@ function isNearBottom(el, px = 80) {
 /* ---------------- UI helpers ---------------- */
 
 function clearActiveButtons(rootEl) {
-  if (!rootEl) {
-    document.querySelectorAll(".chat-room, .chat-dm").forEach((b) => {
-      b.classList.remove("active", "chat-item-active");
-    });
-    return;
-  }
-  rootEl.querySelectorAll(".chat-room, .chat-dm").forEach((b) => {
+  const scope = rootEl || document;
+  scope.querySelectorAll(".chat-room, .chat-dm").forEach((b) => {
     b.classList.remove("active", "chat-item-active");
   });
 }
@@ -147,7 +145,11 @@ function setEmptyState(emptyEl, listEl, on) {
 
 function setInputEnabled(formEl, inputEl, enabled) {
   if (!formEl || !inputEl) return;
-  const btn = formEl.querySelector("button[type='submit'], button");
+
+  const btn =
+    formEl.querySelector(".chat-send-btn") ||
+    formEl.querySelector("#float-send-btn");
+
   inputEl.disabled = !enabled;
   if (btn) btn.disabled = !enabled;
 }
@@ -167,6 +169,14 @@ function ensureTopLoader(listEl, id = "chat-top-loader") {
     listEl.prepend(loader);
   }
   return loader;
+}
+
+/* ---------------- Chat-only mode (Main Messages) ---------------- */
+
+function setChatOnlyMode(on) {
+  const page = document.getElementById("page-messages");
+  if (!page) return;
+  page.classList.toggle("chat-only", !!on);
 }
 
 /* ---------------- Rendering ---------------- */
@@ -210,7 +220,7 @@ function createMessageNode(m) {
 function renderFresh(listEl, msgsAsc, keepScroll = false) {
   if (!listEl) return;
 
-  const loader = ensureTopLoader(listEl);
+  const loader = ensureTopLoader(listEl, `${listEl.id || "chat"}-top-loader`);
   const wasNearBottom = isNearBottom(listEl);
 
   // Remove all except loader
@@ -222,7 +232,7 @@ function renderFresh(listEl, msgsAsc, keepScroll = false) {
   (msgsAsc || []).forEach((m) => frag.appendChild(createMessageNode(m)));
   listEl.appendChild(frag);
 
-  // scroll behavior:
+  // scroll behavior
   if (!keepScroll) {
     listEl.scrollTop = listEl.scrollHeight;
   } else {
@@ -233,7 +243,7 @@ function renderFresh(listEl, msgsAsc, keepScroll = false) {
 function renderChunkToTop(listEl, chunkAsc) {
   if (!listEl || !chunkAsc?.length) return;
 
-  const loader = ensureTopLoader(listEl);
+  const loader = ensureTopLoader(listEl, `${listEl.id || "chat"}-top-loader`);
 
   const prevHeight = listEl.scrollHeight;
   const prevTop = listEl.scrollTop;
@@ -294,6 +304,8 @@ function resetRuntime(rt) {
 
 function attachScrollLoaderFallback(rt, listEl) {
   if (!listEl) return;
+
+  // prevent duplicate binding
   if (rt.scrollBoundEl === listEl) return;
   rt.scrollBoundEl = listEl;
 
@@ -326,6 +338,8 @@ function attachScrollLoaderFallback(rt, listEl) {
 
 function attachScrollLoaderLimitMode(rt, listEl, roomId) {
   if (!listEl) return;
+
+  // prevent duplicate binding
   if (rt.scrollBoundEl === listEl) return;
   rt.scrollBoundEl = listEl;
 
@@ -336,7 +350,6 @@ function attachScrollLoaderLimitMode(rt, listEl, roomId) {
     if (rt.isLoadingOlder || rt.noMoreOlder) return;
     if (!rt.oldestCursorDoc) return;
 
-    // must have getDocs/startAfter/limit
     if (!getDocsFn || !startAfterFn || !limitFn) return;
 
     rt.isLoadingOlder = true;
@@ -393,6 +406,8 @@ function attachScrollLoaderLimitMode(rt, listEl, roomId) {
 
 function subscribeToRoom(rt, roomId, listEl) {
   if (!listEl || !roomId) return;
+
+  // IMPORTANT: do NOT clear UI here; just reset runtime so we don't double subscribe
   resetRuntime(rt);
 
   const canLimit = !!limitFn;
@@ -420,7 +435,9 @@ function subscribeToRoom(rt, roomId, listEl) {
         // keep already loaded olderAsc
         const combined = [...rt.olderAsc, ...rt.newestAsc];
         const capped =
-          combined.length > MAX_RENDER ? combined.slice(combined.length - MAX_RENDER) : combined;
+          combined.length > MAX_RENDER
+            ? combined.slice(combined.length - MAX_RENDER)
+            : combined;
 
         // keepScroll=true => only autoscroll if user is near bottom
         renderFresh(listEl, capped, true);
@@ -545,14 +562,17 @@ function subscribeStatusDots() {
 
       const cls = statusToDotClass(d.status || "unavailable");
 
-      const dot = document.querySelector(`[data-status-dot="${uid}"]`);
-      if (dot) {
+      const dots = document.querySelectorAll(`[data-status-dot="${uid}"]`);
+      dots.forEach((dot) => {
         dot.classList.remove("dot-online", "dot-warn", "dot-offline");
         dot.classList.add(cls);
-      }
+      });
 
-      const sub = document.querySelector(`[data-sub="${uid}"]`);
-      if (sub) sub.textContent = d.status ? String(d.status).replaceAll("_", " ") : "unavailable";
+      // Update subtitle text if exists
+      const subs = document.querySelectorAll(`[data-sub="${uid}"]`);
+      subs.forEach((sub) => {
+        sub.textContent = d.status ? String(d.status).replaceAll("_", " ") : "unavailable";
+      });
     });
   });
 }
@@ -560,7 +580,7 @@ function subscribeStatusDots() {
 /* ---------------- Search ---------------- */
 
 function hookSearch(inputEl, clearBtn, scopeRoot) {
-  if (!inputEl) return;
+  if (!inputEl || !scopeRoot) return;
 
   const run = () => {
     const q = inputEl.value.trim().toLowerCase();
@@ -591,22 +611,20 @@ function buildFloatingUIIfNeeded() {
   floating.panelEl = document.getElementById("float-chat-panel");
   floating.closeBtn = document.getElementById("float-chat-close");
 
-  if (!floating.panelEl || floating.built) return;
+  if (!floating.panelEl) return;
+  if (floating.built) return;
 
-  // We will replace the panel content (keep header if exists)
-  // Keep existing header nodes if present
+  // Keep existing header node if present
   const header = floating.panelEl.querySelector(".floating-chat-header");
-  const existingForm = floating.panelEl.querySelector("#float-chat-form");
 
-  // Clear everything except header; we rebuild body + form
+  // Clear everything except header
   Array.from(floating.panelEl.children).forEach((ch) => {
     if (ch === header) return;
     ch.remove();
   });
 
-  // Body layout (sidebar + chat)
   const body = document.createElement("div");
-  body.className = "floating-mini"; // you can style later in CSS
+  body.className = "floating-mini";
 
   body.innerHTML = `
     <aside class="floating-mini-side">
@@ -647,13 +665,10 @@ function buildFloatingUIIfNeeded() {
   floating.titleEl = floating.panelEl.querySelector("#float-room-name");
   floating.noteEl = floating.panelEl.querySelector("#float-room-note");
 
-  // remove any old form if it was outside our injected layout
-  if (existingForm && existingForm !== floating.formEl) existingForm.remove();
-
   floating.built = true;
 }
 
-/* ---------------- Rooms & DMs populate for floating ---------------- */
+/* ---------------- Rooms & DMs for floating ---------------- */
 
 function getStaticRooms() {
   return [
@@ -663,7 +678,6 @@ function getStaticRooms() {
       sub: "All agents & supervisors",
       className: "role-room",
       avatar: "#",
-      restricted: null,
     },
     {
       id: "supervisors",
@@ -671,7 +685,6 @@ function getStaticRooms() {
       sub: "Supervisor only",
       className: "role-supervisor",
       avatar: "S",
-      restricted: "supervisor",
     },
     {
       id: "ai",
@@ -679,13 +692,11 @@ function getStaticRooms() {
       sub: "Coming soon",
       className: "role-ai",
       avatar: "AI",
-      restricted: "disabled",
     },
   ];
 }
 
 function getStaticDmUsers() {
-  // based on your HTML list (same IDs)
   return [
     { id: "1001", name: "Agent 01", sub: "Direct chat", role: "agent" },
     { id: "1002", name: "Agent 02", sub: "Direct chat", role: "agent" },
@@ -698,16 +709,15 @@ function getStaticDmUsers() {
 function renderFloatingSidebar() {
   if (!floating.roomsEl || !floating.dmsEl) return;
 
-  // rooms
   floating.roomsEl.innerHTML = "";
   getStaticRooms().forEach((r) => {
     const btn = document.createElement("button");
-    btn.className = "chat-room float-item";
+    btn.className = "chat-room";
     btn.type = "button";
     btn.dataset.room = r.id;
     btn.innerHTML = `
       <div class="chat-row">
-        <div class="chat-avatar ${r.className}">${r.avatar}</div>
+        <div class="chat-avatar ${r.className}">${escapeHtml(r.avatar)}</div>
         <div class="chat-row-text">
           <div class="chat-room-title">${escapeHtml(r.title)}</div>
           <div class="chat-room-sub">${escapeHtml(r.sub)}</div>
@@ -717,20 +727,19 @@ function renderFloatingSidebar() {
     floating.roomsEl.appendChild(btn);
   });
 
-  // dms
   floating.dmsEl.innerHTML = "";
   getStaticDmUsers().forEach((u) => {
     const btn = document.createElement("button");
-    btn.className = "chat-dm float-item";
+    btn.className = "chat-dm";
     btn.type = "button";
     btn.dataset.dm = u.id;
-
-    const initials = getInitials(u.name);
 
     btn.innerHTML = `
       <div class="chat-row">
         <div class="dm-avatar-wrap">
-          <div class="chat-avatar ${u.role === "supervisor" ? "role-supervisor" : "role-agent"}" data-avatar="${u.id}">${escapeHtml(initials)}</div>
+          <div class="chat-avatar ${u.role === "supervisor" ? "role-supervisor" : "role-agent"}" data-avatar="${u.id}">
+            ${escapeHtml(getInitials(u.name))}
+          </div>
           <span class="status-dot dot-offline" data-status-dot="${u.id}"></span>
         </div>
         <div class="chat-row-text">
@@ -742,17 +751,21 @@ function renderFloatingSidebar() {
     floating.dmsEl.appendChild(btn);
   });
 
-  // apply ordering by recents
   applyDmOrderFloating();
 }
 
 /* ---------------- Open chat (main/floating) ---------------- */
 
-function openChat(rt, ui, rootForActive, chatType, roomId, otherId, title, desc) {
-  rt.activeChat = chatType === "dm" ? { type: "dm", roomId, otherId } : { type: "room", roomId };
+function openChat(rt, ui, rootForActive, chatType, roomId, otherId, title, desc, opts = {}) {
+  rt.activeChat = chatType === "dm"
+    ? { type: "dm", roomId, otherId }
+    : { type: "room", roomId };
 
   setHeader(ui.nameEl || ui.titleEl, ui.descEl || ui.noteEl, title, desc);
+
+  // main empty state only
   if (ui.listEl && ui.emptyEl) setEmptyState(ui.emptyEl, ui.listEl, false);
+
   setInputEnabled(ui.formEl, ui.inputEl, true);
 
   if (ui.listEl) {
@@ -762,9 +775,8 @@ function openChat(rt, ui, rootForActive, chatType, roomId, otherId, title, desc)
 
   subscribeToRoom(rt, roomId, ui.listEl);
 
-  // mark active on sidebar buttons
+  // active button
   if (rootForActive) {
-    // find matching button
     if (chatType === "room") {
       const btn = rootForActive.querySelector(`.chat-room[data-room="${roomId}"]`);
       setActiveButton(rootForActive, btn);
@@ -773,11 +785,15 @@ function openChat(rt, ui, rootForActive, chatType, roomId, otherId, title, desc)
       setActiveButton(rootForActive, btn);
     }
   }
+
+  // chat-only for main when opening chat
+  if (opts.enableChatOnly) setChatOnlyMode(true);
 }
 
 /* ---------------- Main page init ---------------- */
 
 function initMainMessagesPage() {
+  main.rootEl = document.getElementById("page-messages");
   main.listEl = document.getElementById("chat-message-list");
   main.emptyEl = document.getElementById("chat-empty");
   main.nameEl = document.getElementById("chat-room-name");
@@ -785,21 +801,37 @@ function initMainMessagesPage() {
   main.formEl = document.getElementById("chat-form");
   main.inputEl = document.getElementById("chat-input");
   main.dmListEl = document.getElementById("dm-list");
+  main.sidebarEl = main.rootEl?.querySelector(".messages-sidebar") || null;
 
   // Search (page)
   const searchInput = document.getElementById("chat-search");
   const searchClear = document.getElementById("chat-search-clear");
-  const sidebar = document.querySelector("#page-messages .messages-sidebar");
-  if (searchInput && sidebar) hookSearch(searchInput, searchClear, sidebar);
+  if (searchInput && main.sidebarEl) hookSearch(searchInput, searchClear, main.sidebarEl);
 
   applyDmOrderMain();
   subscribeStatusDots();
 
   // default state
-  mainChat.activeChat = null;
+  resetRuntime(mainChat);
+  setChatOnlyMode(false);
   setHeader(main.nameEl, main.descEl, "Messages", "Start chatting…");
   if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
   setInputEnabled(main.formEl, main.inputEl, false);
+
+  // Back button
+  document.getElementById("chat-back")?.addEventListener("click", () => {
+    // show sidebar
+    setChatOnlyMode(false);
+
+    // Reset chat (like you asked)
+    resetRuntime(mainChat);
+    clearActiveButtons(main.sidebarEl || document);
+
+    if (main.listEl) main.listEl.innerHTML = "";
+    setHeader(main.nameEl, main.descEl, "Messages", "Start chatting…");
+    if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
+    setInputEnabled(main.formEl, main.inputEl, false);
+  });
 
   // Rooms click (page)
   document.querySelectorAll("#page-messages .chat-room").forEach((btn) => {
@@ -811,13 +843,17 @@ function initMainMessagesPage() {
       if (!room) return;
 
       if (room === "ai") {
-        mainChat.activeChat = { type: "ai", roomId: "ai" };
-        setActiveButton(document, btn);
         resetRuntime(mainChat);
+        mainChat.activeChat = { type: "ai", roomId: "ai" };
+        setActiveButton(main.sidebarEl || document, btn);
+
         if (main.listEl) main.listEl.innerHTML = "";
         setHeader(main.nameEl, main.descEl, "ChatGPT 5", "Coming soon…");
         if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
         setInputEnabled(main.formEl, main.inputEl, false);
+
+        // still go chat-only if you want
+        setChatOnlyMode(true);
         return;
       }
 
@@ -828,12 +864,15 @@ function initMainMessagesPage() {
 
       const title =
         room === "general" ? "General chat" : room === "supervisors" ? "Supervisors" : "Room";
+
       const desc =
         room === "general"
           ? "All agents & supervisors • Be respectful • No customer data."
           : "Supervisor-only space for internal notes and coordination.";
 
-      openChat(mainChat, main, document, "room", room, null, title, desc);
+      openChat(mainChat, main, main.sidebarEl || document, "room", room, null, title, desc, {
+        enableChatOnly: true,
+      });
     });
   });
 
@@ -851,7 +890,17 @@ function initMainMessagesPage() {
       const titleEl = btn.querySelector(".chat-room-title");
       const otherName = titleEl ? titleEl.textContent.trim() : `User ${otherId}`;
 
-      openChat(mainChat, main, document, "dm", roomId, otherId, otherName, `Direct message • CCMS ${otherId}`);
+      openChat(
+        mainChat,
+        main,
+        main.sidebarEl || document,
+        "dm",
+        roomId,
+        otherId,
+        otherName,
+        `Direct message • CCMS ${otherId}`,
+        { enableChatOnly: true }
+      );
     });
   });
 
@@ -883,17 +932,29 @@ function initMainMessagesPage() {
 
 /* ---------------- Floating init + hooks ---------------- */
 
+function toggleFloating(open) {
+  if (!floating.panelEl || !floating.toggleBtn) return;
+  const isOpen = open ?? !floating.panelEl.classList.contains("hidden");
+  floating.panelEl.classList.toggle("hidden", !isOpen);
+}
+
 function initFloatingChat() {
   buildFloatingUIIfNeeded();
+  if (!floating.panelEl) return;
+
   renderFloatingSidebar();
 
+  // toggle button show/hide panel
+  floating.toggleBtn?.addEventListener("click", () => toggleFloating(true));
+  floating.closeBtn?.addEventListener("click", () => toggleFloating(false));
+
   // Floating search
-  const clearBtn = floating.panelEl?.querySelector("#float-search-clear");
+  const clearBtn = floating.panelEl.querySelector("#float-search-clear");
   if (floating.searchEl && floating.panelEl) {
     hookSearch(floating.searchEl, clearBtn, floating.panelEl);
   }
 
-  // click handlers (rooms/dms) inside floating panel
+  // click handlers (rooms)
   floating.roomsEl?.querySelectorAll(".chat-room").forEach((btn) => {
     btn.addEventListener("click", () => {
       setCurrentUser();
@@ -903,9 +964,10 @@ function initFloatingChat() {
       if (!room) return;
 
       if (room === "ai") {
+        resetRuntime(floatChat);
         floatChat.activeChat = { type: "ai", roomId: "ai" };
         setActiveButton(floating.panelEl, btn);
-        resetRuntime(floatChat);
+
         if (floating.listEl) floating.listEl.innerHTML = "";
         setHeader(floating.titleEl, floating.noteEl, "ChatGPT 5", "Coming soon…");
         setInputEnabled(floating.formEl, floating.inputEl, false);
@@ -919,15 +981,15 @@ function initFloatingChat() {
 
       const title =
         room === "general" ? "General chat" : room === "supervisors" ? "Supervisors" : "Room";
+
       const desc =
-        room === "general"
-          ? "All agents & supervisors"
-          : "Supervisor-only notes";
+        room === "general" ? "All agents & supervisors" : "Supervisor-only notes";
 
       openChat(floatChat, floating, floating.panelEl, "room", room, null, title, desc);
     });
   });
 
+  // click handlers (dms)
   floating.dmsEl?.querySelectorAll(".chat-dm").forEach((btn) => {
     btn.addEventListener("click", () => {
       setCurrentUser();
@@ -941,7 +1003,16 @@ function initFloatingChat() {
       const titleEl = btn.querySelector(".chat-room-title");
       const otherName = titleEl ? titleEl.textContent.trim() : `User ${otherId}`;
 
-      openChat(floatChat, floating, floating.panelEl, "dm", roomId, otherId, otherName, `Direct message • CCMS ${otherId}`);
+      openChat(
+        floatChat,
+        floating,
+        floating.panelEl,
+        "dm",
+        roomId,
+        otherId,
+        otherName,
+        `Direct message • CCMS ${otherId}`
+      );
     });
   });
 
@@ -969,9 +1040,11 @@ function initFloatingChat() {
     floating.inputEl.value = "";
   });
 
-  // Disable inputs by default until chat selected
+  // default floating state
+  resetRuntime(floatChat);
   setHeader(floating.titleEl, floating.noteEl, "TeleSyriana", "Select a room or DM");
   setInputEnabled(floating.formEl, floating.inputEl, false);
+  toggleFloating(false);
 }
 
 /* ---------------- user changed / reset ---------------- */
@@ -982,23 +1055,26 @@ function handleUserChanged() {
   applyDmOrderMain();
   applyDmOrderFloating();
 
-  // if logged out: stop listeners, clear UIs
+  // If logged out: stop listeners, clear UIs
   if (!currentUser) {
     resetRuntime(mainChat);
     resetRuntime(floatChat);
-    clearActiveButtons(document);
-    if (floating.panelEl) clearActiveButtons(floating.panelEl);
 
     // main
+    clearActiveButtons(main.sidebarEl || document);
+    setChatOnlyMode(false);
+
     if (main.listEl) main.listEl.innerHTML = "";
     setHeader(main.nameEl, main.descEl, "Messages", "Start chatting…");
     if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
     setInputEnabled(main.formEl, main.inputEl, false);
 
     // floating
+    if (floating.panelEl) clearActiveButtons(floating.panelEl);
     if (floating.listEl) floating.listEl.innerHTML = "";
     setHeader(floating.titleEl, floating.noteEl, "TeleSyriana", "Select a room or DM");
     setInputEnabled(floating.formEl, floating.inputEl, false);
+    toggleFloating(false);
   }
 }
 
@@ -1007,16 +1083,16 @@ function handleUserChanged() {
 document.addEventListener("DOMContentLoaded", () => {
   setCurrentUser();
 
-  // main page init
+  // main init
   initMainMessagesPage();
 
-  // floating init (only if elements exist)
+  // floating init (only if exists)
   buildFloatingUIIfNeeded();
-  if (floating.panelEl) {
+  if (document.getElementById("float-chat-panel")) {
     initFloatingChat();
   }
 
-  // keep status dots alive
+  // keep status + ordering alive
   subscribeStatusDots();
   applyDmOrderMain();
   applyDmOrderFloating();

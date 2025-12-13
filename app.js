@@ -788,6 +788,15 @@ function buildSupervisorTableFromFirestore(rows) {
 }
 
 /* ----------------------------- Settings --------------------------------- */
+function applyTheme(gender) {
+  // gender: "male" | "female" | "" (default)
+  const g = String(gender || "").toLowerCase().trim();
+
+  document.body.removeAttribute("data-theme");
+  if (g === "male" || g === "female") {
+    document.body.setAttribute("data-theme", g);
+  }
+}
 
 async function loadUserProfile() {
   if (!currentUser) return;
@@ -798,14 +807,27 @@ async function loadUserProfile() {
   const nameEl = document.getElementById("set-name");
   if (nameEl) nameEl.value = currentUser.name;
 
+  // defaults
+  const bdayEl = document.getElementById("set-birthday");
+  const notesEl = document.getElementById("set-notes");
+  const genderEl = document.getElementById("set-gender");
+
   if (snap.exists()) {
     const d = snap.data();
-    const bdayEl = document.getElementById("set-birthday");
-    const notesEl = document.getElementById("set-notes");
+
     if (bdayEl) bdayEl.value = d.birthday || "";
     if (notesEl) notesEl.value = d.notes || "";
+    if (genderEl) genderEl.value = d.gender || "";
+
+    // ✅ apply theme on load
+    applyTheme(d.gender);
+  } else {
+    // no profile yet
+    if (genderEl) genderEl.value = "";
+    applyTheme("");
   }
 }
+
 
 async function handleSettingsSave(e) {
   e.preventDefault();
@@ -813,6 +835,7 @@ async function handleSettingsSave(e) {
 
   const birthday = document.getElementById("set-birthday")?.value || "";
   const notes = document.getElementById("set-notes")?.value || "";
+  const gender = document.getElementById("set-gender")?.value || "";
 
   const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
 
@@ -823,10 +846,14 @@ async function handleSettingsSave(e) {
       name: currentUser.name,
       birthday,
       notes,
+      gender, // ✅ NEW
       updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
+
+  // ✅ apply immediately without refresh
+  applyTheme(gender);
 
   alert("Settings saved successfully.");
 }
@@ -863,3 +890,5 @@ function showDashboard() {
     clockIntervalId = setInterval(renderClockWidget, 1000);
   }
 }
+
+

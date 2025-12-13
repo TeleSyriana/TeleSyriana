@@ -19,7 +19,7 @@
         <button class="nav-link" data-page="settings">Settings</button>
 
         <div class="actions">
-          <button id="logout-btn" class="nav-link">Logout</button>
+          <button id="logout-btn" class="nav-link" type="button">Logout</button>
         </div>
       </nav>
 
@@ -58,7 +58,9 @@
 
           <p class="hint">
             Demo users:<br />
-            <code>1001 / 1002 / 1003</code> (Agents)<br />
+            <code>1001 / 1234</code> (Agent 01)<br />
+            <code>1002 / 1234</code> (Agent 02)<br />
+            <code>1003 / 1234</code> (Agent 03)<br />
             <code>2001 / sup123</code> (Dema Shabar)<br />
             <code>2002 / sup123</code> (Moustafa Shabar)
           </p>
@@ -326,17 +328,15 @@
         </div>
       </section>
 
-      <!-- ✅ MESSAGES PAGE -->
+      <!-- MESSAGES PAGE -->
       <section id="page-messages" class="page-section hidden">
         <section class="card messages-card">
           <div class="messages-layout">
 
             <!-- SIDEBAR -->
             <aside class="messages-sidebar glass">
-
               <div class="ms-top">
                 <div class="ms-title">Messages</div>
-
                 <div class="ms-search">
                   <input id="chat-search" type="text" placeholder="Search name / room…" autocomplete="off" />
                   <button id="chat-search-clear" type="button" class="ms-search-x" title="Clear">×</button>
@@ -346,7 +346,7 @@
               <!-- ROOMS -->
               <div class="messages-sidebar-header">Rooms</div>
               <div id="rooms-list" class="ms-list" data-list="rooms">
-                <button class="chat-room" data-room="general">
+                <button class="chat-room" type="button" data-room="general">
                   <div class="chat-row">
                     <div class="chat-avatar role-room">#</div>
                     <div class="chat-row-text">
@@ -356,7 +356,7 @@
                   </div>
                 </button>
 
-                <button class="chat-room" data-room="supervisors">
+                <button class="chat-room" type="button" data-room="supervisors">
                   <div class="chat-row">
                     <div class="chat-avatar role-supervisor">S</div>
                     <div class="chat-row-text">
@@ -368,7 +368,7 @@
                   </div>
                 </button>
 
-                <button class="chat-room" data-room="ai">
+                <button class="chat-room" type="button" data-room="ai">
                   <div class="chat-row">
                     <div class="chat-avatar role-ai">AI</div>
                     <div class="chat-row-text">
@@ -391,7 +391,7 @@
               <div class="messages-sidebar-header small">Direct messages</div>
               <div id="dm-list" class="ms-list" data-list="dm">
 
-                <button class="chat-dm" data-dm="1001">
+                <button class="chat-dm" type="button" data-dm="1001">
                   <div class="chat-row">
                     <div class="dm-avatar-wrap">
                       <div class="chat-avatar role-agent" data-avatar="1001">A1</div>
@@ -404,7 +404,7 @@
                   </div>
                 </button>
 
-                <button class="chat-dm" data-dm="1002">
+                <button class="chat-dm" type="button" data-dm="1002">
                   <div class="chat-row">
                     <div class="dm-avatar-wrap">
                       <div class="chat-avatar role-agent" data-avatar="1002">A2</div>
@@ -417,7 +417,7 @@
                   </div>
                 </button>
 
-                <button class="chat-dm" data-dm="1003">
+                <button class="chat-dm" type="button" data-dm="1003">
                   <div class="chat-row">
                     <div class="dm-avatar-wrap">
                       <div class="chat-avatar role-agent" data-avatar="1003">A3</div>
@@ -430,7 +430,7 @@
                   </div>
                 </button>
 
-                <button class="chat-dm" data-dm="2001">
+                <button class="chat-dm" type="button" data-dm="2001">
                   <div class="chat-row">
                     <div class="dm-avatar-wrap">
                       <div class="chat-avatar role-supervisor" data-avatar="2001">SD</div>
@@ -443,7 +443,7 @@
                   </div>
                 </button>
 
-                <button class="chat-dm" data-dm="2002">
+                <button class="chat-dm" type="button" data-dm="2002">
                   <div class="chat-row">
                     <div class="dm-avatar-wrap">
                       <div class="chat-avatar role-supervisor" data-avatar="2002">SM</div>
@@ -459,9 +459,10 @@
               </div>
             </aside>
 
-            <!-- CHAT AREA -->
+            <!-- MAIN CHAT -->
             <div class="messages-main">
               <header class="chat-header">
+                <button id="chat-back" class="chat-back-btn" type="button">← Back</button>
                 <div>
                   <div class="chat-room-name" id="chat-room-name">Messages</div>
                   <div class="chat-room-desc" id="chat-room-desc">Start chatting…</div>
@@ -504,6 +505,15 @@
             </label>
 
             <label>
+              Gender / Theme
+              <select id="set-gender">
+                <option value="">Select… (Default)</option>
+                <option value="male">Male (Blue)</option>
+                <option value="female">Female (Pink)</option>
+              </select>
+            </label>
+
+            <label>
               Birthday
               <input type="date" id="set-birthday" />
             </label>
@@ -521,56 +531,16 @@
     </main>
   </div>
 
-  <!-- ✅ FLOATING CHAT TOGGLE -->
+  <!-- FLOATING CHAT TOGGLE -->
   <button id="float-chat-toggle" class="floating-chat-toggle hidden" type="button">💬</button>
 
-  <!-- ✅ FLOATING CHAT PANEL (Same logic as Messages) -->
+  <!-- FLOATING CHAT PANEL -->
   <div id="float-chat-panel" class="floating-chat-panel hidden">
-
     <div class="floating-chat-header">
       <div class="floating-chat-title">TeleSyriana chat</div>
       <button id="float-chat-close" class="floating-chat-close" type="button">×</button>
     </div>
-
-    <div class="floating-mini">
-
-      <!-- LEFT: mini sidebar -->
-      <aside class="floating-mini-side">
-
-        <input id="float-search" class="floating-mini-search" placeholder="Search…" autocomplete="off" />
-
-        <div class="floating-mini-section">Rooms</div>
-        <div class="floating-mini-list" id="float-rooms">
-          <button class="float-item" type="button" data-froom="general"># General</button>
-          <button class="float-item" type="button" data-froom="supervisors">S Supervisors</button>
-          <button class="float-item" type="button" data-froom="ai">AI ChatGPT 5</button>
-        </div>
-
-        <div class="floating-mini-section">DM</div>
-        <div class="floating-mini-list" id="float-dms">
-          <button class="float-item" type="button" data-fdm="1001">Agent 01</button>
-          <button class="float-item" type="button" data-fdm="1002">Agent 02</button>
-          <button class="float-item" type="button" data-fdm="1003">Agent 03</button>
-          <button class="float-item" type="button" data-fdm="2001">Supervisor Dema</button>
-          <button class="float-item" type="button" data-fdm="2002">Supervisor Moustafa</button>
-        </div>
-      </aside>
-
-      <!-- RIGHT: chat -->
-      <section class="floating-mini-chat">
-        <div class="floating-chat-body">
-          <div id="float-room-name" class="floating-chat-room-name">Select chat</div>
-          <div id="float-room-note" class="floating-chat-note">Choose a room or DM</div>
-          <div id="float-chat-messages" class="floating-chat-messages"></div>
-        </div>
-
-        <form id="float-chat-form" class="floating-chat-input-row">
-          <input id="float-chat-input" type="text" autocomplete="off" placeholder="Quick message…" disabled />
-          <button id="float-send-btn" type="submit" disabled>Send</button>
-        </form>
-      </section>
-
-    </div>
+    <!-- ✅ messages.js will inject the body UI here (buildFloatingUIIfNeeded) -->
   </div>
 
   <!-- scripts -->
@@ -579,3 +549,6 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
+
+
