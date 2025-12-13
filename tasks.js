@@ -1,8 +1,19 @@
-// tasks.js — Trello-like Tasks (Drag/Drop/Delete) + Modal (title/desc/image) + LocalStorage + Firestore per user/day
+// tasks.js — Trello-like Tasks + Modal (title/desc/image upload) + LocalStorage + Firestore Sync per user/day
 
 import { db, fs } from "./firebase.js";
 
-const { doc, setDoc, getDoc, collection, serverTimestamp } = fs;
+// ✅ Firestore
+const { doc, setDoc, getDoc, collection, serverTimestamp, onSnapshot } = fs;
+
+// ✅ Firebase Storage (CDN module import)
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+const storage = getStorage();
 
 const USER_KEY = "telesyrianaUser";
 const TASKS_LOCAL_PREFIX = "telesyrianaTasks"; // per user/day
@@ -13,6 +24,9 @@ const COLS = ["todo", "doing", "done"];
 let currentUser = null;
 let board = null; // { todo:[], doing:[], done:[] }
 let isReady = false;
+
+let unsubBoard = null;
+let lastBoardJson = ""; // prevent unnecessary re-render loops
 
 // ---------------- helpers ----------------
 
@@ -56,6 +70,10 @@ function findTask(taskId) {
   return null;
 }
 
+function getDocIdForUserDay(userId) {
+  return `${getTodayKey()}_${userId}`;
+}
+
 // ---------------- DOM refs ----------------
 
 function el(id) {
@@ -70,6 +88,11 @@ function getCountEl(col) {
   return document.querySelector(`.count[data-count="${col}"]`);
 }
 
+function toast(msg) {
+  // simple alert for now (يمكن نبدلها لاحقاً بتوست UI)
+  alert(msg);
+}
+
 // ---------------- Modal ----------------
 
 function openModal(prefill = {}) {
@@ -82,6 +105,7 @@ function openModal(prefill = {}) {
   el("task-modal-title").value = (prefill.title || "").trim();
   el("task-modal-desc").value = "";
   el("task-modal-img").value = "";
+  if (el("task-modal-file")) el("task-modal-file").value = "";
   el("task-modal-col").value = prefill.col || "todo";
 
   modal.classList.remove("hidden");
@@ -98,17 +122,47 @@ function hookModal() {
     btn.addEventListener("click", closeModal);
   });
 
-  // submit modal -> add task
+  // submit modal -> add task (with upload)
   el("task-modal-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!currentUser) return alert("Please login first.");
+    if (!currentUser) return toast("Please login first.");
 
     const title = el("task-modal-title")?.value?.trim();
     const desc = el("task-modal-desc")?.value?.trim() || "";
-    const img = el("task-modal-img")?.value?.trim() || "";
+    const linkImg = el("task-modal-img")?.value?.trim() || "";
     const col = el("task-modal-col")?.value || "todo";
 
-    await addTask({ title, desc, img }, col);
+    const fileInput = el("task-modal-file");
+    const file = fileInput?.files?.[0] || null;
+
+    // ✅ create task id first (so storage path stable)
+    const taskId = uid();
+
+    let uploadedUrl = "";
+
+    // ✅ Upload file if exists
+    if (file) {
+      try {
+        uploadedUrl = await uploadTaskImage(file, taskId);
+      } catch (err) {
+        console.error("Upload failed:", err);
+        toast("Image upload failed. Check Storage rules / internet.");
+        return;
+      }
+    }
+
+    // final image: prefer uploaded file, else link field
+    const finalImg = uploadedUrl || linkImg;
+
+    await addTask(
+      {
+        id: taskId,
+        title,
+        desc,
+        img: finalImg,
+      },
+      col
+    );
 
     // clear quick input
     const quickInput = el("task-title");
@@ -123,10 +177,32 @@ function hookModal() {
   });
 }
 
+// ---------------- Storage upload ----------------
+
+async function uploadTaskImage(file, taskId) {
+  if (!currentUser) throw new Error("No user");
+  const today = getTodayKey();
+  const safeName = (file.name || "image").replace(/[^\w.\-]+/g, "_");
+
+  const path = `taskImages/${currentUser.id}/${today}/${taskId}_${safeName}`;
+  const r = storageRef(storage, path);
+
+  await uploadBytes(r, file, {
+    contentType: file.type || "image/*",
+  });
+
+  return await getDownloadURL(r);
+}
+
 // ---------------- render ----------------
 
 function render() {
   if (!isReady || !board) return;
+
+  // avoid redundant
+  const nowJson = JSON.stringify(board);
+  if (nowJson === lastBoardJson) return;
+  lastBoardJson = nowJson;
 
   for (const col of COLS) {
     const listEl = getListEl(col);
@@ -185,7 +261,7 @@ function renderTaskCard(task) {
   card.appendChild(row);
   card.appendChild(meta);
 
-  // ✅ description preview
+  // description preview
   if (task.desc) {
     const d = document.createElement("div");
     d.className = "task-meta";
@@ -193,17 +269,14 @@ function renderTaskCard(task) {
     card.appendChild(d);
   }
 
-  // ✅ image preview (URL)
+  // image preview (URL from Storage or link)
   if (task.img) {
     const img = document.createElement("img");
     img.className = "task-thumb";
     img.src = task.img;
     img.alt = "Task image";
     img.loading = "lazy";
-    img.onerror = () => {
-      // if broken url, hide image (clean UI)
-      img.style.display = "none";
-    };
+    img.onerror = () => (img.style.display = "none");
     card.appendChild(img);
   }
 
@@ -270,7 +343,7 @@ async function addTask(data, col) {
   const c = COLS.includes(col) ? col : "todo";
 
   const task = {
-    id: uid(),
+    id: data?.id || uid(),
     title: t,
     desc: String(data?.desc || ""),
     img: String(data?.img || ""),
@@ -278,6 +351,7 @@ async function addTask(data, col) {
   };
 
   board[c].unshift(task);
+  lastBoardJson = ""; // force render
   render();
   await persist();
 }
@@ -287,6 +361,7 @@ async function deleteTask(taskId) {
   if (!found) return;
 
   board[found.col].splice(found.idx, 1);
+  lastBoardJson = ""; // force render
   render();
   await persist();
 }
@@ -294,7 +369,6 @@ async function deleteTask(taskId) {
 // ---------------- persistence ----------------
 
 async function loadBoard() {
-  const today = getTodayKey();
   const userId = currentUser?.id;
   if (!userId) return safeBoard(null);
 
@@ -308,7 +382,7 @@ async function loadBoard() {
 
   // 2) Firestore
   try {
-    const id = `${today}_${userId}`;
+    const id = getDocIdForUserDay(userId);
     const ref = doc(collection(db, TASK_BOARDS_COL), id);
     const snap = await getDoc(ref);
     if (snap.exists()) {
@@ -330,12 +404,11 @@ async function persist() {
 
   // Firestore
   try {
-    const today = getTodayKey();
-    const id = `${today}_${currentUser.id}`;
+    const id = getDocIdForUserDay(currentUser.id);
     await setDoc(
       doc(collection(db, TASK_BOARDS_COL), id),
       {
-        day: today,
+        day: getTodayKey(),
         userId: currentUser.id,
         name: currentUser.name,
         role: currentUser.role,
@@ -346,7 +419,44 @@ async function persist() {
     );
   } catch (err) {
     console.warn("Tasks Firestore save failed:", err?.message || err);
+    toast("⚠️ Online save failed (Firestore rules). Tasks saved locally only.");
   }
+}
+
+// ---------------- Firestore live sync (between devices) ----------------
+
+function subscribeBoardDoc() {
+  unsubBoard?.();
+  unsubBoard = null;
+
+  if (!currentUser) return;
+
+  const id = getDocIdForUserDay(currentUser.id);
+  const ref = doc(collection(db, TASK_BOARDS_COL), id);
+
+  unsubBoard = onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+      const incoming = safeBoard(data?.board);
+      const incomingJson = JSON.stringify(incoming);
+
+      // if same ignore
+      if (incomingJson === JSON.stringify(board)) return;
+
+      board = incoming;
+      lastBoardJson = "";
+      render();
+
+      // also refresh local
+      localStorage.setItem(localKey(currentUser.id), JSON.stringify(board));
+    },
+    (err) => {
+      console.warn("Tasks onSnapshot failed:", err?.message || err);
+    }
+  );
 }
 
 // ---------------- init / wiring ----------------
@@ -369,10 +479,10 @@ function hookAddForm() {
 
   if (!form || !input || !sel) return;
 
-  // ✅ بدل الإضافة الفورية، افتح مودال (Trello-style)
+  // بدل الإضافة الفورية، افتح مودال
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (!currentUser) return alert("Please login first.");
+    if (!currentUser) return toast("Please login first.");
 
     openModal({
       title: input.value,
@@ -389,15 +499,23 @@ async function bootstrap() {
   hookDnD();
   hookAddForm();
   hookModal();
+
+  lastBoardJson = "";
   render();
+
+  subscribeBoardDoc();
 }
 
 // When user logs in/out in app.js, it fires this event
 window.addEventListener("telesyriana:user-changed", async () => {
   currentUser = getUserFromStorage();
   board = safeBoard(await loadBoard());
+  isReady = true;
+
+  lastBoardJson = "";
   render();
+
+  subscribeBoardDoc();
 });
 
-// DOM ready
 document.addEventListener("DOMContentLoaded", bootstrap);
