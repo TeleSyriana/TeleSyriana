@@ -1231,5 +1231,42 @@ body[data-theme="male"] .chat-dm.active{ background:#e9f1ff; }
 }
 
 #chat-form{ flex: 0 0 auto; }
+/* =========================================================
+   FIX: Hide Floating Chat completely when Messages page is open
+   (Option A)
+   Put this at VERY END of style.css
+========================================================= */
+
+/* Chrome/Edge modern: hide floating chat if #page-messages is visible */
+body:has(#page-messages:not(.hidden)) #float-chat-toggle,
+body:has(#page-messages:not(.hidden)) #float-chat-panel{
+  display:none !important;
+}
+
+/* Safety: keep floating always above everything on other pages */
+#float-chat-toggle,
+#float-chat-panel{
+  position: fixed;
+  z-index: 9999;
+}
+
+/* Ensure the toggle is clickable */
+#float-chat-toggle{
+  pointer-events: auto;
+}
+
+/* =========================================================
+   Theme prep: Male (Blue) – ready for later HTML/JS switch
+   How to use later:
+   <body class="theme-male"> ... </body>
+========================================================= */
+
+body.theme-male{
+  --pink:#2b7bff;     /* primary */
+  --pink2:#5aa6ff;    /* secondary */
+  --bg1:#1b5cff;      /* background 1 */
+  --bg2:#9bd0ff;      /* background 2 */
+}
+
 
 
