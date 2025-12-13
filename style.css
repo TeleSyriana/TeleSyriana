@@ -462,6 +462,16 @@ input:focus, textarea:focus, select:focus{
   font-size:11px;
   font-weight:700;
 }
+/* ✅ Match Supervisor pills colors with Dashboard statuses */
+.sup-status-pill.status-in_operation{ background:#e4f8ea; color:#1b7c3a; }
+
+.sup-status-pill.status-break,
+.sup-status-pill.status-meeting{ background:#fff3cd; color:#856404; }
+
+.sup-status-pill.status-handling{ background:#f5cdff; color:#85047f; }
+
+.sup-status-pill.status-unavailable{ background:#e2e3e5; color:#505050; }
+
 
 /* =========================
    Messages (Clean + Glass sidebar)
@@ -1133,4 +1143,5 @@ input:focus, textarea:focus, select:focus{
   .widgets-grid{ grid-template-columns:1fr; }
   .widget-calendar{ grid-column:auto; }
 }
+
 
