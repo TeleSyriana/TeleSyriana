@@ -345,6 +345,40 @@
 >
   + Create Group
 </button>
+                <form id="group-create-form">
+
+  <!-- hidden edit id -->
+  <input type="hidden" id="group-edit-id" value="" />
+
+  <label>Group name</label>
+  <input id="group-name" type="text" placeholder="e.g. iPro Sales" />
+
+  <label>Rules (optional)</label>
+  <textarea
+    id="group-rules"
+    placeholder="Sharing is caring"
+  ></textarea>
+
+  <!-- ✅ NEW: Group image -->
+  <label>Group photo (optional)</label>
+  <input
+    id="group-photo"
+    type="file"
+    accept="image/*"
+  />
+
+  <label>Select members</label>
+  <div class="group-members">
+    <!-- checkboxes هون متل ما عندك -->
+  </div>
+
+  <div class="modal-actions">
+    <button id="group-cancel" type="button">Cancel</button>
+    <button id="group-create-btn" type="submit">Create</button>
+  </div>
+
+</form>
+
 
                 <div class="ms-search">
                   <input id="chat-search" type="text" placeholder="Search name / room…" autocomplete="off" />
@@ -601,6 +635,7 @@
 
 </body>
 </html>
+
 
 
 
