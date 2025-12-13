@@ -1,5 +1,5 @@
 // messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots
-// ✅ + Recents (DM reorder) + Search filter + Glass sidebar support
+// ✅ + Recents UI (DM only) + Search filter + Glass sidebar support
 import { db, fs } from "./firebase.js";
 
 const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } = fs;
@@ -35,6 +35,10 @@ let scrollBoundEl = null;
 // refs for sidebar lists
 let dmListEl = null;
 let roomListEl = null;
+
+// ✅ recent UI refs
+let recentListEl = null;
+let recentEmptyEl = null;
 
 // ----------------------------- helpers -----------------------------
 
@@ -255,12 +259,11 @@ function subscribeMainToRoom(roomId, listEl) {
       renderFresh(listEl, initial, true);
       attachScrollLoader(listEl);
 
-      // ✅ If active chat is DM and we have messages, bump that user to top
+      // ✅ DM: update RECENT only if there is a NEWER message than saved
       if (activeChat?.type === "dm" && activeChat?.roomId === roomId && roomCache.length) {
         const last = roomCache[roomCache.length - 1];
-        // if I’m chatting with X, bump X
         const otherId = getOtherIdFromDmRoom(roomId, currentUser?.id);
-        if (otherId) bumpRecent(otherId, last?.ts);
+        if (otherId) bumpRecentIfNewer(otherId, last?.ts);
       }
     },
     (err) => {
@@ -347,7 +350,7 @@ function setActiveButton(el) {
   }
 }
 
-// ----------------------- ✅ Recents (DM reorder) -----------------------
+// ----------------------- ✅ Recents (DM only) -----------------------
 
 function recentsKey() {
   if (!currentUser?.id) return null;
@@ -391,20 +394,36 @@ function getOtherIdFromDmRoom(roomId, myId) {
   return String(myId) === a ? b : a;
 }
 
+// ✅ update saved ts ONLY if newer (prevents "open chat" from changing recents)
+function bumpRecentIfNewer(otherId, ts) {
+  if (!currentUser?.id || !otherId) return;
+  const map = loadRecentsMap();
+  const newT = tsToNumber(ts);
+  const oldT = Number(map[String(otherId)] || 0);
+  if (newT <= oldT) return; // no change
+  bumpRecent(otherId, newT);
+}
+
+// ✅ bumpRecent: called only on SEND DM or NEW incoming DM
 function bumpRecent(otherId, ts) {
   if (!currentUser?.id) return;
   const map = loadRecentsMap();
   map[String(otherId)] = tsToNumber(ts);
   saveRecentsMap(map);
+
+  // (Optional) if you still want DM list reorder, keep this:
   applyDmOrderFromRecents();
+
+  // ✅ refresh RECENT UI
+  renderRecentsList();
 }
 
+// OPTIONAL: DM reorder (you already had it)
 function applyDmOrderFromRecents() {
   if (!dmListEl) dmListEl = document.getElementById("dm-list");
   if (!dmListEl) return;
 
   const map = loadRecentsMap();
-
   const buttons = Array.from(dmListEl.querySelectorAll(".chat-dm"));
 
   buttons.sort((a, b) => {
@@ -412,21 +431,65 @@ function applyDmOrderFromRecents() {
     const idb = String(b.dataset.dm || "");
     const ta = map[ida] || 0;
     const tb = map[idb] || 0;
-    // newer first
-    if (tb !== ta) return tb - ta;
-    // fallback stable by id
+    if (tb !== ta) return tb - ta; // newer first
     return ida.localeCompare(idb);
   });
 
-  // re-append in sorted order
   buttons.forEach((btn) => dmListEl.appendChild(btn));
+}
+
+// ✅ RECENT UI renderer
+function renderRecentsList() {
+  setCurrentUser();
+
+  if (!recentListEl) recentListEl = document.getElementById("recent-list");
+  if (!recentEmptyEl) recentEmptyEl = document.getElementById("recent-empty");
+  if (!recentListEl || !recentEmptyEl) return;
+
+  const map = loadRecentsMap();
+  const entries = Object.entries(map || {})
+    .map(([id, t]) => ({ id: String(id), t: Number(t) || 0 }))
+    .sort((a, b) => b.t - a.t);
+
+  // clear old recent buttons (keep the empty div)
+  Array.from(recentListEl.children).forEach((ch) => {
+    if (ch.id !== "recent-empty") ch.remove();
+  });
+
+  if (!entries.length) {
+    recentEmptyEl.style.display = "block";
+    return;
+  }
+  recentEmptyEl.style.display = "block"; // will hide after append? no, fix:
+  recentEmptyEl.style.display = "none";
+
+  // show up to 6
+  entries.slice(0, 6).forEach(({ id }) => {
+    const orig = document.querySelector(`.chat-dm[data-dm="${id}"]`);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chat-dm";
+    btn.dataset.dm = id;
+
+    if (orig) btn.innerHTML = orig.innerHTML;
+    else btn.textContent = `CCMS ${id}`;
+
+    btn.addEventListener("click", () => {
+      const target = document.querySelector(`.chat-dm[data-dm="${id}"]`);
+      target?.click();
+    });
+
+    recentListEl.appendChild(btn);
+  });
 }
 
 // ----------------------- ✅ Search filter -----------------------
 
 function hookSearch() {
   const input = document.getElementById("chat-search");
-  const clearBtn = document.getElementById("chat-search-x");
+  // ✅ FIX: in your HTML the button id is "chat-search-clear"
+  const clearBtn = document.getElementById("chat-search-clear");
 
   if (!input) return;
 
@@ -452,7 +515,6 @@ function hookSearch() {
     run();
   });
 
-  // first run
   run();
 }
 
@@ -464,7 +526,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const roomButtons = document.querySelectorAll(".chat-room");
   const dmButtons = document.querySelectorAll(".chat-dm");
 
-  roomListEl = document.getElementById("room-list");
+  // (not critical) rooms list id in HTML is "rooms-list"
+  roomListEl = document.getElementById("rooms-list");
   dmListEl = document.getElementById("dm-list");
 
   const roomNameEl = document.getElementById("chat-room-name");
@@ -499,6 +562,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ✅ apply recents order on load
   applyDmOrderFromRecents();
+
+  // ✅ render recent list on load
+  renderRecentsList();
 
   // ---------- Floating ----------
   floatToggle?.addEventListener("click", () => floatPanel?.classList.toggle("hidden"));
@@ -602,8 +668,8 @@ document.addEventListener("DOMContentLoaded", () => {
         setEmptyState(emptyEl, listEl, false);
         setInputEnabled(formEl, inputEl, true);
 
-        // ✅ bump to top on open
-        bumpRecent(otherId, Date.now());
+        // ❌ IMPORTANT: NO bump on open (as you requested)
+        // bumpRecent(otherId, Date.now());
 
         subscribeMainToRoom(activeChat.roomId, listEl);
       });
@@ -628,7 +694,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ts: serverTimestamp(),
       });
 
-      // ✅ bump on send if DM
+      // ✅ bump on send if DM (THIS is the only “after click” path)
       if (activeChat.type === "dm") {
         const otherId = getOtherIdFromDmRoom(activeChat.roomId, currentUser.id);
         if (otherId) bumpRecent(otherId, Date.now());
@@ -648,6 +714,7 @@ window.addEventListener("telesyriana:user-changed", () => {
 
   subscribeStatusDots();
   applyDmOrderFromRecents();
+  renderRecentsList();
 
   const listEl = document.getElementById("chat-message-list");
   const emptyEl = document.getElementById("chat-empty");
