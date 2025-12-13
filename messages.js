@@ -1,5 +1,6 @@
 // messages.js – TeleSyriana Firestore chat
-// ✅ Limit + scroll up (pagination)
+// ✅ Limit + scroll up (if supported by firebase.js exports)
+// ✅ Fallback mode if limit/getDocs not available (still renders last 50 + scroll up from cache)
 // ✅ Rooms + DMs
 // ✅ Status dots
 // ✅ DM reorder ONLY after sending message
@@ -16,40 +17,38 @@ const {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  getDocs,
-  limit,
-  startAfter,
 } = fs;
+
+// Optional (may be missing depending on your firebase.js)
+const limitFn = fs.limit;
+const startAfterFn = fs.startAfter;
+const getDocsFn = fs.getDocs;
 
 const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 const AGENT_DAYS_COL = "agentDays";
 
-// recents per user
 const RECENTS_KEY_PREFIX = "telesyrianaChatRecents";
 
 const PAGE_SIZE = 50;
 const MAX_RENDER = 600;
 
 let currentUser = null;
-
-// activeChat: { type: "room"|"dm"|"ai", roomId, otherId?, title?, desc? }
 let activeChat = null;
 
 let unsubscribeMain = null;
 let unsubscribeStatus = null;
 
-// For rendering / pagination
-let newestAsc = [];          // newest PAGE_SIZE messages ASC (old->new)
-let olderAsc = [];           // older loaded messages ASC (old->new)
-let oldestCursorDoc = null;  // Firestore doc cursor for "older" pagination (desc query)
+let roomCacheAsc = [];        // full cache ASC (old -> new) for fallback mode
+let newestAsc = [];           // newest page ASC (old -> new) for limit mode
+let olderAsc = [];            // loaded older pages ASC for limit mode
+let oldestCursorDoc = null;   // cursor for loading older (limit mode)
 let isLoadingOlder = false;
 let noMoreOlder = false;
 
-// Prevent binding scroll twice
+let renderedCount = 0;        // for fallback lazy render
 let scrollBoundEl = null;
 
-// sidebar list refs
 let dmListEl = null;
 
 /* ---------------- helpers ---------------- */
@@ -83,15 +82,9 @@ function getTodayKey() {
 }
 
 function dmRoomId(a, b) {
-  const x = String(a),
-    y = String(b);
+  const x = String(a);
+  const y = String(b);
   return x < y ? `dm_${x}_${y}` : `dm_${y}_${x}`;
-}
-
-function getOtherIdFromDmRoom(roomId, myId) {
-  const p = String(roomId || "").split("_");
-  if (p.length !== 3) return null;
-  return String(myId) === p[1] ? p[2] : p[1];
 }
 
 function statusToDotClass(status) {
@@ -147,7 +140,7 @@ function ensureTopLoader(listEl) {
   return loader;
 }
 
-/* ---------------- Messages render ---------------- */
+/* ---------------- Rendering ---------------- */
 
 function getInitials(name = "") {
   const parts = String(name).trim().split(/\s+/).slice(0, 2);
@@ -156,7 +149,6 @@ function getInitials(name = "") {
 }
 
 function escapeHtml(str = "") {
-  // prevent accidental HTML injection in message text
   return String(str)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -186,39 +178,22 @@ function createMessageNode(m) {
   return wrap;
 }
 
-function buildCombinedAsc() {
-  // olderAsc is old->new, newestAsc is old->new
-  // Combined should be old->new
-  const combined = [...olderAsc, ...newestAsc];
-
-  // Safety cap (keep newest MAX_RENDER)
-  if (combined.length > MAX_RENDER) {
-    return combined.slice(combined.length - MAX_RENDER);
-  }
-  return combined;
-}
-
-function renderFresh(listEl) {
+function renderFresh(listEl, msgsAsc) {
   if (!listEl) return;
 
   const loader = ensureTopLoader(listEl);
-
-  // wipe everything except loader
   Array.from(listEl.children).forEach((ch) => {
     if (ch !== loader) ch.remove();
   });
 
-  const msgs = buildCombinedAsc();
-
   const frag = document.createDocumentFragment();
-  msgs.forEach((m) => frag.appendChild(createMessageNode(m)));
+  (msgsAsc || []).forEach((m) => frag.appendChild(createMessageNode(m)));
   listEl.appendChild(frag);
 
-  // scroll to bottom for fresh render
   listEl.scrollTop = listEl.scrollHeight;
 }
 
-function prependOlderChunk(listEl, chunkAsc) {
+function renderChunkToTop(listEl, chunkAsc) {
   if (!listEl || !chunkAsc?.length) return;
 
   const loader = ensureTopLoader(listEl);
@@ -233,155 +208,194 @@ function prependOlderChunk(listEl, chunkAsc) {
   if (afterLoader) listEl.insertBefore(frag, afterLoader);
   else listEl.appendChild(frag);
 
-  // keep viewport stable
   const newHeight = listEl.scrollHeight;
   listEl.scrollTop = prevTop + (newHeight - prevHeight);
 }
 
-/* ---------------- Firestore (Main Chat) ---------------- */
+/* ---------------- Subscriptions ---------------- */
 
 function unsubscribeAllMain() {
   unsubscribeMain?.();
   unsubscribeMain = null;
 
+  roomCacheAsc = [];
   newestAsc = [];
   olderAsc = [];
   oldestCursorDoc = null;
+
+  renderedCount = 0;
   isLoadingOlder = false;
   noMoreOlder = false;
   scrollBoundEl = null;
 }
 
-function subscribeMainToRoom(roomId, listEl, headerNameEl, headerDescEl) {
-  if (!roomId || !listEl) return;
-
-  unsubscribeAllMain();
-
-  // listen only to newest PAGE_SIZE, live
-  const qNewest = query(
-    collection(db, MESSAGES_COL),
-    where("room", "==", roomId),
-    orderBy("ts", "desc"),
-    limit(PAGE_SIZE)
-  );
-
-  unsubscribeMain = onSnapshot(
-    qNewest,
-    (snap) => {
-      setCurrentUser();
-
-      // newest in DESC from firestore snapshot (because orderBy desc)
-      const newestDesc = [];
-      snap.forEach((d) => newestDesc.push({ id: d.id, ...d.data() }));
-
-      // cursor for older pagination = last doc in desc list (oldest among newest)
-      oldestCursorDoc = snap.docs[snap.docs.length - 1] || null;
-
-      // store as ASC for UI
-      newestAsc = newestDesc.slice().reverse();
-
-      // if we have no messages at all (new room), show empty state message list but still keep input enabled
-      renderFresh(listEl);
-
-      // attach scroll loader only once
-      attachScrollLoader(listEl, roomId);
-
-      // If room has fewer than PAGE_SIZE messages, we may already be at the beginning
-      // (Still allow older loading but it will quickly set noMoreOlder=true)
-      if (snap.size < PAGE_SIZE) {
-        // not necessarily no more, but often yes — leave it false and let first older load decide
-      }
-
-      // header: show subtitle if room empty
-      if (headerDescEl && buildCombinedAsc().length === 0) {
-        headerDescEl.textContent = "Start chatting…";
-      }
-    },
-    (err) => {
-      console.error("Main snapshot error:", err);
-      alert("Firestore error: " + err.message);
-    }
-  );
-}
-
-async function loadOlderPage(roomId, listEl) {
-  if (!roomId || !listEl) return;
-  if (isLoadingOlder || noMoreOlder) return;
-  if (!oldestCursorDoc) {
-    // nothing loaded yet
-    return;
-  }
-
-  isLoadingOlder = true;
-  const loader = ensureTopLoader(listEl);
-  loader.style.display = "block";
-
-  try {
-    const qOlder = query(
-      collection(db, MESSAGES_COL),
-      where("room", "==", roomId),
-      orderBy("ts", "desc"),
-      startAfter(oldestCursorDoc),
-      limit(PAGE_SIZE)
-    );
-
-    const snap = await getDocs(qOlder);
-
-    if (snap.empty) {
-      noMoreOlder = true;
-      loader.textContent = "No more messages";
-      setTimeout(() => {
-        loader.style.display = "none";
-        loader.textContent = "Loading older messages…";
-      }, 700);
-      isLoadingOlder = false;
-      return;
-    }
-
-    const olderDesc = [];
-    snap.forEach((d) => olderDesc.push({ id: d.id, ...d.data() }));
-
-    // update cursor for next pagination
-    oldestCursorDoc = snap.docs[snap.docs.length - 1] || oldestCursorDoc;
-
-    // convert to ASC and prepend to olderAsc
-    const chunkAsc = olderDesc.slice().reverse();
-
-    // Update store (olderAsc is ASC)
-    olderAsc = [...chunkAsc, ...olderAsc];
-
-    // Cap total render memory
-    const combined = buildCombinedAsc();
-    const extra = combined.length - MAX_RENDER;
-    if (extra > 0) {
-      // drop from very oldest side
-      // remove from olderAsc first
-      olderAsc = olderAsc.slice(extra);
-    }
-
-    // Prepend to DOM without re-render everything (keeps scroll position stable)
-    prependOlderChunk(listEl, chunkAsc);
-  } catch (e) {
-    console.error("loadOlderPage error:", e);
-    alert("Error loading older messages: " + (e?.message || e));
-  } finally {
-    isLoadingOlder = false;
-    loader.style.display = "none";
-  }
-}
-
-function attachScrollLoader(listEl, roomId) {
+function attachScrollLoaderFallback(listEl) {
   if (!listEl) return;
   if (scrollBoundEl === listEl) return;
   scrollBoundEl = listEl;
 
-  ensureTopLoader(listEl);
+  const loader = ensureTopLoader(listEl);
+
+  listEl.addEventListener("scroll", () => {
+    if (listEl.scrollTop > 40) return;
+    if (renderedCount >= Math.min(MAX_RENDER, roomCacheAsc.length)) return;
+
+    loader.style.display = "block";
+
+    const total = roomCacheAsc.length;
+    const alreadyRenderedStartIndex = Math.max(0, total - renderedCount);
+    if (alreadyRenderedStartIndex <= 0) {
+      loader.style.display = "none";
+      return;
+    }
+
+    const addCount = Math.min(PAGE_SIZE, alreadyRenderedStartIndex);
+    const newStart = alreadyRenderedStartIndex - addCount;
+
+    const chunk = roomCacheAsc.slice(newStart, alreadyRenderedStartIndex);
+    renderedCount += chunk.length;
+
+    renderChunkToTop(listEl, chunk);
+
+    setTimeout(() => (loader.style.display = "none"), 120);
+  });
+}
+
+function attachScrollLoaderLimitMode(listEl, roomId) {
+  if (!listEl) return;
+  if (scrollBoundEl === listEl) return;
+  scrollBoundEl = listEl;
+
+  const loader = ensureTopLoader(listEl);
 
   listEl.addEventListener("scroll", async () => {
-    // near top
     if (listEl.scrollTop > 40) return;
-    await loadOlderPage(roomId, listEl);
+    if (isLoadingOlder || noMoreOlder) return;
+    if (!oldestCursorDoc) return;
+
+    // If firebase.js doesn't support getDocs/startAfter, stop here
+    if (!getDocsFn || !startAfterFn || !limitFn) return;
+
+    isLoadingOlder = true;
+    loader.style.display = "block";
+
+    try {
+      const qOlder = query(
+        collection(db, MESSAGES_COL),
+        where("room", "==", roomId),
+        orderBy("ts", "desc"),
+        startAfterFn(oldestCursorDoc),
+        limitFn(PAGE_SIZE)
+      );
+
+      const snap = await getDocsFn(qOlder);
+
+      if (snap.empty) {
+        noMoreOlder = true;
+        loader.textContent = "No more messages";
+        setTimeout(() => {
+          loader.style.display = "none";
+          loader.textContent = "Loading older messages…";
+        }, 700);
+        return;
+      }
+
+      const olderDesc = [];
+      snap.forEach((d) => olderDesc.push({ id: d.id, ...d.data() }));
+
+      oldestCursorDoc = snap.docs[snap.docs.length - 1] || oldestCursorDoc;
+
+      const chunkAsc = olderDesc.slice().reverse();
+      olderAsc = [...chunkAsc, ...olderAsc];
+
+      // cap
+      const combined = [...olderAsc, ...newestAsc];
+      if (combined.length > MAX_RENDER) {
+        const extra = combined.length - MAX_RENDER;
+        olderAsc = olderAsc.slice(extra);
+      }
+
+      renderChunkToTop(listEl, chunkAsc);
+    } catch (e) {
+      console.error("Older load error:", e);
+      alert("Error loading older messages: " + (e?.message || e));
+    } finally {
+      isLoadingOlder = false;
+      loader.style.display = "none";
+    }
   });
+}
+
+function subscribeMainToRoom(roomId, listEl) {
+  if (!listEl || !roomId) return;
+  unsubscribeAllMain();
+
+  // ✅ LIMIT MODE (if supported)
+  const canLimit = !!limitFn;
+
+  if (canLimit) {
+    const qNewest = query(
+      collection(db, MESSAGES_COL),
+      where("room", "==", roomId),
+      orderBy("ts", "desc"),
+      limitFn(PAGE_SIZE)
+    );
+
+    unsubscribeMain = onSnapshot(
+      qNewest,
+      (snap) => {
+        setCurrentUser();
+
+        const newestDesc = [];
+        snap.forEach((d) => newestDesc.push({ id: d.id, ...d.data() }));
+
+        newestAsc = newestDesc.slice().reverse();
+        oldestCursorDoc = snap.docs[snap.docs.length - 1] || null;
+
+        // Do not destroy already loaded olderAsc; keep it
+        const combined = [...olderAsc, ...newestAsc];
+        const capped = combined.length > MAX_RENDER ? combined.slice(combined.length - MAX_RENDER) : combined;
+
+        renderFresh(listEl, capped);
+        attachScrollLoaderLimitMode(listEl, roomId);
+      },
+      (err) => {
+        console.error("Snapshot error:", err);
+        alert("Firestore error: " + err.message);
+      }
+    );
+
+    return;
+  }
+
+  // ✅ FALLBACK MODE (no limit available): listen all but render last PAGE_SIZE only
+  const qAll = query(
+    collection(db, MESSAGES_COL),
+    where("room", "==", roomId),
+    orderBy("ts", "desc")
+  );
+
+  unsubscribeMain = onSnapshot(
+    qAll,
+    (snap) => {
+      setCurrentUser();
+
+      const allDesc = [];
+      snap.forEach((d) => allDesc.push({ id: d.id, ...d.data() }));
+      roomCacheAsc = allDesc.slice().reverse(); // ASC
+
+      renderedCount = Math.min(PAGE_SIZE, roomCacheAsc.length);
+      const start = Math.max(0, roomCacheAsc.length - renderedCount);
+      const initial = roomCacheAsc.slice(start);
+
+      renderFresh(listEl, initial);
+      attachScrollLoaderFallback(listEl);
+    },
+    (err) => {
+      console.error("Snapshot error:", err);
+      alert("Firestore error: " + err.message);
+    }
+  );
 }
 
 /* ---------------- Recents (ONLY on send) ---------------- */
@@ -404,13 +418,11 @@ function loadRecents() {
 function saveRecents(map) {
   const key = recentsKey();
   if (!key) return;
-  try {
-    localStorage.setItem(key, JSON.stringify(map || {}));
-  } catch {}
+  localStorage.setItem(key, JSON.stringify(map || {}));
 }
 
 function bumpRecent(otherId) {
-  if (!otherId || !currentUser?.id) return;
+  if (!currentUser?.id || !otherId) return;
   const map = loadRecents();
   map[String(otherId)] = Date.now();
   saveRecents(map);
@@ -445,7 +457,7 @@ function subscribeStatusDots() {
   const q = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
 
   unsubscribeStatus = onSnapshot(q, (snap) => {
-    // reset all
+    // reset
     document.querySelectorAll("[data-status-dot]").forEach((dot) => {
       dot.classList.remove("dot-online", "dot-warn", "dot-offline");
       dot.classList.add("dot-offline");
@@ -453,16 +465,17 @@ function subscribeStatusDots() {
 
     snap.forEach((docu) => {
       const d = docu.data();
-      const userId = String(d.userId || d.userId === 0 ? d.userId : d.userId || d.userId);
-      const dot = document.querySelector(`[data-status-dot="${String(d.userId || "")}"]`);
+      const uid = String(d.userId || "");
+      if (!uid) return;
+
+      const dot = document.querySelector(`[data-status-dot="${uid}"]`);
       if (!dot) return;
 
       const cls = statusToDotClass(d.status || "unavailable");
       dot.classList.remove("dot-online", "dot-warn", "dot-offline");
       dot.classList.add(cls);
 
-      // optional: update sub text if exists
-      const sub = document.querySelector(`[data-sub="${String(d.userId || "")}"]`);
+      const sub = document.querySelector(`[data-sub="${uid}"]`);
       if (sub) sub.textContent = d.status ? String(d.status).replaceAll("_", " ") : "unavailable";
     });
   });
@@ -477,18 +490,17 @@ function hookSearch() {
 
   const run = () => {
     const q = input.value.trim().toLowerCase();
-    document.querySelectorAll(".chat-room, .chat-dm").forEach((b) => {
-      const titleEl = b.querySelector(".chat-room-title");
-      const subEl = b.querySelector(".chat-room-sub");
-      const t = (titleEl?.textContent || b.textContent || "").toLowerCase();
-      const s = (subEl?.textContent || "").toLowerCase();
-      const hit = !q || t.includes(q) || s.includes(q);
-      b.style.display = hit ? "" : "none";
+    document.querySelectorAll(".chat-room, .chat-dm").forEach((btn) => {
+      const titleEl = btn.querySelector(".chat-room-title");
+      const subEl = btn.querySelector(".chat-room-sub");
+      const title = (titleEl?.textContent || btn.textContent || "").toLowerCase();
+      const sub = (subEl?.textContent || "").toLowerCase();
+      const hit = !q || title.includes(q) || sub.includes(q);
+      btn.style.display = hit ? "" : "none";
     });
   };
 
   input.addEventListener("input", run);
-
   clear?.addEventListener("click", () => {
     input.value = "";
     input.focus();
@@ -516,7 +528,7 @@ document.addEventListener("DOMContentLoaded", () => {
   applyDmOrder();
   subscribeStatusDots();
 
-  // Default state
+  // default
   activeChat = null;
   setHeader(nameEl, descEl, "Messages", "Start chatting…");
   if (listEl && emptyEl) setEmptyState(emptyEl, listEl, true);
@@ -531,7 +543,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const room = btn.dataset.room;
       if (!room) return;
 
-      // AI room
       if (room === "ai") {
         activeChat = { type: "ai", roomId: "ai" };
         setActiveButton(btn);
@@ -543,7 +554,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // supervisors room access
       if (room === "supervisors" && currentUser.role !== "supervisor") {
         alert("Supervisor only room.");
         return;
@@ -563,7 +573,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (listEl && emptyEl) setEmptyState(emptyEl, listEl, false);
       setInputEnabled(formEl, inputEl, true);
 
-      subscribeMainToRoom(room, listEl, nameEl, descEl);
+      subscribeMainToRoom(room, listEl);
     });
   });
 
@@ -588,16 +598,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (listEl && emptyEl) setEmptyState(emptyEl, listEl, false);
       setInputEnabled(formEl, inputEl, true);
 
-      // ❌ IMPORTANT: do NOT reorder on open
-      // ✅ reorder only after sending message
-
-      subscribeMainToRoom(roomId, listEl, nameEl, descEl);
+      // ✅ reorder only after sending (not on open)
+      subscribeMainToRoom(roomId, listEl);
     });
   });
 
-  // Send message
+  // Send
   formEl?.addEventListener("submit", async (e) => {
     e.preventDefault();
+
     const text = inputEl?.value?.trim();
     if (!text) return;
 
@@ -614,10 +623,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ts: serverTimestamp(),
     });
 
-    // ✅ DM reorder only after send
-    if (activeChat.type === "dm") {
-      bumpRecent(activeChat.otherId);
-    }
+    if (activeChat.type === "dm") bumpRecent(activeChat.otherId);
 
     inputEl.value = "";
   });
@@ -626,7 +632,6 @@ document.addEventListener("DOMContentLoaded", () => {
 // login/logout without refresh
 window.addEventListener("telesyriana:user-changed", () => {
   setCurrentUser();
-
   subscribeStatusDots();
   applyDmOrder();
 
