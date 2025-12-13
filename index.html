@@ -250,46 +250,50 @@
         </div>
       </section>
 
+<!-- ✅ TASK MODAL -->
+<div id="task-modal" class="modal hidden">
+  <div class="modal-backdrop" data-modal-close></div>
 
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">Add new task</div>
+      <button class="modal-x" type="button" data-modal-close>×</button>
+    </div>
 
-      <!-- TASKS PAGE -->
-<section id="page-tasks" class="page-section hidden">
-  <section class="card">
-    <div class="tasks-top">
-      <div>
-        <h2 style="margin:0">Tasks</h2>
-        <p class="subtitle" style="margin:6px 0 0">Trello-style board (drag • drop • delete)</p>
-      </div>
+    <form id="task-modal-form" class="modal-body">
+      <label>
+        Title
+        <input id="task-modal-title" type="text" placeholder="Task title…" required />
+      </label>
 
-      <form id="task-add-form" class="task-add">
-        <input id="task-title" type="text" placeholder="New task title…" required />
-        <select id="task-col">
+      <label>
+        Description
+        <textarea id="task-modal-desc" rows="4" placeholder="Write details…"></textarea>
+      </label>
+
+      <label>
+        Image (optional)
+        <input id="task-modal-img" type="url" placeholder="Paste image URL (Copy link address)..." />
+        <small class="hint">Example: https://...jpg / png</small>
+      </label>
+
+      <label>
+        Column
+        <select id="task-modal-col">
           <option value="todo">To do</option>
           <option value="doing">Doing</option>
           <option value="done">Done</option>
         </select>
-        <button class="btn-primary" type="submit" style="width:auto;padding:10px 16px">Add</button>
-      </form>
-    </div>
+      </label>
 
-    <div class="kanban" id="kanban">
-      <div class="kanban-col" data-col="todo">
-        <div class="kanban-head">To do <span class="count" data-count="todo">0</span></div>
-        <div class="kanban-list" data-list="todo"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-modal-close>Cancel</button>
+        <button type="submit" class="btn-primary" style="width:auto">Save</button>
       </div>
+    </form>
+  </div>
+</div>
 
-      <div class="kanban-col" data-col="doing">
-        <div class="kanban-head">Doing <span class="count" data-count="doing">0</span></div>
-        <div class="kanban-list" data-list="doing"></div>
-      </div>
-
-      <div class="kanban-col" data-col="done">
-        <div class="kanban-head">Done <span class="count" data-count="done">0</span></div>
-        <div class="kanban-list" data-list="done"></div>
-      </div>
-    </div>
-  </section>
-</section>
 
       <!-- MESSAGES PAGE -->
       <section id="page-messages" class="page-section hidden">
@@ -492,6 +496,7 @@
 
 </body>
 </html>
+
 
 
 
