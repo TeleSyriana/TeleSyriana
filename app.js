@@ -40,7 +40,10 @@ let supUnsub = null;
 // widgets timers
 let clockIntervalId = null;
 
-// ------------------------------ helpers ---------------------------------
+// floating chat UI
+let floatUIHooked = false;
+
+/* ------------------------------ helpers --------------------------------- */
 
 function getTodayKey() {
   const d = new Date();
@@ -91,7 +94,7 @@ function computeWorkedMinutes(live) {
   return op + meet + hand + br;
 }
 
-// --------------------------- Widgets (Clock/Date) ------------------------
+/* --------------------------- Widgets (Clock/Date) ------------------------ */
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -119,7 +122,7 @@ function renderClockWidget() {
   });
 }
 
-// --------------------------- Widgets (Break Ring) ------------------------
+/* --------------------------- Widgets (Break Ring) ------------------------ */
 
 /**
  * Expects:
@@ -136,15 +139,8 @@ function setRing(percent) {
   label.textContent = `${p}%`;
 }
 
-// --------------------------- Widgets (Work target box) -------------------
+/* --------------------------- Widgets (Work target box) ------------------- */
 
-/**
- * Optional IDs (if you added the box in HTML):
- * - #work-used
- * - #work-remaining
- * - #work-target
- * - #work-percent
- */
 function updateWorkUI(workedMin) {
   const used = Math.max(0, Math.floor(workedMin));
   const remaining = Math.max(0, WORK_TARGET_MIN - used);
@@ -159,7 +155,8 @@ function updateWorkUI(workedMin) {
   if (remainingText) remainingText.textContent = formatDuration(remaining);
 
   // ring
-  const pct = WORK_TARGET_MIN > 0 ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100)) : 0;
+  const pct =
+    WORK_TARGET_MIN > 0 ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100)) : 0;
   const ring = document.getElementById("work-ring-progress");
   const label = document.getElementById("work-ring-label");
 
@@ -167,8 +164,7 @@ function updateWorkUI(workedMin) {
   if (label) label.textContent = `${pct}%`;
 }
 
-
-// --------------------------- Widgets (Mini Calendar) ---------------------
+/* --------------------------- Widgets (Mini Calendar) --------------------- */
 
 /**
  * Expects:
@@ -240,7 +236,7 @@ function hookCalendarButtons() {
   };
 }
 
-// --------------------------- Live usage math ----------------------------
+/* --------------------------- Live usage math ---------------------------- */
 
 function recomputeLiveUsage(nowMs) {
   if (!state) {
@@ -257,15 +253,20 @@ function recomputeLiveUsage(nowMs) {
 
   switch (state.status) {
     case "in_operation":
-      op += elapsedMin; break;
+      op += elapsedMin;
+      break;
     case "break":
-      br += elapsedMin; break;
+      br += elapsedMin;
+      break;
     case "meeting":
-      meet += elapsedMin; break;
+      meet += elapsedMin;
+      break;
     case "handling":
-      hand += elapsedMin; break;
+      hand += elapsedMin;
+      break;
     case "unavailable":
-      unav += elapsedMin; break;
+      unav += elapsedMin;
+      break;
   }
 
   if (br > BREAK_LIMIT_MIN) br = BREAK_LIMIT_MIN;
@@ -281,21 +282,29 @@ function applyElapsedToState(nowMs) {
 
   switch (state.status) {
     case "in_operation":
-      state.operationMinutes += elapsedMin; break;
+      state.operationMinutes += elapsedMin;
+      break;
     case "break":
-      state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin); break;
+      state.breakUsedMinutes = Math.min(
+        BREAK_LIMIT_MIN,
+        state.breakUsedMinutes + elapsedMin
+      );
+      break;
     case "meeting":
-      state.meetingMinutes += elapsedMin; break;
+      state.meetingMinutes += elapsedMin;
+      break;
     case "handling":
-      state.handlingMinutes += elapsedMin; break;
+      state.handlingMinutes += elapsedMin;
+      break;
     case "unavailable":
-      state.unavailableMinutes += elapsedMin; break;
+      state.unavailableMinutes += elapsedMin;
+      break;
   }
 
   state.lastStatusChange = nowMs;
 }
 
-// --------------------------- Firestore sync -----------------------------
+/* --------------------------- Firestore sync ----------------------------- */
 
 async function syncStateToFirestore(live) {
   if (!currentUser || !state) return;
@@ -336,7 +345,7 @@ function subscribeSupervisorDashboard() {
   });
 }
 
-// --------------------------- Local storage ------------------------------
+/* --------------------------- Local storage ------------------------------ */
 
 function saveState() {
   if (!state) return;
@@ -354,7 +363,72 @@ function loadStateForToday(userId) {
   return null;
 }
 
-// --------------------------- UI init ------------------------------------
+/* ------------------------- Floating Chat Shell -------------------------- */
+/**
+ * This file only handles open/close + visibility rules.
+ * messages.js will handle Firestore + content.
+ */
+function closeFloatingChat() {
+  const panel = document.getElementById("float-chat-panel");
+  if (panel) panel.classList.add("hidden");
+}
+
+function openFloatingChat() {
+  const panel = document.getElementById("float-chat-panel");
+  if (!panel) return;
+  panel.classList.remove("hidden");
+}
+
+function toggleFloatingChat() {
+  if (!currentUser) return; // no user logged in
+  const panel = document.getElementById("float-chat-panel");
+  if (!panel) return;
+  const isHidden = panel.classList.contains("hidden");
+  if (isHidden) openFloatingChat();
+  else closeFloatingChat();
+}
+
+function hookFloatingChatUI() {
+  if (floatUIHooked) return;
+  floatUIHooked = true;
+
+  const toggleBtn = document.getElementById("float-chat-toggle");
+  const closeBtn = document.getElementById("float-chat-close");
+  const panel = document.getElementById("float-chat-panel");
+
+  toggleBtn?.addEventListener("click", () => {
+    // if user not logged in, do nothing
+    if (!currentUser) return;
+    toggleFloatingChat();
+  });
+
+  closeBtn?.addEventListener("click", () => {
+    closeFloatingChat();
+  });
+
+  // Click outside panel closes it
+  document.addEventListener("mousedown", (e) => {
+    if (!panel || panel.classList.contains("hidden")) return;
+    if (panel.contains(e.target)) return;
+
+    // allow clicking the toggle button without instant-close
+    if (toggleBtn && (e.target === toggleBtn || toggleBtn.contains(e.target))) return;
+
+    closeFloatingChat();
+  });
+
+  // ESC closes it
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeFloatingChat();
+  });
+
+  // If user changes (login/logout) close it
+  window.addEventListener("telesyriana:user-changed", () => {
+    closeFloatingChat();
+  });
+}
+
+/* --------------------------- UI init ------------------------------------ */
 
 document.addEventListener("DOMContentLoaded", () => {
   // ✅ FIX: make sure menu taps always work (even if HTML changes slightly)
@@ -372,6 +446,9 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
   document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
 
+  // ✅ hook floating shell once
+  hookFloatingChatUI();
+
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
     const u = JSON.parse(savedUser);
@@ -386,7 +463,7 @@ document.addEventListener("DOMContentLoaded", () => {
   showLogin();
 });
 
-// -------------------------- Pages switching -----------------------------
+/* -------------------------- Pages switching ----------------------------- */
 
 function switchPage(pageId) {
   // hide all pages
@@ -404,15 +481,19 @@ function switchPage(pageId) {
     btn.classList.toggle("active", btn.dataset.page === pageId);
   });
 
-  // floating chat toggle
+  // floating chat toggle visibility rules
   const floatToggle = document.getElementById("float-chat-toggle");
   if (floatToggle) {
-    if (!currentUser || pageId === "messages") floatToggle.classList.add("hidden");
-    else floatToggle.classList.remove("hidden");
+    if (!currentUser || pageId === "messages") {
+      floatToggle.classList.add("hidden");
+      closeFloatingChat();
+    } else {
+      floatToggle.classList.remove("hidden");
+    }
   }
 }
 
-// -------------------------- Login / Logout ------------------------------
+/* -------------------------- Login / Logout ------------------------------ */
 
 function handleLogin(e) {
   e.preventDefault();
@@ -436,6 +517,9 @@ function handleLogin(e) {
 }
 
 async function handleLogout() {
+  // close floating chat on logout
+  closeFloatingChat();
+
   if (currentUser && state) {
     const now = Date.now();
     applyElapsedToState(now);
@@ -472,7 +556,7 @@ function showError(msg) {
   box.classList.remove("hidden");
 }
 
-// --------------------- Status change (FIX) ------------------------------
+/* --------------------- Status change (FIX) ------------------------------ */
 
 async function handleStatusChange(e) {
   if (!state || !currentUser) return;
@@ -500,7 +584,7 @@ async function handleStatusChange(e) {
   updateDashboardUI();
 }
 
-// ---------------------------- Init Session ------------------------------
+/* ---------------------------- Init Session ------------------------------ */
 
 async function initStateForUser() {
   const today = getTodayKey();
@@ -573,7 +657,7 @@ function finishInit(now) {
   syncStateToFirestore(live);
 }
 
-// ----------------------------- Timer ------------------------------------
+/* ----------------------------- Timer ------------------------------------ */
 
 function startTimer() {
   if (timerId) clearInterval(timerId);
@@ -606,7 +690,7 @@ async function tick() {
   await syncStateToFirestore(live);
 }
 
-// ------------------------- Dashboard UI ---------------------------------
+/* ------------------------- Dashboard UI --------------------------------- */
 
 function updateDashboardUI() {
   if (!currentUser || !state) return;
@@ -662,7 +746,7 @@ function updateStatusMinutesUI(live) {
   if (handEl) handEl.textContent = formatDuration(live.handling);
 }
 
-// -------------------------- Supervisor Table ----------------------------
+/* -------------------------- Supervisor Table ---------------------------- */
 
 function buildSupervisorTableFromFirestore(rows) {
   const body = document.getElementById("sup-table-body");
@@ -703,7 +787,7 @@ function buildSupervisorTableFromFirestore(rows) {
   if (sumUnavail) sumUnavail.textContent = totals.unavailable;
 }
 
-// ----------------------------- Settings ---------------------------------
+/* ----------------------------- Settings --------------------------------- */
 
 async function loadUserProfile() {
   if (!currentUser) return;
@@ -747,7 +831,7 @@ async function handleSettingsSave(e) {
   alert("Settings saved successfully.");
 }
 
-// --------------------------- View switching -----------------------------
+/* --------------------------- View switching ----------------------------- */
 
 function showLogin() {
   document.getElementById("dashboard-screen")?.classList.add("hidden");
@@ -756,6 +840,8 @@ function showLogin() {
 
   const floatToggle = document.getElementById("float-chat-toggle");
   if (floatToggle) floatToggle.classList.add("hidden");
+
+  closeFloatingChat();
 
   if (clockIntervalId) clearInterval(clockIntervalId);
   clockIntervalId = null;
@@ -777,4 +863,3 @@ function showDashboard() {
     clockIntervalId = setInterval(renderClockWidget, 1000);
   }
 }
-
