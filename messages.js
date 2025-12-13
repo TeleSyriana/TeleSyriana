@@ -1629,22 +1629,37 @@ makeCollapsible("Direct messages", "dm-list");
 
     // Send (main)
     formEl?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const text = inputEl?.value?.trim();
-      if (!text) return;
+  e.preventDefault();
+  const text = inputEl?.value?.trim();
+  if (!text) return;
 
-      setCurrentUser();
-      if (!currentUser) return alert("Please login first.");
-      if (!activeChat || activeChat.type === "ai") return;
+  setCurrentUser();
+  if (!currentUser) return alert("Please login first.");
+  if (!activeChat || activeChat.type === "ai") return;
 
-      await addDoc(collection(db, MESSAGES_COL), {
-        room: activeChat.roomId,
-        text,
-        userId: currentUser.id,
-        name: currentUser.name,
-        role: currentUser.role,
-        ts: serverTimestamp(),
-      });
+  await addDoc(collection(db, MESSAGES_COL), {
+    room: activeChat.roomId,
+    text,
+    userId: currentUser.id,
+    name: currentUser.name,
+    role: currentUser.role,
+    ts: serverTimestamp(),
+  });
+
+  // ✅ bump recent AFTER SEND for ANY chat
+  // key: "dm:xxxx" or "room:general" or "group:grp_xxx"
+  const recentKey =
+    activeChat.type === "dm"
+      ? `dm:${getOtherIdFromDmRoom(activeChat.roomId, currentUser.id) || ""}`
+      : `${activeChat.type}:${activeChat.roomId}`;
+
+  if (recentKey && !recentKey.endsWith(":")) {
+    bumpRecentAfterSend(recentKey, Date.now());
+  }
+
+  inputEl.value = "";
+});
+
 
       // ✅ ONLY HERE: bump recent after SEND (DM فقط) — CLOUD
       if (activeChat.type === "dm") {
@@ -1695,6 +1710,7 @@ window.addEventListener("telesyriana:user-changed", () => {
     renderRecentsList();
   }
 });
+
 
 
 
