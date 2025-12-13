@@ -1,4 +1,5 @@
 // messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots
+// ✅ + Recents (DM reorder) + Search filter + Glass sidebar support
 import { db, fs } from "./firebase.js";
 
 const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } = fs;
@@ -6,6 +7,10 @@ const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp }
 const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 const AGENT_DAYS_COL = "agentDays"; // status source (today docs)
+
+// ✅ recents storage (per user)
+const RECENTS_KEY_PREFIX = "telesyrianaChatRecents"; // `${prefix}:${userId}`
+// structure: { [otherId]: lastTsNumber }
 
 let currentUser = null;
 
@@ -26,6 +31,10 @@ let renderedCount = 0;
 
 // لمنع تكرار ربط السكرول على نفس list
 let scrollBoundEl = null;
+
+// refs for sidebar lists
+let dmListEl = null;
+let roomListEl = null;
 
 // ----------------------------- helpers -----------------------------
 
@@ -63,11 +72,8 @@ function dmRoomId(a, b) {
 }
 
 function statusToDotClass(status) {
-  // Operating/Handling => online
   if (status === "in_operation" || status === "handling") return "dot-online";
-  // Meeting/Break => orange
   if (status === "meeting" || status === "break") return "dot-warn";
-  // Other => grey
   return "dot-offline";
 }
 
@@ -89,7 +95,7 @@ function ensureTopLoader(listEl) {
 
 function getInitials(name = "") {
   const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map(p => p[0]?.toUpperCase() || "").join("") || "U";
+  return parts.map((p) => p[0]?.toUpperCase() || "").join("") || "U";
 }
 
 function createMessageNode(m, showRole) {
@@ -97,16 +103,13 @@ function createMessageNode(m, showRole) {
   wrapper.className = "chat-message";
   if (currentUser && m.userId === currentUser.id) wrapper.classList.add("me");
 
-  // avatar
   const avatar = document.createElement("div");
   avatar.className = "msg-avatar";
   avatar.textContent = getInitials(m.name || "User");
 
-  // body
   const body = document.createElement("div");
   body.className = "msg-body";
 
-  // meta row (name + role + time) جنب الصورة
   const meta = document.createElement("div");
   meta.className = "msg-meta";
 
@@ -120,7 +123,6 @@ function createMessageNode(m, showRole) {
   meta.appendChild(nameEl);
   meta.appendChild(timeEl);
 
-  // bubble text
   const text = document.createElement("div");
   text.className = "chat-message-text";
   text.textContent = m.text || "";
@@ -134,11 +136,9 @@ function createMessageNode(m, showRole) {
   return wrapper;
 }
 
-
 function renderFresh(listEl, msgs, showRole) {
   const loader = ensureTopLoader(listEl);
 
-  // امسح كلشي ما عدا اللودر
   Array.from(listEl.children).forEach((ch) => {
     if (ch !== loader) ch.remove();
   });
@@ -159,7 +159,6 @@ function renderChunkToTop(listEl, items, showRole) {
   const frag = document.createDocumentFragment();
   items.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
 
-  // حط الرسائل بعد اللودر مباشرة
   const afterLoader = loader.nextSibling;
   if (afterLoader) listEl.insertBefore(frag, afterLoader);
   else listEl.appendChild(frag);
@@ -255,6 +254,14 @@ function subscribeMainToRoom(roomId, listEl) {
 
       renderFresh(listEl, initial, true);
       attachScrollLoader(listEl);
+
+      // ✅ If active chat is DM and we have messages, bump that user to top
+      if (activeChat?.type === "dm" && activeChat?.roomId === roomId && roomCache.length) {
+        const last = roomCache[roomCache.length - 1];
+        // if I’m chatting with X, bump X
+        const otherId = getOtherIdFromDmRoom(roomId, currentUser?.id);
+        if (otherId) bumpRecent(otherId, last?.ts);
+      }
     },
     (err) => {
       console.error("Main snapshot error:", err);
@@ -300,7 +307,6 @@ function subscribeStatusDots() {
   );
 
   unsubscribeStatus = onSnapshot(q, (snap) => {
-    // default all offline
     const dots = document.querySelectorAll("[data-status-dot]");
     dots.forEach((d) => {
       d.classList.remove("dot-online", "dot-warn", "dot-offline");
@@ -318,7 +324,6 @@ function subscribeStatusDots() {
       dot.classList.remove("dot-online", "dot-warn", "dot-offline");
       dot.classList.add(cls);
 
-      // optional: subtitle text
       const sub = document.querySelector(`[data-sub="${userId}"]`);
       if (sub) sub.textContent = d.status ? d.status.replaceAll("_", " ") : "unavailable";
     });
@@ -328,12 +333,127 @@ function subscribeStatusDots() {
 // ----------------------- Active selection UI -----------------------
 
 function clearActiveButtons() {
-  document.querySelectorAll(".chat-room, .chat-dm").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".chat-room, .chat-dm").forEach((b) => {
+    b.classList.remove("active");
+    b.classList.remove("chat-item-active");
+  });
 }
 
 function setActiveButton(el) {
   clearActiveButtons();
-  if (el) el.classList.add("active");
+  if (el) {
+    el.classList.add("active");
+    el.classList.add("chat-item-active");
+  }
+}
+
+// ----------------------- ✅ Recents (DM reorder) -----------------------
+
+function recentsKey() {
+  if (!currentUser?.id) return null;
+  return `${RECENTS_KEY_PREFIX}:${currentUser.id}`;
+}
+
+function loadRecentsMap() {
+  const key = recentsKey();
+  if (!key) return {};
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveRecentsMap(map) {
+  const key = recentsKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(map || {}));
+  } catch {}
+}
+
+function tsToNumber(ts) {
+  if (!ts) return Date.now();
+  if (typeof ts === "number") return ts;
+  if (ts.toMillis) return ts.toMillis();
+  if (ts.toDate) return ts.toDate().getTime();
+  return Date.now();
+}
+
+function getOtherIdFromDmRoom(roomId, myId) {
+  if (!roomId || !myId) return null;
+  // dm_1001_2002
+  const parts = String(roomId).split("_");
+  if (parts.length !== 3) return null;
+  const a = parts[1];
+  const b = parts[2];
+  return String(myId) === a ? b : a;
+}
+
+function bumpRecent(otherId, ts) {
+  if (!currentUser?.id) return;
+  const map = loadRecentsMap();
+  map[String(otherId)] = tsToNumber(ts);
+  saveRecentsMap(map);
+  applyDmOrderFromRecents();
+}
+
+function applyDmOrderFromRecents() {
+  if (!dmListEl) dmListEl = document.getElementById("dm-list");
+  if (!dmListEl) return;
+
+  const map = loadRecentsMap();
+
+  const buttons = Array.from(dmListEl.querySelectorAll(".chat-dm"));
+
+  buttons.sort((a, b) => {
+    const ida = String(a.dataset.dm || "");
+    const idb = String(b.dataset.dm || "");
+    const ta = map[ida] || 0;
+    const tb = map[idb] || 0;
+    // newer first
+    if (tb !== ta) return tb - ta;
+    // fallback stable by id
+    return ida.localeCompare(idb);
+  });
+
+  // re-append in sorted order
+  buttons.forEach((btn) => dmListEl.appendChild(btn));
+}
+
+// ----------------------- ✅ Search filter -----------------------
+
+function hookSearch() {
+  const input = document.getElementById("chat-search");
+  const clearBtn = document.getElementById("chat-search-x");
+
+  if (!input) return;
+
+  const run = () => {
+    const q = input.value.trim().toLowerCase();
+
+    const items = document.querySelectorAll(".chat-room, .chat-dm");
+    items.forEach((btn) => {
+      const titleEl = btn.querySelector(".chat-room-title");
+      const subEl = btn.querySelector(".chat-room-sub");
+      const title = (titleEl?.textContent || "").toLowerCase();
+      const sub = (subEl?.textContent || "").toLowerCase();
+      const hit = !q || title.includes(q) || sub.includes(q);
+      btn.style.display = hit ? "" : "none";
+    });
+  };
+
+  input.addEventListener("input", run);
+
+  clearBtn?.addEventListener("click", () => {
+    input.value = "";
+    input.focus();
+    run();
+  });
+
+  // first run
+  run();
 }
 
 // ----------------------------- init -----------------------------
@@ -343,6 +463,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const roomButtons = document.querySelectorAll(".chat-room");
   const dmButtons = document.querySelectorAll(".chat-dm");
+
+  roomListEl = document.getElementById("room-list");
+  dmListEl = document.getElementById("dm-list");
 
   const roomNameEl = document.getElementById("chat-room-name");
   const roomDescEl = document.getElementById("chat-room-desc");
@@ -371,7 +494,13 @@ document.addEventListener("DOMContentLoaded", () => {
     floatList.style.maxHeight = "220px";
   }
 
-  // ---------- Floating: hide on messages page (app.js handles), we just wire open/close/send ----------
+  // ✅ search
+  hookSearch();
+
+  // ✅ apply recents order on load
+  applyDmOrderFromRecents();
+
+  // ---------- Floating ----------
   floatToggle?.addEventListener("click", () => floatPanel?.classList.toggle("hidden"));
   floatClose?.addEventListener("click", () => floatPanel?.classList.add("hidden"));
 
@@ -395,12 +524,10 @@ document.addEventListener("DOMContentLoaded", () => {
     floatInput.value = "";
   });
 
-  // Always keep floating list live (even if hidden)
   subscribeFloatToGeneral(floatList);
 
   // ---------- Main Messages page logic ----------
   if (hasMainChat && listEl) {
-    // default: empty state
     activeChat = null;
     setHeader(roomNameEl, roomDescEl, "Messages", "Start chatting…");
     setEmptyState(emptyEl, listEl, true);
@@ -414,7 +541,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const room = btn.dataset.room;
 
-        // AI room -> coming soon only
         if (room === "ai") {
           activeChat = { type: "ai", roomId: "ai", title: "ChatGPT 5", desc: "Coming soon…" };
           setActiveButton(btn);
@@ -426,7 +552,6 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        // supervisors room visible only to supervisors (extra safety)
         if (room === "supervisors" && currentUser.role !== "supervisor") {
           alert("Supervisor only room.");
           return;
@@ -477,6 +602,9 @@ document.addEventListener("DOMContentLoaded", () => {
         setEmptyState(emptyEl, listEl, false);
         setInputEnabled(formEl, inputEl, true);
 
+        // ✅ bump to top on open
+        bumpRecent(otherId, Date.now());
+
         subscribeMainToRoom(activeChat.roomId, listEl);
       });
     });
@@ -500,6 +628,12 @@ document.addEventListener("DOMContentLoaded", () => {
         ts: serverTimestamp(),
       });
 
+      // ✅ bump on send if DM
+      if (activeChat.type === "dm") {
+        const otherId = getOtherIdFromDmRoom(activeChat.roomId, currentUser.id);
+        if (otherId) bumpRecent(otherId, Date.now());
+      }
+
       inputEl.value = "";
     });
 
@@ -512,10 +646,9 @@ document.addEventListener("DOMContentLoaded", () => {
 window.addEventListener("telesyriana:user-changed", () => {
   setCurrentUser();
 
-  // update status dots subscription
   subscribeStatusDots();
+  applyDmOrderFromRecents();
 
-  // if user logged out while in messages page, reset
   const listEl = document.getElementById("chat-message-list");
   const emptyEl = document.getElementById("chat-empty");
   const roomNameEl = document.getElementById("chat-room-name");
@@ -533,4 +666,3 @@ window.addEventListener("telesyriana:user-changed", () => {
     setInputEnabled(formEl, inputEl, false);
   }
 });
-
