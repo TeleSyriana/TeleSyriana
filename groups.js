@@ -206,3 +206,24 @@ window.addEventListener("telesyriana:user-changed", () => {
   hookOpenButton();
   renderGroups();
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+  const raw = localStorage.getItem("telesyrianaUser");
+  const user = raw ? JSON.parse(raw) : null;
+
+  const openBtn = document.getElementById("group-open-modal");
+  const modal = document.getElementById("group-modal");
+
+  // show only for supervisor
+  if (openBtn) openBtn.style.display = user?.role === "supervisor" ? "block" : "none";
+
+  openBtn?.addEventListener("click", () => modal?.classList.remove("hidden"));
+
+  document.getElementById("group-modal-close")?.addEventListener("click", () => {
+    modal?.classList.add("hidden");
+  });
+
+  document.getElementById("group-cancel")?.addEventListener("click", () => {
+    modal?.classList.add("hidden");
+  });
+});
