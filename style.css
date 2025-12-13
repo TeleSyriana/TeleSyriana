@@ -1252,6 +1252,8 @@ body[data-theme="male"] .chat-dm.active{ background:#e9f1ff; }
   overflow-x: hidden;
   padding-bottom: 6px;
 }
+#page-messages.chat-only .messages-sidebar { display: none; }
+#page-messages.chat-only .messages-main { width: 100%; }
 
 #chat-form{ flex: 0 0 auto; }
 /* =========================================================
@@ -1290,6 +1292,7 @@ body.theme-male{
   --bg1:#1b5cff;      /* background 1 */
   --bg2:#9bd0ff;      /* background 2 */
 }
+
 
 
 
