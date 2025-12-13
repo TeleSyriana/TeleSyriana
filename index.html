@@ -492,34 +492,43 @@
       </section>
 
       <!-- SETTINGS PAGE -->
-      <section id="page-settings" class="page-section hidden">
-        <div class="card">
-          <h2>Settings</h2>
-          <p class="subtitle">Update personal info</p>
+<!-- SETTINGS PAGE -->
+<section id="page-settings" class="page-section hidden">
+  <div class="card">
+    <h2>Settings</h2>
+    <p class="subtitle">Update personal info</p>
 
-          <form id="settings-form">
-            <label>
-              Full Name
-              <input type="text" id="set-name" disabled />
-            </label>
+    <form id="settings-form">
+      <label>
+        Full Name
+        <input type="text" id="set-name" disabled />
+      </label>
 
-            <label>
-              Birthday
-              <input type="date" id="set-birthday" />
-            </label>
+      <!-- ✅ NEW: Gender -->
+      <label>
+        Gender / Theme
+        <select id="set-gender">
+          <option value="">Select… (Default)</option>
+          <option value="male">Male (Blue)</option>
+          <option value="female">Female (Pink)</option>
+        </select>
+      </label>
 
-            <label>
-              Notes
-              <textarea id="set-notes" placeholder="Report any issue..."></textarea>
-            </label>
+      <label>
+        Birthday
+        <input type="date" id="set-birthday" />
+      </label>
 
-            <button type="submit" class="btn-primary">Save</button>
-          </form>
-        </div>
-      </section>
+      <label>
+        Notes
+        <textarea id="set-notes" placeholder="Report any issue..."></textarea>
+      </label>
 
-    </main>
+      <button type="submit" class="btn-primary">Save</button>
+    </form>
   </div>
+</section>
+
 
   <!-- ✅ FLOATING CHAT TOGGLE -->
   <button id="float-chat-toggle" class="floating-chat-toggle hidden" type="button">💬</button>
@@ -579,3 +588,4 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
