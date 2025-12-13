@@ -545,6 +545,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
 
+  // Create Group test
+window.addEventListener("telesyriana:open-room", (e) => {
+  const detail = e.detail || {};
+  const { roomId, title, desc, type } = detail;
+  if (!roomId) return;
+
+  // call your existing open-room logic:
+  // activeChat = { type: type || "room", roomId, title, desc }
+  // set header, enable input, subscribe, etc...
+});
+
   // ✅ Hide Back button (no need)
   const backBtn = document.getElementById("chat-back");
   if (backBtn) backBtn.style.display = "none";
@@ -727,3 +738,4 @@ window.addEventListener("telesyriana:user-changed", () => {
     setInputEnabled(formEl, inputEl, false);
   }
 });
+
