@@ -1237,6 +1237,66 @@ input:focus, textarea:focus{
   .messages-sidebar.glass{ border-radius: 18px; }
 }
 
+/* =========================
+   FIX: Messages height + internal scroll
+   Put at END of style.css
+========================= */
+
+:root{
+  /* عدّل الرقم إذا الهيدر عندك أكبر/أصغر */
+  --header-offset: 120px;
+}
+
+/* خلي صفحة messages ما تتمدّد */
+#page-messages{
+  height: calc(100vh - var(--header-offset));
+}
+
+/* الكارد ياخد طول ثابت */
+#page-messages .messages-card{
+  height: calc(100vh - var(--header-offset));
+  display: flex;
+}
+
+/* المحتوى جوّا الكارد */
+#page-messages .messages-layout{
+  height: 100%;
+  width: 100%;
+  display: flex;
+  overflow: hidden; /* مهم */
+}
+
+/* الشات الرئيسي */
+#page-messages .messages-main{
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* مهم */
+}
+
+/* هون لازم يصير السكروول */
+#chat-message-list{
+  flex: 1;
+  min-height: 0;        /* مهم جداً مع flex */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 6px;
+}
+
+/* خلي الإدخال ثابت تحت */
+#chat-form{
+  flex: 0 0 auto;
+}
+
+/* موبايل */
+@media (max-width:768px){
+  :root{ --header-offset: 170px; } /* لأن الهيدر بصفين غالباً */
+  #page-messages,
+  #page-messages .messages-card{
+    height: calc(100vh - var(--header-offset));
+  }
+}
+
 
 
 
