@@ -858,10 +858,6 @@ async function handleSettingsSave(e) {
   alert("Settings saved successfully.");
 }
 
-
-  alert("Settings saved successfully.");
-}
-
 /* --------------------------- View switching ----------------------------- */
 
 function showLogin() {
@@ -894,4 +890,5 @@ function showDashboard() {
     clockIntervalId = setInterval(renderClockWidget, 1000);
   }
 }
+
 
