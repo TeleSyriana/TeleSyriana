@@ -1,4 +1,9 @@
-// app.js — TeleSyriana Agent Access Panel (Firestore + daily docs + multi-page UI)
+// app.js — TeleSyriana Agent Access Panel (Firestore + daily docs + multi-page UI) (FIXED)
+// ✅ Blocks mobile phones (allows iPad + Desktop only)
+// ✅ Stable init, no duplicate listeners
+// ✅ Better page switching + floating chat visibility rules
+// ✅ Keeps messages.js informed via telesyriana:user-changed
+// ✅ Safe UI updates (won't crash if an element is missing)
 
 import { db, fs } from "./firebase.js";
 
@@ -43,6 +48,87 @@ let clockIntervalId = null;
 // floating chat UI
 let floatUIHooked = false;
 
+// guard duplicate init
+let appInited = false;
+
+/* =========================
+   ✅ BLOCK MOBILE PHONES
+   Allows: iPad + Desktop
+   Blocks: phones (Android/iPhone)
+========================= */
+function isIPadLike() {
+  // iPadOS 13+ may report as MacIntel with touch points
+  return (
+    /iPad/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+function isPhoneLike() {
+  const ua = navigator.userAgent || "";
+  // block common phone identifiers (Android Mobile, iPhone, iPod)
+  if (/iPhone|iPod/i.test(ua)) return true;
+  if (/Android/i.test(ua) && /Mobile/i.test(ua)) return true;
+  // Some browsers include "Mobile" for phones
+  if (/Mobile/i.test(ua) && !isIPadLike()) return true;
+  return false;
+}
+
+function ensureAllowedDeviceOrBlock() {
+  // allow iPad
+  if (isIPadLike()) return true;
+
+  // block phones
+  if (isPhoneLike()) {
+    renderMobileBlockedScreen();
+    return false;
+  }
+
+  // desktop/tablet non-phone -> allowed
+  return true;
+}
+
+function renderMobileBlockedScreen() {
+  document.documentElement.style.height = "100%";
+  document.body.style.height = "100%";
+  document.body.style.margin = "0";
+
+  document.body.innerHTML = `
+    <div style="
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background: linear-gradient(135deg, #ff2c8b, #ff8bd3);
+      color:#fff;
+      text-align:center;
+    ">
+      <div style="
+        width:min(520px, 92vw);
+        background: rgba(255,255,255,0.15);
+        border:1px solid rgba(255,255,255,0.35);
+        border-radius:18px;
+        padding:22px 18px;
+        backdrop-filter: blur(14px);
+        box-shadow: 0 18px 40px rgba(0,0,0,0.25);
+      ">
+        <div style="font-size:20px;font-weight:900;margin-bottom:8px;">
+          TeleSyriana Portal
+        </div>
+        <div style="font-size:13px;opacity:.95;line-height:1.6;margin-bottom:14px;">
+          This portal is available on <b>iPad</b> and <b>Desktop</b> only.<br/>
+          Please open it on an iPad or computer.
+        </div>
+        <div style="font-size:12px;opacity:.85;">
+          (Mobile phones are not supported for security & layout reasons.)
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 /* ------------------------------ helpers --------------------------------- */
 
 function getTodayKey() {
@@ -69,9 +155,6 @@ function statusLabel(code) {
   }
 }
 
-/**
- * ✅ Minutes -> "xx min" OR "1 hr" OR "2 hrs 13 min"
- */
 function formatDuration(mins) {
   const m = Math.max(0, Math.floor(Number(mins) || 0));
   if (m < 60) return `${m} min`;
@@ -100,12 +183,6 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
-/**
- * Expects IDs in HTML:
- * - #widget-clock
- * - #widget-day
- * - #widget-date
- */
 function renderClockWidget() {
   const clockEl = document.getElementById("widget-clock");
   const dayEl = document.getElementById("widget-day");
@@ -124,11 +201,6 @@ function renderClockWidget() {
 
 /* --------------------------- Widgets (Break Ring) ------------------------ */
 
-/**
- * Expects:
- * - #ring-progress
- * - #ring-label
- */
 function setRing(percent) {
   const p = Math.max(0, Math.min(100, Math.round(percent)));
   const ring = document.getElementById("ring-progress");
@@ -145,7 +217,6 @@ function updateWorkUI(workedMin) {
   const used = Math.max(0, Math.floor(workedMin));
   const remaining = Math.max(0, WORK_TARGET_MIN - used);
 
-  // text
   const workText = document.getElementById("work-text");
   const targetText = document.getElementById("work-target-text");
   const remainingText = document.getElementById("work-remaining-text");
@@ -154,9 +225,9 @@ function updateWorkUI(workedMin) {
   if (targetText) targetText.textContent = formatDuration(WORK_TARGET_MIN);
   if (remainingText) remainingText.textContent = formatDuration(remaining);
 
-  // ring
   const pct =
     WORK_TARGET_MIN > 0 ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100)) : 0;
+
   const ring = document.getElementById("work-ring-progress");
   const label = document.getElementById("work-ring-label");
 
@@ -166,13 +237,6 @@ function updateWorkUI(workedMin) {
 
 /* --------------------------- Widgets (Mini Calendar) --------------------- */
 
-/**
- * Expects:
- * - #cal-title
- * - #cal-grid
- * - #cal-prev
- * - #cal-next
- */
 let calRef = new Date();
 
 function monthTitle(d) {
@@ -190,7 +254,6 @@ function buildMiniCalendar() {
   const year = calRef.getFullYear();
   const month = calRef.getMonth();
 
-  // Monday-first calendar
   const first = new Date(year, month, 1);
   const startDay = (first.getDay() + 6) % 7; // 0=Mon ... 6=Sun
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -224,6 +287,10 @@ function hookCalendarButtons() {
   const prev = document.getElementById("cal-prev");
   const next = document.getElementById("cal-next");
   if (!prev || !next) return;
+
+  // avoid stacking handlers if DOM reloaded
+  prev.onclick = null;
+  next.onclick = null;
 
   prev.onclick = () => {
     calRef = new Date(calRef.getFullYear(), calRef.getMonth() - 1, 1);
@@ -285,10 +352,7 @@ function applyElapsedToState(nowMs) {
       state.operationMinutes += elapsedMin;
       break;
     case "break":
-      state.breakUsedMinutes = Math.min(
-        BREAK_LIMIT_MIN,
-        state.breakUsedMinutes + elapsedMin
-      );
+      state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin);
       break;
     case "meeting":
       state.meetingMinutes += elapsedMin;
@@ -368,6 +432,7 @@ function loadStateForToday(userId) {
  * This file only handles open/close + visibility rules.
  * messages.js will handle Firestore + content.
  */
+
 function closeFloatingChat() {
   const panel = document.getElementById("float-chat-panel");
   if (panel) panel.classList.add("hidden");
@@ -380,7 +445,7 @@ function openFloatingChat() {
 }
 
 function toggleFloatingChat() {
-  if (!currentUser) return; // no user logged in
+  if (!currentUser) return;
   const panel = document.getElementById("float-chat-panel");
   if (!panel) return;
   const isHidden = panel.classList.contains("hidden");
@@ -397,7 +462,6 @@ function hookFloatingChatUI() {
   const panel = document.getElementById("float-chat-panel");
 
   toggleBtn?.addEventListener("click", () => {
-    // if user not logged in, do nothing
     if (!currentUser) return;
     toggleFloatingChat();
   });
@@ -411,7 +475,6 @@ function hookFloatingChatUI() {
     if (!panel || panel.classList.contains("hidden")) return;
     if (panel.contains(e.target)) return;
 
-    // allow clicking the toggle button without instant-close
     if (toggleBtn && (e.target === toggleBtn || toggleBtn.contains(e.target))) return;
 
     closeFloatingChat();
@@ -431,7 +494,13 @@ function hookFloatingChatUI() {
 /* --------------------------- UI init ------------------------------------ */
 
 document.addEventListener("DOMContentLoaded", () => {
-  // ✅ FIX: make sure menu taps always work (even if HTML changes slightly)
+  if (appInited) return;
+  appInited = true;
+
+  // ✅ block phones
+  if (!ensureAllowedDeviceOrBlock()) return;
+
+  // ✅ nav buttons
   document.querySelectorAll(".nav-link").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       const page = btn.dataset.page;
@@ -446,18 +515,21 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
   document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
 
-  // ✅ hook floating shell once
   hookFloatingChatUI();
 
+  // restore session
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
-    const u = JSON.parse(savedUser);
-    if (USERS[u.id]) {
-      currentUser = u;
-      initStateForUser();
-      showDashboard();
-      return;
-    }
+    try {
+      const u = JSON.parse(savedUser);
+      if (u?.id && USERS[u.id]) {
+        currentUser = u;
+        initStateForUser().then(() => {
+          showDashboard();
+        });
+        return;
+      }
+    } catch {}
   }
 
   showLogin();
@@ -466,7 +538,6 @@ document.addEventListener("DOMContentLoaded", () => {
 /* -------------------------- Pages switching ----------------------------- */
 
 function switchPage(pageId) {
-  // hide all pages
   document.querySelectorAll(".page-section").forEach((pg) => pg.classList.add("hidden"));
 
   const target = document.getElementById(`page-${pageId}`);
@@ -507,17 +578,17 @@ function handleLogin(e) {
   currentUser = { id, name: USERS[id].name, role: USERS[id].role };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
-  // let messages.js know user changed
+  // notify messages.js
   window.dispatchEvent(new Event("telesyriana:user-changed"));
 
   document.getElementById("login-error")?.classList.add("hidden");
 
-  initStateForUser();
-  showDashboard();
+  initStateForUser().then(() => {
+    showDashboard();
+  });
 }
 
 async function handleLogout() {
-  // close floating chat on logout
   closeFloatingChat();
 
   if (currentUser && state) {
@@ -531,7 +602,6 @@ async function handleLogout() {
 
   localStorage.removeItem(USER_KEY);
 
-  // let messages.js know user changed
   window.dispatchEvent(new Event("telesyriana:user-changed"));
 
   if (timerId) clearInterval(timerId);
@@ -571,10 +641,8 @@ async function handleStatusChange(e) {
     return;
   }
 
-  // apply elapsed to old status
   applyElapsedToState(now);
 
-  // set new status
   state.status = newStatus;
   state.lastStatusChange = now;
   saveState();
@@ -635,6 +703,8 @@ async function initStateForUser() {
 }
 
 function finishInit(now) {
+  if (!currentUser) return;
+
   if (currentUser.role === "supervisor") subscribeSupervisorDashboard();
 
   loadUserProfile();
@@ -642,14 +712,10 @@ function finishInit(now) {
 
   const live = recomputeLiveUsage(now);
 
-  // ✅ update UI immediately
   updateBreakUI(live.breakUsed);
   updateStatusMinutesUI(live);
-
-  // ✅ worked hours box
   updateWorkUI(computeWorkedMinutes(live));
 
-  // ✅ widgets (safe if elements not found)
   renderClockWidget();
   buildMiniCalendar();
   hookCalendarButtons();
@@ -759,12 +825,12 @@ function buildSupervisorTableFromFirestore(rows) {
     .filter((r) => r.role === "agent")
     .forEach((r) => {
       const status = r.status || "unavailable";
-      totals[status]++;
+      totals[status] = (totals[status] || 0) + 1;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.name}</td>
-        <td>${r.userId}</td>
+        <td>${r.name || ""}</td>
+        <td>${r.userId || ""}</td>
         <td>${String(r.role || "").toUpperCase()}</td>
         <td><span class="sup-status-pill status-${status}">${statusLabel(status)}</span></td>
         <td>${formatDuration(r.operationMinutes || 0)}</td>
@@ -781,17 +847,16 @@ function buildSupervisorTableFromFirestore(rows) {
   const sumMeet = document.getElementById("sum-meet");
   const sumUnavail = document.getElementById("sum-unavail");
 
-  if (sumOp) sumOp.textContent = totals.in_operation;
-  if (sumBreak) sumBreak.textContent = totals.break;
-  if (sumMeet) sumMeet.textContent = totals.meeting;
-  if (sumUnavail) sumUnavail.textContent = totals.unavailable;
+  if (sumOp) sumOp.textContent = totals.in_operation || 0;
+  if (sumBreak) sumBreak.textContent = totals.break || 0;
+  if (sumMeet) sumMeet.textContent = totals.meeting || 0;
+  if (sumUnavail) sumUnavail.textContent = totals.unavailable || 0;
 }
 
 /* ----------------------------- Settings --------------------------------- */
-function applyTheme(gender) {
-  // gender: "male" | "female" | "" (default)
-  const g = String(gender || "").toLowerCase().trim();
 
+function applyTheme(gender) {
+  const g = String(gender || "").toLowerCase().trim();
   document.body.removeAttribute("data-theme");
   if (g === "male" || g === "female") {
     document.body.setAttribute("data-theme", g);
@@ -807,27 +872,21 @@ async function loadUserProfile() {
   const nameEl = document.getElementById("set-name");
   if (nameEl) nameEl.value = currentUser.name;
 
-  // defaults
   const bdayEl = document.getElementById("set-birthday");
   const notesEl = document.getElementById("set-notes");
   const genderEl = document.getElementById("set-gender");
 
   if (snap.exists()) {
     const d = snap.data();
-
     if (bdayEl) bdayEl.value = d.birthday || "";
     if (notesEl) notesEl.value = d.notes || "";
     if (genderEl) genderEl.value = d.gender || "";
-
-    // ✅ apply theme on load
     applyTheme(d.gender);
   } else {
-    // no profile yet
     if (genderEl) genderEl.value = "";
     applyTheme("");
   }
 }
-
 
 async function handleSettingsSave(e) {
   e.preventDefault();
@@ -846,15 +905,13 @@ async function handleSettingsSave(e) {
       name: currentUser.name,
       birthday,
       notes,
-      gender, // ✅ NEW
+      gender,
       updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
 
-  // ✅ apply immediately without refresh
   applyTheme(gender);
-
   alert("Settings saved successfully.");
 }
 
@@ -890,5 +947,3 @@ function showDashboard() {
     clockIntervalId = setInterval(renderClockWidget, 1000);
   }
 }
-
-
