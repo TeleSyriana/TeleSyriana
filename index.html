@@ -16,7 +16,7 @@
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
         <button class="nav-link" data-page="messages">Messages</button>
-       <!-- <button class="nav-link" data-page="meetings">Meetings</button> -->
+        <!-- <button class="nav-link" data-page="meetings">Meetings</button> -->
         <button class="nav-link" data-page="settings">Settings</button>
 
         <div class="actions">
@@ -137,8 +137,8 @@
               </div>
             </section>
           </section>
-          <!-- ChatGPT On what to do with team's tasks -->
-                    <!-- RIGHT SIDE (Today’s Snapshot) -->
+
+          <!-- RIGHT SIDE (Today’s Snapshot) -->
           <section class="card dashboard-side">
             <h2>Today’s Snapshot</h2>
             <p class="subtitle">Quick reminders:</p>
@@ -215,7 +215,7 @@
                 </div>
               </div>
 
-              <!-- ✅ Hours worked ring (same style) -->
+              <!-- Hours worked ring -->
               <div class="widget-card">
                 <div class="widget-head">
                   <div class="widget-title">Hours worked</div>
@@ -244,58 +244,95 @@
               </div>
 
             </div>
-
           </section>
 
         </div>
       </section>
 
-<!-- ✅ TASK MODAL -->
-<div id="task-modal" class="modal hidden">
-  <div class="modal-backdrop" data-modal-close></div>
+      <!-- ✅ TASKS PAGE -->
+      <section id="page-tasks" class="page-section hidden">
+        <section class="card">
+          <div class="tasks-top">
+            <div>
+              <h2 style="margin:0">Tasks</h2>
+              <p class="subtitle" style="margin:6px 0 0">Trello-style board (drag • drop • delete)</p>
+            </div>
 
-  <div class="modal-card">
-    <div class="modal-head">
-      <div class="modal-title">Add new task</div>
-      <button class="modal-x" type="button" data-modal-close>×</button>
-    </div>
+            <form id="task-add-form" class="task-add">
+              <input id="task-title" type="text" placeholder="New task title…" required />
+              <select id="task-col">
+                <option value="todo">To do</option>
+                <option value="doing">Doing</option>
+                <option value="done">Done</option>
+              </select>
+              <button class="btn-primary" type="submit" style="width:auto;padding:10px 16px">Add</button>
+            </form>
+          </div>
 
-    <form id="task-modal-form" class="modal-body">
-      <label>
-        Title
-        <input id="task-modal-title" type="text" placeholder="Task title…" required />
-      </label>
+          <div class="kanban" id="kanban">
+            <div class="kanban-col" data-col="todo">
+              <div class="kanban-head">To do <span class="count" data-count="todo">0</span></div>
+              <div class="kanban-list" data-list="todo"></div>
+            </div>
 
-      <label>
-        Description
-        <textarea id="task-modal-desc" rows="4" placeholder="Write details…"></textarea>
-      </label>
+            <div class="kanban-col" data-col="doing">
+              <div class="kanban-head">Doing <span class="count" data-count="doing">0</span></div>
+              <div class="kanban-list" data-list="doing"></div>
+            </div>
 
-      <label>
-        Image (optional)
-        <input id="task-modal-img" type="url" placeholder="Paste image URL (Copy link address)..." />
-        <small class="hint">Example: https://...jpg / png</small>
-      </label>
+            <div class="kanban-col" data-col="done">
+              <div class="kanban-head">Done <span class="count" data-count="done">0</span></div>
+              <div class="kanban-list" data-list="done"></div>
+            </div>
+          </div>
+        </section>
 
-      <label>
-        Column
-        <select id="task-modal-col">
-          <option value="todo">To do</option>
-          <option value="doing">Doing</option>
-          <option value="done">Done</option>
-        </select>
-      </label>
+        <!-- ✅ TASK MODAL -->
+        <div id="task-modal" class="modal hidden">
+          <div class="modal-backdrop" data-modal-close></div>
 
-      <div class="modal-actions">
-        <button type="button" class="btn-secondary" data-modal-close>Cancel</button>
-        <button type="submit" class="btn-primary" style="width:auto">Save</button>
-      </div>
-    </form>
-  </div>
-</div>
+          <div class="modal-card">
+            <div class="modal-head">
+              <div class="modal-title">Add new task</div>
+              <button class="modal-x" type="button" data-modal-close>×</button>
+            </div>
 
+            <form id="task-modal-form" class="modal-body">
+              <label>
+                Title
+                <input id="task-modal-title" type="text" placeholder="Task title…" required />
+              </label>
 
-      <!-- MESSAGES PAGE -->
+              <label>
+                Description
+                <textarea id="task-modal-desc" rows="4" placeholder="Write details…"></textarea>
+              </label>
+
+              <label>
+                Image (optional)
+                <input id="task-modal-img" type="url" placeholder="Paste image URL (Copy link address)..." />
+                <small class="hint">Example: https://...jpg / png</small>
+              </label>
+
+              <label>
+                Column
+                <select id="task-modal-col">
+                  <option value="todo">To do</option>
+                  <option value="doing">Doing</option>
+                  <option value="done">Done</option>
+                </select>
+              </label>
+
+              <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-modal-close>Cancel</button>
+                <button type="submit" class="btn-primary" style="width:auto">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ✅ MESSAGES PAGE -->
       <section id="page-messages" class="page-section hidden">
         <section class="card messages-card">
           <div class="messages-layout">
@@ -340,7 +377,6 @@
 
               <div class="messages-sidebar-header small">Direct messages</div>
 
-              <!-- ✅ DM buttons (DOT ATTACHED TO AVATAR) -->
               <button class="chat-dm" data-dm="1001">
                 <div class="chat-row">
                   <div class="dm-avatar-wrap">
@@ -439,7 +475,7 @@
         </section>
       </section>
 
-      <!-- SETTINGS PAGE -->
+      <!-- ✅ SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
         <div class="card">
           <h2>Settings</h2>
@@ -490,12 +526,13 @@
     </form>
   </div>
 
+  <!-- ✅ scripts order -->
   <script type="module" src="app.js"></script>
-  <script type="module" src="messages.js"></script>
   <script type="module" src="tasks.js"></script>
-
+  <script type="module" src="messages.js"></script>
 </body>
 </html>
+
 
 
 
