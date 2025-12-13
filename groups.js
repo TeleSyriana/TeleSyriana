@@ -164,13 +164,15 @@ const {
   onSnapshot,
   serverTimestamp,
   updateDoc,
-  doc
+  doc,
 } = fs;
 
 const USER_KEY = "telesyrianaUser";
 const GROUPS_COL = "groups";
 
-// -------- helpers --------
+const norm = (x) => String(x ?? "").trim();
+const isSup = (u) => String(u?.role || "").toLowerCase() === "supervisor";
+
 function getCurrentUser() {
   try {
     return JSON.parse(localStorage.getItem(USER_KEY) || "null");
@@ -178,8 +180,18 @@ function getCurrentUser() {
     return null;
   }
 }
-const norm = (x) => String(x ?? "").trim();
-const isSupervisor = (u) => (u?.role || "").toLowerCase() === "supervisor";
+
+function $(id) {
+  return document.getElementById(id);
+}
+
+function openModal() {
+  $("group-modal")?.classList.remove("hidden");
+}
+
+function closeModal() {
+  $("group-modal")?.classList.add("hidden");
+}
 
 async function fileToDataURL(file) {
   if (!file) return "";
@@ -191,85 +203,72 @@ async function fileToDataURL(file) {
   });
 }
 
-// -------- modal controls --------
-function openModal() {
-  document.getElementById("group-modal")?.classList.remove("hidden");
-}
-function closeModal() {
-  document.getElementById("group-modal")?.classList.add("hidden");
+// --------- state ----------
+let unsubGroups = null;
+let groupsCache = []; // latest visible groups
+
+// --------- UI helpers ----------
+function applySupervisorVisibility() {
+  const me = getCurrentUser();
+  const openBtn = $("group-open-modal");
+  if (openBtn) openBtn.style.display = isSup(me) ? "" : "none";
 }
 
-function setCreateMode() {
-  const editId = document.getElementById("group-edit-id");
-  const btn = document.getElementById("group-create-btn");
-  if (editId) editId.value = "";
-  if (btn) btn.textContent = "Create";
+function resetFormToCreate() {
+  // ملاحظة: ما عندك group-edit-id بالـ HTML، فعم نخزن editId على الفورم نفسه:
+  const form = $("group-create-form");
+  if (form) form.dataset.editId = "";
 
-  // clear fields
-  const name = document.getElementById("group-name");
-  const rules = document.getElementById("group-rules");
-  const photo = document.getElementById("group-photo");
+  const name = $("group-name");
+  const rules = $("group-rules");
   if (name) name.value = "";
   if (rules) rules.value = "";
-  if (photo) photo.value = "";
 
   // uncheck members
-  document.querySelectorAll('input[name="group-members"]').forEach((cb) => {
-    cb.checked = false;
-  });
+  document.querySelectorAll('input[name="group-members"]').forEach((cb) => (cb.checked = false));
+
+  const btn = $("group-create-btn");
+  if (btn) btn.textContent = "Create";
 }
 
-function setEditMode(group) {
-  const editId = document.getElementById("group-edit-id");
-  const btn = document.getElementById("group-create-btn");
-  if (editId) editId.value = group.id || "";
-  if (btn) btn.textContent = "Save";
+function setFormToEdit(group) {
+  const form = $("group-create-form");
+  if (form) form.dataset.editId = group.id || "";
 
-  const name = document.getElementById("group-name");
-  const rules = document.getElementById("group-rules");
-  const photo = document.getElementById("group-photo");
+  const name = $("group-name");
+  const rules = $("group-rules");
   if (name) name.value = group.name || "";
   if (rules) rules.value = group.rules || "";
-  if (photo) photo.value = ""; // ما فينا نعبّي file input برمجياً
 
   const members = Array.isArray(group.members) ? group.members.map(norm) : [];
   document.querySelectorAll('input[name="group-members"]').forEach((cb) => {
     cb.checked = members.includes(norm(cb.value));
   });
+
+  const btn = $("group-create-btn");
+  if (btn) btn.textContent = "Save";
 }
 
-// -------- UI visibility --------
-function applySupervisorVisibility() {
-  const me = getCurrentUser();
-  const openBtn = document.getElementById("group-open-modal");
-  if (!openBtn) return;
-  openBtn.style.display = isSupervisor(me) ? "" : "none";
-}
-
-// -------- subscribe groups list --------
-let unsubGroups = null;
-let groupsCache = []; // used for edit permission & quick lookup
-
+// --------- Firestore subscribe list ----------
 function subscribeGroupsList() {
   unsubGroups?.();
   unsubGroups = null;
 
-  const listEl = document.getElementById("groups-list");
-  if (!listEl) return;
+  const el = $("groups-list");
+  if (!el) return;
 
   const me = getCurrentUser();
   const myId = norm(me?.id);
 
-  listEl.innerHTML = "";
+  el.innerHTML = "";
   groupsCache = [];
 
   if (!myId) {
-    listEl.innerHTML = `<div class="ms-empty">Please login to see groups</div>`;
+    el.innerHTML = `<div class="ms-empty">Please login to see groups</div>`;
     return;
   }
 
-  // ✅ Cloud visibility: only groups where members contains myId
-  // NOTE: orderBy may require index; if it errors, remove orderBy line.
+  // إذا طلع لك index error، شيل orderBy وخليها بدون ترتيب.
   const q = query(
     collection(db, GROUPS_COL),
     where("members", "array-contains", myId),
@@ -279,11 +278,11 @@ function subscribeGroupsList() {
   unsubGroups = onSnapshot(
     q,
     (snap) => {
-      listEl.innerHTML = "";
+      el.innerHTML = "";
       groupsCache = [];
 
       if (snap.empty) {
-        listEl.innerHTML = `<div class="ms-empty">No groups yet</div>`;
+        el.innerHTML = `<div class="ms-empty">No groups yet</div>`;
         return;
       }
 
@@ -300,10 +299,10 @@ function subscribeGroupsList() {
         btn.className = "chat-room chat-group";
         btn.dataset.groupId = id;
 
-        const membersCount = Array.isArray(g.members) ? g.members.length : 0;
         const avatarLetter = (g.name || "G").trim().slice(0, 1).toUpperCase();
-        const hasPhoto = !!g.photoUrl;
+        const membersCount = Array.isArray(g.members) ? g.members.length : 0;
 
+        const hasPhoto = !!g.photoUrl;
         const avatarHtml = hasPhoto
           ? `<div class="chat-avatar role-room" style="padding:0; overflow:hidden;">
                <img src="${g.photoUrl}" style="width:100%; height:100%; object-fit:cover; display:block;" />
@@ -320,7 +319,7 @@ function subscribeGroupsList() {
           </div>
         `;
 
-        // ✅ open group chat
+        // open group chat
         btn.addEventListener("click", () => {
           window.dispatchEvent(
             new CustomEvent("telesyriana:open-group", {
@@ -328,57 +327,47 @@ function subscribeGroupsList() {
                 roomId: id,
                 title: g.name || "Group",
                 desc: g.rules ? `Rules: ${g.rules}` : "Group chat",
-                type: "group"
-              }
+                type: "group",
+              },
             })
           );
         });
 
-        // ✅ creator edit button (⋯) — works on mobile
-        const isCreator = norm(g.createdBy) === myId;
-        if (isCreator) {
-          const kebab = document.createElement("button");
-          kebab.type = "button";
-          kebab.className = "kebab";
-          kebab.textContent = "⋯";
-          kebab.style.marginLeft = "auto";
-
-          kebab.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            setEditMode({ ...g, id });
-            openModal();
-          });
-
-          btn.querySelector(".chat-row")?.appendChild(kebab);
-        }
+        // edit (creator only) — dblclick
+        btn.addEventListener("dblclick", () => {
+          const me2 = getCurrentUser();
+          if (!me2?.id) return;
+          if (norm(g.createdBy) !== norm(me2.id)) return; // only creator
+          setFormToEdit({ ...g, id });
+          openModal();
+        });
 
         frag.appendChild(btn);
       });
 
-      listEl.appendChild(frag);
+      el.appendChild(frag);
     },
     (err) => {
       console.error("Groups snapshot error:", err);
-
-      // إذا طلع index error، احذف orderBy من query فوق.
-      alert("Groups Firestore error: " + (err?.message || "Unknown"));
+      alert("Groups Firestore error: " + (err?.message || err));
     }
   );
 }
 
-// -------- create / edit --------
+// --------- Create / Edit ----------
 async function createOrEditFromForm() {
   const me = getCurrentUser();
   const myId = norm(me?.id);
   if (!myId) throw new Error("Please login first");
 
-  const editId = norm(document.getElementById("group-edit-id")?.value);
+  const form = $("group-create-form");
+  const editId = norm(form?.dataset?.editId);
 
-  // Create: supervisor only
-  if (!editId && !isSupervisor(me)) throw new Error("Only supervisors can create groups");
+  // create: supervisor only
+  if (!editId && !isSup(me)) throw new Error("Only supervisors can create groups");
 
-  const name = (document.getElementById("group-name")?.value || "").trim();
-  const rules = (document.getElementById("group-rules")?.value || "").trim();
+  const name = ($("group-name")?.value || "").trim();
+  const rules = ($("group-rules")?.value || "").trim();
   if (!name) throw new Error("Group name required");
 
   const members = Array.from(document.querySelectorAll('input[name="group-members"]:checked'))
@@ -388,13 +377,14 @@ async function createOrEditFromForm() {
   // creator always included
   if (!members.includes(myId)) members.unshift(myId);
 
-  // optional photo
-  const file = document.getElementById("group-photo")?.files?.[0] || null;
-  const photoUrl = file ? await fileToDataURL(file) : "";
+  // OPTIONAL photo: فقط إذا ضفت input id="group-photo"
+  let photoUrl = "";
+  const photoInput = $("group-photo");
+  const file = photoInput?.files?.[0] || null;
+  if (file) photoUrl = await fileToDataURL(file);
 
   if (!editId) {
-    // ✅ CREATE
-    const ref = await addDoc(collection(db, GROUPS_COL), {
+    await addDoc(collection(db, GROUPS_COL), {
       name,
       rules,
       members,
@@ -402,25 +392,12 @@ async function createOrEditFromForm() {
       createdByName: me?.name || "",
       photoUrl: photoUrl || "",
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
     });
-
-    // ✅ open group immediately
-    window.dispatchEvent(
-      new CustomEvent("telesyriana:open-group", {
-        detail: {
-          roomId: ref.id,
-          title: name,
-          desc: rules ? `Rules: ${rules}` : "Group chat",
-          type: "group"
-        }
-      })
-    );
-
     return;
   }
 
-  // ✅ EDIT — only creator
+  // edit: creator only
   const existing = groupsCache.find((g) => norm(g.id) === editId);
   if (!existing) throw new Error("Group not found (refresh and try again)");
   if (norm(existing.createdBy) !== myId) throw new Error("Only the creator can edit this group");
@@ -429,74 +406,61 @@ async function createOrEditFromForm() {
     name,
     rules,
     members,
-    updatedAt: serverTimestamp()
+    updatedAt: serverTimestamp(),
   };
-  if (photoUrl) patch.photoUrl = photoUrl; // only if new selected
+  if (photoUrl) patch.photoUrl = photoUrl;
 
   await updateDoc(doc(db, GROUPS_COL, editId), patch);
-
-  // optional: open after save
-  window.dispatchEvent(
-    new CustomEvent("telesyriana:open-group", {
-      detail: {
-        roomId: editId,
-        title: name,
-        desc: rules ? `Rules: ${rules}` : "Group chat",
-        type: "group"
-      }
-    })
-  );
 }
 
-// -------- hook UI --------
+// --------- Hook UI ----------
 function hookUI() {
-  const openBtn = document.getElementById("group-open-modal");
-  const form = document.getElementById("group-create-form");
-  const btnSave = document.getElementById("group-create-btn");
-  const closeBtn = document.getElementById("group-modal-close");
-  const cancelBtn = document.getElementById("group-cancel");
+  const openBtn = $("group-open-modal");
+  const closeBtn = $("group-modal-close");
+  const cancelBtn = $("group-cancel");
+  const form = $("group-create-form");
+  const btnSave = $("group-create-btn");
 
-  // IMPORTANT: avoid duplicate listeners by replacing handlers safely
+  // open
   openBtn?.addEventListener("click", () => {
-    setCreateMode();
+    resetFormToCreate();
     openModal();
   });
 
+  // close/cancel
   closeBtn?.addEventListener("click", closeModal);
   cancelBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     closeModal();
   });
 
-  if (form) {
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (btnSave) btnSave.disabled = true;
+  // submit
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (btnSave) btnSave.disabled = true;
 
-      try {
-        await createOrEditFromForm();
-        closeModal();
-        form.reset();
-        setCreateMode();
-      } catch (err) {
-        alert(err?.message || "Save failed");
-      } finally {
-        if (btnSave) btnSave.disabled = false;
-      }
-    });
-  }
+    try {
+      await createOrEditFromForm();
+      closeModal();
+      form.reset();
+      resetFormToCreate();
+    } catch (err) {
+      alert(err?.message || "Save failed");
+    } finally {
+      if (btnSave) btnSave.disabled = false;
+    }
+  });
 
   applySupervisorVisibility();
 }
 
-// -------- init --------
 document.addEventListener("DOMContentLoaded", () => {
   hookUI();
   subscribeGroupsList();
 });
 
-// when login changes
 window.addEventListener("telesyriana:user-changed", () => {
   applySupervisorVisibility();
   subscribeGroupsList();
 });
+
