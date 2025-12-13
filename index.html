@@ -253,12 +253,43 @@
 
 
       <!-- TASKS PAGE -->
-      <section id="page-tasks" class="page-section hidden">
-        <div class="card">
-          <h2>Tasks</h2>
-          <p class="subtitle">Task system coming soon.</p>
-        </div>
-      </section>
+<section id="page-tasks" class="page-section hidden">
+  <section class="card">
+    <div class="tasks-top">
+      <div>
+        <h2 style="margin:0">Tasks</h2>
+        <p class="subtitle" style="margin:6px 0 0">Trello-style board (drag • drop • delete)</p>
+      </div>
+
+      <form id="task-add-form" class="task-add">
+        <input id="task-title" type="text" placeholder="New task title…" required />
+        <select id="task-col">
+          <option value="todo">To do</option>
+          <option value="doing">Doing</option>
+          <option value="done">Done</option>
+        </select>
+        <button class="btn-primary" type="submit" style="width:auto;padding:10px 16px">Add</button>
+      </form>
+    </div>
+
+    <div class="kanban" id="kanban">
+      <div class="kanban-col" data-col="todo">
+        <div class="kanban-head">To do <span class="count" data-count="todo">0</span></div>
+        <div class="kanban-list" data-list="todo"></div>
+      </div>
+
+      <div class="kanban-col" data-col="doing">
+        <div class="kanban-head">Doing <span class="count" data-count="doing">0</span></div>
+        <div class="kanban-list" data-list="doing"></div>
+      </div>
+
+      <div class="kanban-col" data-col="done">
+        <div class="kanban-head">Done <span class="count" data-count="done">0</span></div>
+        <div class="kanban-list" data-list="done"></div>
+      </div>
+    </div>
+  </section>
+</section>
 
       <!-- MESSAGES PAGE -->
       <section id="page-messages" class="page-section hidden">
@@ -459,6 +490,7 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
 
 
 
