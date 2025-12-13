@@ -1,4 +1,4 @@
-// tasks.js — Trello-like Tasks (Drag/Drop/Delete) + LocalStorage + Firestore per user/day
+// tasks.js — Trello-like Tasks (Drag/Drop/Delete) + Modal (title/desc/image) + LocalStorage + Firestore per user/day
 
 import { db, fs } from "./firebase.js";
 
@@ -38,7 +38,6 @@ function localKey(userId) {
 }
 
 function uid() {
-  // short unique id
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -69,6 +68,59 @@ function getListEl(col) {
 
 function getCountEl(col) {
   return document.querySelector(`.count[data-count="${col}"]`);
+}
+
+// ---------------- Modal ----------------
+
+function openModal(prefill = {}) {
+  const modal = el("task-modal");
+  if (!modal) {
+    alert("Task modal not found. Please add the modal HTML block (task-modal).");
+    return;
+  }
+
+  el("task-modal-title").value = (prefill.title || "").trim();
+  el("task-modal-desc").value = "";
+  el("task-modal-img").value = "";
+  el("task-modal-col").value = prefill.col || "todo";
+
+  modal.classList.remove("hidden");
+  setTimeout(() => el("task-modal-title")?.focus(), 0);
+}
+
+function closeModal() {
+  el("task-modal")?.classList.add("hidden");
+}
+
+function hookModal() {
+  // close on backdrop / X / Cancel
+  document.querySelectorAll("[data-modal-close]").forEach((btn) => {
+    btn.addEventListener("click", closeModal);
+  });
+
+  // submit modal -> add task
+  el("task-modal-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!currentUser) return alert("Please login first.");
+
+    const title = el("task-modal-title")?.value?.trim();
+    const desc = el("task-modal-desc")?.value?.trim() || "";
+    const img = el("task-modal-img")?.value?.trim() || "";
+    const col = el("task-modal-col")?.value || "todo";
+
+    await addTask({ title, desc, img }, col);
+
+    // clear quick input
+    const quickInput = el("task-title");
+    if (quickInput) quickInput.value = "";
+
+    closeModal();
+  });
+
+  // optional: close with ESC
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+  });
 }
 
 // ---------------- render ----------------
@@ -133,6 +185,28 @@ function renderTaskCard(task) {
   card.appendChild(row);
   card.appendChild(meta);
 
+  // ✅ description preview
+  if (task.desc) {
+    const d = document.createElement("div");
+    d.className = "task-meta";
+    d.textContent = task.desc.length > 90 ? task.desc.slice(0, 90) + "…" : task.desc;
+    card.appendChild(d);
+  }
+
+  // ✅ image preview (URL)
+  if (task.img) {
+    const img = document.createElement("img");
+    img.className = "task-thumb";
+    img.src = task.img;
+    img.alt = "Task image";
+    img.loading = "lazy";
+    img.onerror = () => {
+      // if broken url, hide image (clean UI)
+      img.style.display = "none";
+    };
+    card.appendChild(img);
+  }
+
   return card;
 }
 
@@ -145,7 +219,6 @@ function onDragStart(e) {
   draggingTaskId = taskId || null;
   e.dataTransfer.effectAllowed = "move";
   e.dataTransfer.setData("text/plain", draggingTaskId);
-  // subtle
   setTimeout(() => e.currentTarget.classList.add("dragging"), 0);
 }
 
@@ -181,7 +254,6 @@ async function onDrop(e) {
   const fromCol = found.col;
   if (fromCol === toCol) return;
 
-  // move
   const [task] = board[fromCol].splice(found.idx, 1);
   board[toCol].unshift(task);
 
@@ -191,8 +263,8 @@ async function onDrop(e) {
 
 // ---------------- CRUD ----------------
 
-async function addTask(title, col) {
-  const t = String(title || "").trim();
+async function addTask(data, col) {
+  const t = String(data?.title || "").trim();
   if (!t) return;
 
   const c = COLS.includes(col) ? col : "todo";
@@ -200,6 +272,8 @@ async function addTask(title, col) {
   const task = {
     id: uid(),
     title: t,
+    desc: String(data?.desc || ""),
+    img: String(data?.img || ""),
     createdAt: Date.now(),
   };
 
@@ -224,7 +298,7 @@ async function loadBoard() {
   const userId = currentUser?.id;
   if (!userId) return safeBoard(null);
 
-  // 1) try local first (fast)
+  // 1) local
   const raw = localStorage.getItem(localKey(userId));
   if (raw) {
     try {
@@ -232,7 +306,7 @@ async function loadBoard() {
     } catch {}
   }
 
-  // 2) try Firestore
+  // 2) Firestore
   try {
     const id = `${today}_${userId}`;
     const ref = doc(collection(db, TASK_BOARDS_COL), id);
@@ -272,7 +346,6 @@ async function persist() {
     );
   } catch (err) {
     console.warn("Tasks Firestore save failed:", err?.message || err);
-    // still ok because local saved
   }
 }
 
@@ -296,24 +369,26 @@ function hookAddForm() {
 
   if (!form || !input || !sel) return;
 
-  form.addEventListener("submit", async (e) => {
+  // ✅ بدل الإضافة الفورية، افتح مودال (Trello-style)
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
     if (!currentUser) return alert("Please login first.");
 
-    await addTask(input.value, sel.value);
-    input.value = "";
-    input.focus();
+    openModal({
+      title: input.value,
+      col: sel.value,
+    });
   });
 }
 
 async function bootstrap() {
-  // Only run once DOM exists
   currentUser = getUserFromStorage();
   board = safeBoard(await loadBoard());
   isReady = true;
 
   hookDnD();
   hookAddForm();
+  hookModal();
   render();
 }
 
