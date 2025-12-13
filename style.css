@@ -1,27 +1,25 @@
 /* =========================
-   TeleSyriana — style.css (FULL)
-   - Pink theme (Female) default
-   - Blue theme (Male) ready via CSS variables
-   - Floating chat button fix (z-index + click)
-========================= */
-
-/* =========================
    Reset & base
 ========================= */
 *,
 *::before,
 *::after { box-sizing: border-box; }
 
-html, body { height: 100%; }
-
 :root{
-  /* =========================
-     THEME (Female default)
-     ========================= */
+  /* Female (default) */
   --pink:#ff2c8b;
   --pink2:#ff5db6;
-  --bg1:#ff2c8b;
-  --bg2:#ff8bd3;
+
+  /* Male theme (prepared) */
+  --blue:#1f6dff;
+  --blue2:#36b5ff;
+
+  /* Active theme tokens (default = pink/female) */
+  --brand: var(--pink);
+  --brand2: var(--pink2);
+
+  --bg1: var(--pink);
+  --bg2: #ff8bd3;
 
   --card:#fff;
   --muted:#777;
@@ -33,28 +31,21 @@ html, body { height: 100%; }
   --msg-in:#f1f1f1;
   --shadow:0 16px 30px rgba(0,0,0,.18);
 
-  /* layout helper */
+  /* Layout */
   --header-offset: 120px;
+
+  /* Floating chat safe spacing */
+  --float-gap: 18px;
 }
 
-/* =========================
-   Male theme (Blue) — READY
-   الاستخدام لاحقاً:
-   - على <body> حط: class="theme-male"
-   أو
-   - على <html> حط: data-theme="male"
-========================= */
-body.theme-male,
-html[data-theme="male"]{
-  --pink:#2f7bff;     /* accent 1 */
-  --pink2:#58b7ff;    /* accent 2 */
-  --bg1:#0b2a6d;      /* background 1 */
-  --bg2:#2f7bff;      /* background 2 */
+/* ✅ Male theme ready (later: <body data-theme="male">) */
+body[data-theme="male"]{
+  --brand: var(--blue);
+  --brand2: var(--blue2);
+  --bg1: #1f6dff;
+  --bg2: #7ad7ff;
 }
 
-/* =========================
-   Body
-========================= */
 body{
   margin:0;
   padding:0;
@@ -119,18 +110,27 @@ body{
   transition:background .15s ease, transform .05s ease;
 }
 
+body[data-theme="male"] .nav-link{
+  background: rgba(31,109,255,.12);
+  color:#0b2f7a;
+}
+
 .nav-link:hover{ background:rgba(255,44,139,.18); }
+body[data-theme="male"] .nav-link:hover{ background: rgba(31,109,255,.18); }
 
 .nav-link.active{
   background:#fff;
-  color:var(--pink);
+  color:var(--brand);
   box-shadow:0 8px 18px rgba(255,44,139,.20);
   transform:translateY(-1px);
+}
+body[data-theme="male"] .nav-link.active{
+  box-shadow:0 8px 18px rgba(31,109,255,.22);
 }
 
 .header-right{ text-align:right; }
 .logo{ font-size:22px; font-weight:800; letter-spacing:.04em; color:#2a2a2a; }
-.logo span{ font-weight:500; color:var(--pink); }
+.logo span{ font-weight:500; color:var(--brand); }
 .tagline{ font-size:12px; opacity:.85; color:#555; }
 
 .actions{ display:flex; gap:10px; }
@@ -198,8 +198,8 @@ input, textarea{
 }
 
 input:focus, textarea:focus{
-  border-color:var(--pink);
-  box-shadow:0 0 0 2px rgba(255,44,139,.15);
+  border-color:var(--brand);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--brand) 18%, transparent);
 }
 
 .btn-primary, .btn-secondary{
@@ -214,7 +214,7 @@ input:focus, textarea:focus{
 }
 
 .btn-primary{
-  background:linear-gradient(135deg,var(--pink),var(--pink2));
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
   color:#fff;
 }
 .btn-primary:hover{ filter:brightness(1.06); }
@@ -245,7 +245,6 @@ input:focus, textarea:focus{
 
 .dashboard-side h2{ margin:0 0 6px; font-size:18px; }
 .side-list{ margin:0 0 10px; padding-left:18px; font-size:13px; color:#555; }
-.side-footer-note{ font-size:12px; color:#777; border-top:1px dashed #eee; padding-top:8px; margin-top:6px; }
 
 .status-box{
   display:flex;
@@ -279,8 +278,8 @@ input:focus, textarea:focus{
   outline:none;
 }
 #status-select:focus{
-  border-color:var(--pink);
-  box-shadow:0 0 0 2px rgba(255,44,139,.15);
+  border-color:var(--brand);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--brand) 18%, transparent);
 }
 
 .status-note{ display:block; margin-top:6px; font-size:11px; color:#777; }
@@ -295,16 +294,7 @@ input:focus, textarea:focus{
   justify-content:space-between;
   gap:10px;
 }
-.work-box{
-  background:#f7f7f7;
-  border-radius:10px;
-  padding:8px 12px;
-  font-size:12px;
-  margin-bottom:16px;
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-}
+body[data-theme="male"] .break-box{ background:#eef6ff; }
 
 .time-box{
   background:#f7f7f7;
@@ -370,11 +360,7 @@ input:focus, textarea:focus{
 
 .widget-calendar{ grid-column: 1 / -1; }
 
-.cal-nav{
-  display:flex;
-  gap:8px;
-  align-items:center;
-}
+.cal-nav{ display:flex; gap:8px; align-items:center; }
 
 .cal-btn{
   width:28px;
@@ -422,55 +408,22 @@ input:focus, textarea:focus{
 
 .mini-day.muted{ color:#bbb; }
 .mini-day.today{
-  background: linear-gradient(135deg, var(--pink), var(--pink2));
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
   color:#fff;
   font-weight:900;
 }
 
 /* Progress ring */
-.ring-row{
-  display:flex;
-  align-items:center;
-  gap:12px;
-}
-
-.ring{
-  position:relative;
-  width:60px;
-  height:60px;
-  flex:0 0 auto;
-}
-
-.ring svg{
-  width:60px;
-  height:60px;
-  transform: rotate(-90deg);
-}
-
-.ring-bg{
-  fill:none;
-  stroke:#eee;
-  stroke-width:3.2;
-}
-
-.ring-fg{
-  fill:none;
-  stroke: var(--pink);
-  stroke-width:3.2;
-  stroke-linecap:round;
-}
-
+.ring-row{ display:flex; align-items:center; gap:12px; }
+.ring{ position:relative; width:60px; height:60px; flex:0 0 auto; }
+.ring svg{ width:60px; height:60px; transform: rotate(-90deg); }
+.ring-bg{ fill:none; stroke:#eee; stroke-width:3.2; }
+.ring-fg{ fill:none; stroke: var(--brand); stroke-width:3.2; stroke-linecap:round; }
 .ring-label{
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:12px;
-  font-weight:900;
-  color:#444;
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:900; color:#444;
 }
-
 .ring-text .widget-big{ font-size:12px; }
 
 /* Mobile widgets */
@@ -576,6 +529,8 @@ input:focus, textarea:focus{
 
 .chat-room:hover, .chat-dm:hover{ background:#f0f0f0; }
 .chat-room.active, .chat-dm.active{ background:#ffe5f3; }
+body[data-theme="male"] .chat-room.active,
+body[data-theme="male"] .chat-dm.active{ background:#e9f1ff; }
 
 .room-badge{
   display:inline-block;
@@ -615,18 +570,17 @@ input:focus, textarea:focus{
   flex:0 0 auto;
 }
 .chat-avatar.role-agent{ background:#4c9fff; }
-.chat-avatar.role-supervisor{ background:var(--pink); }
+.chat-avatar.role-supervisor{ background:var(--brand); }
 .chat-avatar.role-ai{ background:#6b4cff; }
 .chat-avatar.role-room{ background:#9aa0a6; }
 
-/* iOS dot attached to avatar (DM list) */
+/* DM dot attached */
 .dm-avatar-wrap{
   position:relative;
   width:32px;
   height:32px;
   flex:0 0 auto;
 }
-
 .dm-avatar-wrap .chat-avatar{
   width:32px;
   height:32px;
@@ -643,7 +597,6 @@ input:focus, textarea:focus{
   border:2px solid #fff;
   box-shadow:0 2px 10px rgba(0,0,0,.12);
 }
-
 .dot-online{ background:#34c759; }
 .dot-warn{ background:#ff9f0a; }
 .dot-offline{ background:#8e8e93; }
@@ -706,21 +659,7 @@ input:focus, textarea:focus{
   background:#9aa0a6;
   flex:0 0 auto;
 }
-.chat-message.me .msg-avatar{ background:var(--pink); }
-
-/* optional status dot on avatar */
-.avatar-status-dot{
-  position:absolute;
-  bottom:-2px;
-  right:-2px;
-  width:10px;
-  height:10px;
-  border-radius:50%;
-  border:2px solid #fff;
-}
-.status-online{ background:#34c759; }
-.status-break{ background:#ff9f0a; }
-.status-offline{ background:#8e8e93; }
+.chat-message.me .msg-avatar{ background:var(--brand); }
 
 .msg-body{
   display:flex;
@@ -731,7 +670,6 @@ input:focus, textarea:focus{
   font-size:13px;
 }
 
-/* name beside avatar */
 .msg-meta{
   display:flex;
   align-items:center;
@@ -756,9 +694,9 @@ input:focus, textarea:focus{
   font-size:13px;
 }
 
-/* my messages */
+/* my messages: brand */
 .chat-message.me .chat-message-text{
-  background:linear-gradient(135deg,var(--pink),var(--pink2));
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
   color:#fff;
 }
 
@@ -780,8 +718,8 @@ input:focus, textarea:focus{
 }
 
 .chat-input:focus{
-  border-color:var(--pink);
-  box-shadow:0 0 0 2px rgba(255,44,139,.15);
+  border-color:var(--brand);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--brand) 18%, transparent);
 }
 
 .chat-send-btn{
@@ -791,54 +729,60 @@ input:focus, textarea:focus{
   font-size:10px;
   font-weight:900;
   cursor:pointer;
-  background:linear-gradient(135deg,var(--pink),var(--pink2));
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
   color:#fff;
 }
 
 /* =========================
    Floating chat (FIXED)
-   - Always clickable
-   - Always on top
 ========================= */
+/* ✅ أهم إصلاح: خلي الزد-إندكس عالي جداً + ما ينقص تحت + قابل للكبس دائماً */
+#float-chat-toggle,
 .floating-chat-toggle{
-  position:fixed !important;
-  right: max(18px, env(safe-area-inset-right));
-  bottom: max(18px, env(safe-area-inset-bottom));
-  width:52px;
-  height:52px;
+  position:fixed;
+  right: max(var(--float-gap), env(safe-area-inset-right));
+  bottom: max(var(--float-gap), env(safe-area-inset-bottom));
+  width:56px;
+  height:56px;
   border-radius:50%;
   border:none;
   cursor:pointer;
-  background:linear-gradient(135deg,var(--pink),var(--pink2));
+
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
   color:#fff;
-  font-size:25px;
+  font-size:26px;
+
   display:flex;
   align-items:center;
   justify-content:center;
-  box-shadow:0 12px 24px rgba(0,0,0,.25);
-  z-index:99999;              /* ✅ أعلى من أي overlay */
-  pointer-events:auto;        /* ✅ لو في طبقة فوقه */
+
+  box-shadow:0 14px 28px rgba(0,0,0,.28);
+  z-index: 99999;         /* ✅ فوق كل شي */
+  pointer-events: auto;   /* ✅ قابل للكبس */
   user-select:none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.floating-chat-toggle:active{
-  transform: scale(.98);
-}
+/* ✅ عشان ما يختفي لو في عناصر فوقه */
+#float-chat-toggle.hidden{ display:none !important; }
 
+/* Panel */
+#float-chat-panel,
 .floating-chat-panel{
-  position:fixed !important;
-  right: max(18px, env(safe-area-inset-right));
-  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 62px);
-  width:320px;
-  max-width:90vw;
+  position:fixed;
+  right: max(var(--float-gap), env(safe-area-inset-right));
+  bottom: calc(max(var(--float-gap), env(safe-area-inset-bottom)) + 68px);
+
+  width:340px;
+  max-width:calc(100vw - 24px);
   background:#fff;
   border-radius:16px;
   box-shadow:0 18px 40px rgba(0,0,0,.35);
   display:flex;
   flex-direction:column;
   overflow:hidden;
-  z-index:99999;              /* ✅ أعلى من كلشي */
+
+  z-index: 99999;         /* ✅ نفس الزد-إندكس */
   pointer-events:auto;
 }
 
@@ -847,7 +791,7 @@ input:focus, textarea:focus{
   align-items:center;
   justify-content:space-between;
   padding:8px 12px;
-  background:linear-gradient(135deg,var(--pink),var(--bg2));
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
   color:#fff;
 }
 
@@ -859,7 +803,7 @@ input:focus, textarea:focus{
 .floating-chat-note{ font-size:11px; color:#777; margin-bottom:6px; }
 
 .floating-chat-messages{
-  max-height:220px;
+  max-height:240px;
   overflow-y:auto;
   display:flex;
   flex-direction:column;
@@ -883,6 +827,10 @@ input:focus, textarea:focus{
   padding:7px 10px;
   outline:none;
 }
+.floating-chat-input-row input:focus{
+  border-color:var(--brand);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--brand) 18%, transparent);
+}
 
 .floating-chat-input-row button{
   border-radius:999px;
@@ -891,7 +839,7 @@ input:focus, textarea:focus{
   font-size:12px;
   font-weight:900;
   cursor:pointer;
-  background:var(--pink);
+  background:var(--brand);
   color:#fff;
 }
 
@@ -916,6 +864,14 @@ input:focus, textarea:focus{
 
   .messages-layout{ flex-direction:column; }
   .messages-sidebar{ width:100%; border-right:none; border-bottom:1px solid var(--line); }
+
+  :root{ --header-offset: 170px; }
+
+  #float-chat-panel,
+  .floating-chat-panel{
+    width: min(380px, calc(100vw - 24px));
+    bottom: calc(max(var(--float-gap), env(safe-area-inset-bottom)) + 72px);
+  }
 }
 
 /* =========================
@@ -1065,7 +1021,7 @@ input:focus, textarea:focus{
 }
 
 .kanban-list.drag-over{
-  outline:2px dashed rgba(255,44,139,.35);
+  outline:2px dashed color-mix(in srgb, var(--brand) 35%, transparent);
   outline-offset:6px;
   border-radius:12px;
 }
@@ -1108,7 +1064,7 @@ input:focus, textarea:focus{
   align-items:center;
   justify-content:space-between;
   padding:12px 14px;
-  background:linear-gradient(135deg, var(--pink), var(--pink2));
+  background:linear-gradient(135deg, var(--brand), var(--brand2));
   color:#fff;
 }
 
@@ -1220,20 +1176,18 @@ input:focus, textarea:focus{
 }
 
 .messages-sidebar.glass .chat-room:active,
-.messages-sidebar.glass .chat-dm:active{
-  transform: scale(.99);
-}
+.messages-sidebar.glass .chat-dm:active{ transform: scale(.99); }
 
 .chat-item-active{
   background: rgba(255,255,255,.92) !important;
-  border-color: rgba(255,44,139,.35) !important;
-  box-shadow: 0 10px 22px rgba(255,44,139,.12);
+  border-color: color-mix(in srgb, var(--brand) 35%, transparent) !important;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--brand) 18%, transparent);
 }
 
 .messages-sidebar.glass .chat-room.active,
 .messages-sidebar.glass .chat-dm.active{
   background: rgba(255,255,255,.92) !important;
-  border-color: rgba(255,44,139,.35) !important;
+  border-color: color-mix(in srgb, var(--brand) 35%, transparent) !important;
 }
 
 .messages-layout{ gap: 12px; }
@@ -1244,16 +1198,10 @@ input:focus, textarea:focus{
   border: 1px solid rgba(255,255,255,.55);
 }
 
-@media (max-width:768px){
-  .messages-sidebar.glass{ border-radius: 18px; }
-}
-
 /* =========================
    FIX: Messages height + internal scroll
 ========================= */
-#page-messages{
-  height: calc(100vh - var(--header-offset));
-}
+#page-messages{ height: calc(100vh - var(--header-offset)); }
 
 #page-messages .messages-card{
   height: calc(100vh - var(--header-offset));
@@ -1282,24 +1230,6 @@ input:focus, textarea:focus{
   padding-bottom: 6px;
 }
 
-#chat-form{
-  flex: 0 0 auto;
-}
+#chat-form{ flex: 0 0 auto; }
 
-@media (max-width:768px){
-  :root{ --header-offset: 170px; }
-  #page-messages,
-  #page-messages .messages-card{
-    height: calc(100vh - var(--header-offset));
-  }
-}
 
-/* =========================
-   EXTRA: Make sure nothing blocks chat button clicks
-   (Some overlays/cards can accidentally catch clicks)
-========================= */
-.floating-chat-toggle,
-.floating-chat-panel,
-.floating-chat-panel *{
-  pointer-events: auto;
-}
