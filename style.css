@@ -1301,7 +1301,6 @@ input:focus, textarea:focus, select:focus{
 
 /* Create Group modal body */
 #group-modal .modal-body {
-  padding: 20px;
   max-height: 65vh;        /* مهم */
   overflow-y: auto;        /* scrolling */
   box-sizing: border-box;
@@ -1324,5 +1323,6 @@ input:focus, textarea:focus, select:focus{
   border-radius: 8px;
   border: 1px solid #ccc;
 }
+
 
 
