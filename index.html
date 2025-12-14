@@ -571,20 +571,28 @@
   <section class="card meetings-card">
     <div class="meetings-layout">
 
-      <!-- LEFT: sidebar -->
+      <!-- LEFT SIDEBAR -->
       <aside class="meetings-sidebar glass">
         <div class="ms-top">
           <div class="ms-title">Meetings</div>
 
           <div class="ms-search">
-            <input id="meeting-search" type="text" placeholder="Search meeting ID / host / title…" autocomplete="off" />
+            <input id="meeting-search" type="text" placeholder="Search meeting ID / title / host…" autocomplete="off" />
             <button type="button" id="meeting-search-clear" class="ms-search-x" title="Clear">×</button>
           </div>
+
+          <!-- ✅ Supervisor only -->
+          <button id="open-create-meeting" class="btn-secondary meetings-create-toggle hidden" type="button">
+            + Create meeting
+          </button>
         </div>
 
-        <!-- Create meeting (Supervisor only) -->
+        <!-- ✅ Create panel (Supervisor only) -->
         <div id="create-meeting-box" class="create-meeting hidden">
-          <div class="meetings-sidebar-header">Create meeting</div>
+          <div class="create-head">
+            <div class="meetings-sidebar-header" style="margin:0">Create</div>
+            <button id="close-create-meeting" class="create-close" type="button">×</button>
+          </div>
 
           <div class="create-row">
             <input id="create-title" type="text" placeholder="Title (e.g. Daily briefing)" autocomplete="off" />
@@ -596,31 +604,29 @@
           </div>
 
           <div class="create-row two">
-            <input id="create-id" type="text" placeholder="Meeting ID" readonly />
-            <input id="create-pass" type="text" placeholder="Password" readonly />
+            <input id="create-id" type="text" placeholder="Meeting ID (auto)" autocomplete="off" disabled />
+            <input id="create-pass" type="text" placeholder="Password (auto)" autocomplete="off" disabled />
           </div>
 
-          <div class="create-row two">
-            <button id="regen-meeting-btn" class="btn-secondary" type="button">🔄 Regenerate</button>
-            <button id="create-meeting-btn" class="btn-primary" type="button">➕ Create</button>
+          <div class="create-actions">
+            <button id="regen-pass-btn" class="btn-secondary" type="button">🔁 New password</button>
+            <button id="create-meeting-btn" class="btn-primary" type="button">Create</button>
           </div>
 
-          <div class="create-hint">
-            Share <b>ID</b> + <b>Password</b> with agents.
-          </div>
+          <div class="create-hint" id="create-hint"></div>
         </div>
 
         <div class="meetings-sidebar-header">Upcoming</div>
-        <div id="meetings-list" class="ms-list" data-list="meetings"></div>
+        <div id="meetings-list" class="ms-list"></div>
         <div class="ms-empty" id="meetings-empty">No upcoming meetings</div>
       </aside>
 
-      <!-- RIGHT: main -->
+      <!-- RIGHT MAIN -->
       <div class="meetings-main">
         <header class="chat-header">
           <div>
-            <div class="chat-room-name" id="meetings-right-title">Join meeting</div>
-            <div class="chat-room-desc" id="meetings-right-desc">Enter Meeting ID + password</div>
+            <div class="chat-room-name" id="meeting-right-title">Join meeting</div>
+            <div class="chat-room-desc" id="meeting-right-desc">Enter Meeting ID + password</div>
           </div>
         </header>
 
@@ -650,8 +656,8 @@
             </div>
           </div>
 
-          <div class="meeting-note">
-            *Local preview فقط. Multi-user video يحتاج WebRTC/Server لاحقاً.
+          <div class="meeting-note" id="meeting-note">
+            *Local preview فقط. Multi-user video لاحقاً (WebRTC server).
           </div>
         </div>
       </div>
@@ -720,6 +726,7 @@
 
 </body>
 </html>
+
 
 
 
