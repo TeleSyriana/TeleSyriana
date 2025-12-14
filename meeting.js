@@ -1,286 +1,407 @@
-// meetings.js (Local meetings + local camera preview)
-// Storage keys
-const MEETINGS_KEY = "tele_meetings_v1";
-const USER_KEY     = "tele_current_user_v1";
+// meetings.js — TeleSyriana Meetings (Firestore like chat)
 
-// DOM
-const meetingsListEl = document.getElementById("meetings-list");
-const meetingsEmpty  = document.getElementById("meetings-empty");
+import { db, fs } from "./firebase.js";
 
-const searchInput = document.getElementById("meeting-search");
-const searchClear = document.getElementById("meeting-search-clear");
+const {
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  serverTimestamp,
+  runTransaction,
+} = fs;
 
-// Create (sup)
-const createBox   = document.getElementById("create-meeting-box");
-const createBtn   = document.getElementById("create-meeting-btn");
-const createTitle = document.getElementById("create-title");
-const createDate  = document.getElementById("create-date");
-const createTime  = document.getElementById("create-time");
-const createId    = document.getElementById("create-id");
-const createPass  = document.getElementById("create-pass");
+// -------------------- Config / Helpers --------------------
+const MEETINGS_COL = "meetings";
+const META_DOC = "meta";
+const COUNTER_DOC = "counters"; // meetings/meta/counters
 
-// Join + stage
-let localStream = null;
-let joinedMeeting = null;
+function getCurrentUser() {
+  // نفس أسلوبك الحالي
+  try {
+    return JSON.parse(localStorage.getItem("telesyrianaUser") || "null");
+  } catch {
+    return null;
+  }
+}
 
+function pad(n, len = 4) {
+  return String(n).padStart(len, "0");
+}
+
+function randPassword(len = 6) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1, 2)}-${pad(d.getDate(), 2)}`;
+}
+
+function parseDateTime(dateStr, timeStr) {
+  // date: YYYY-MM-DD, time: HH:MM
+  if (!dateStr) return null;
+  const t = timeStr || "09:00";
+  const dt = new Date(`${dateStr}T${t}:00`);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function fmtWhen(tsOrDate) {
+  const d = tsOrDate?.toDate ? tsOrDate.toDate() : tsOrDate;
+  if (!d) return "";
+  return d.toLocaleString(undefined, { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+async function nextMeetingId() {
+  // ✅ تسلسلي: transaction على meetings/meta/counters
+  const ref = doc(db, MEETINGS_COL, META_DOC, "metaDocs", COUNTER_DOC);
+  const newId = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const current = snap.exists() ? (snap.data().next || 1000) : 1000;
+    tx.set(ref, { next: current + 1, updatedAt: serverTimestamp() }, { merge: true });
+    return current;
+  });
+  return String(newId);
+}
+
+// -------------------- DOM --------------------
+const listEl = document.getElementById("meetings-list");
+const emptyEl = document.getElementById("meetings-empty");
+const searchEl = document.getElementById("meeting-search");
+const clearSearchBtn = document.getElementById("meeting-search-clear");
+
+const openCreateBtn = document.getElementById("open-create-meeting");
+const closeCreateBtn = document.getElementById("close-create-meeting");
+const createBox = document.getElementById("create-meeting-box");
+
+const createTitleEl = document.getElementById("create-title");
+const createDateEl = document.getElementById("create-date");
+const createTimeEl = document.getElementById("create-time");
+const createIdEl = document.getElementById("create-id");
+const createPassEl = document.getElementById("create-pass");
+const regenPassBtn = document.getElementById("regen-pass-btn");
+const createBtn = document.getElementById("create-meeting-btn");
+const createHintEl = document.getElementById("create-hint");
+
+const joinIdEl = document.getElementById("join-meeting-id");
+const joinPassEl = document.getElementById("join-meeting-pass");
 const joinBtn = document.getElementById("join-meeting-btn");
-const stage   = document.getElementById("meeting-stage");
+
+const stage = document.getElementById("meeting-stage");
 const videoEl = document.getElementById("local-video");
-const liveTitle = document.getElementById("meeting-live-title");
-const liveMeta  = document.getElementById("meeting-live-meta");
-
-const micBtn   = document.getElementById("btn-mic");
-const camBtn   = document.getElementById("btn-cam");
-const handBtn  = document.getElementById("btn-hand");
+const micBtn = document.getElementById("btn-mic");
+const camBtn = document.getElementById("btn-cam");
+const handBtn = document.getElementById("btn-hand");
 const leaveBtn = document.getElementById("btn-leave");
+const liveTitleEl = document.getElementById("meeting-live-title");
+const liveMetaEl = document.getElementById("meeting-live-meta");
 
-// -------------------- Helpers --------------------
-function loadMeetings(){
-  try { return JSON.parse(localStorage.getItem(MEETINGS_KEY) || "[]"); }
-  catch { return []; }
-}
-function saveMeetings(list){
-  localStorage.setItem(MEETINGS_KEY, JSON.stringify(list));
-}
+let unsubMeetings = null;
+let meetingsCache = [];
+let localStream = null;
+let activeMeeting = null;
 
-function genId(len=4){
-  return String(Math.floor(Math.random() * (10 ** len))).padStart(len, "0");
-}
+// -------------------- Init / Role UI --------------------
+function applyRoleUI() {
+  const user = getCurrentUser();
+  const isSup = user?.role === "supervisor";
 
-function getCurrentUser(){
-  // 1) if you already set window.currentUser in app.js, we use it
-  if (window.currentUser) return window.currentUser;
+  // زر create
+  if (openCreateBtn) openCreateBtn.classList.toggle("hidden", !isSup);
 
-  // 2) fallback to localStorage
-  try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); }
-  catch { return null; }
+  // صندوق create مخفي افتراضياً
+  if (!isSup && createBox) createBox.classList.add("hidden");
 }
 
-function getCcms(){
-  const u = getCurrentUser();
-  const ccms = u?.ccmsId ?? u?.ccms ?? u?.id ?? "";
-  return String(ccms || "");
+async function prepareCreateDefaults() {
+  const user = getCurrentUser();
+  if (!user || user.role !== "supervisor") return;
+
+  // default: today + now+10min
+  const now = new Date();
+  const dt = new Date(now.getTime() + 10 * 60000);
+  if (createDateEl) createDateEl.value = todayKey();
+  if (createTimeEl) createTimeEl.value = `${pad(dt.getHours(), 2)}:${pad(dt.getMinutes(), 2)}`;
+
+  // generate meeting id + pass
+  const id = await nextMeetingId();
+  if (createIdEl) createIdEl.value = id;
+  if (createPassEl) createPassEl.value = randPassword(6);
+
+  if (createHintEl) createHintEl.textContent = "";
 }
 
-function isSupervisor(){
-  // Your demo: supervisors are 2001/2002 -> starts with "200"
-  return getCcms().startsWith("200");
-}
+// -------------------- Firestore subscribe --------------------
+function subscribeMeetings() {
+  if (!listEl) return;
 
-function formatWhen(iso){
-  try{
-    const d = new Date(iso);
-    return d.toLocaleString();
-  }catch{
-    return iso;
-  }
-}
+  // Upcoming: اليوم و لقدّام (بس demo)
+  const q = query(
+    collection(db, MEETINGS_COL),
+    orderBy("scheduledAt", "asc"),
+    limit(50)
+  );
 
-function validateJoin(id, pass){
-  const list = loadMeetings();
-  const m = list.find(x => String(x.id) === String(id));
-  if(!m) return { ok:false, msg:"Meeting ID not found" };
-  if(String(m.pass) !== String(pass)) return { ok:false, msg:"Wrong password" };
-  return { ok:true, meeting:m };
-}
-
-// -------------------- UI --------------------
-function initCreateBox(){
-  if(!createBox) return;
-
-  if(isSupervisor()){
-    createBox.classList.remove("hidden");
-    if(createId && !createId.value) createId.value = genId(4);
-    if(createPass && !createPass.value) createPass.value = genId(4);
-
-    // default date/time (next 10 minutes)
-    const now = new Date(Date.now() + 10*60*1000);
-    if(createDate && !createDate.value){
-      createDate.value = now.toISOString().slice(0,10);
-    }
-    if(createTime && !createTime.value){
-      const hh = String(now.getHours()).padStart(2,"0");
-      const mm = String(now.getMinutes()).padStart(2,"0");
-      createTime.value = `${hh}:${mm}`;
-    }
-  }else{
-    createBox.classList.add("hidden");
-  }
-}
-
-function renderMeetings(filterText = ""){
-  if(!meetingsListEl) return;
-
-  const list = loadMeetings();
-
-  // show only upcoming (>= now - 2 hours) so ما تختفي لو تأخرت شوي
-  const cutoff = Date.now() - (2 * 60 * 60 * 1000);
-
-  const filtered = list
-    .filter(m => {
-      const t = `${m.id} ${m.title} ${m.hostCcms}`.toLowerCase();
-      const okSearch = t.includes(filterText.toLowerCase());
-      const okTime = new Date(m.when).getTime() >= cutoff;
-      return okSearch && okTime;
-    })
-    .sort((a,b) => (a.when||"").localeCompare(b.when||""));
-
-  meetingsListEl.innerHTML = "";
-
-  if(filtered.length === 0){
-    meetingsEmpty?.classList.remove("hidden");
-    return;
-  }
-  meetingsEmpty?.classList.add("hidden");
-
-  filtered.forEach(m=>{
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "chat-room";
-
-    btn.innerHTML = `
-      <div class="chat-row">
-        <div class="chat-avatar role-room">M</div>
-        <div class="chat-row-text">
-          <div class="chat-room-title">${escapeHtml(m.title || "Meeting")}</div>
-          <div class="chat-room-sub">ID ${m.id} • ${formatWhen(m.when)}</div>
-        </div>
-      </div>
-    `;
-
-    btn.addEventListener("click", ()=>{
-      const idEl = document.getElementById("join-meeting-id");
-      const passEl = document.getElementById("join-meeting-pass");
-      if(idEl) idEl.value = m.id;
-      if(passEl) passEl.value = m.pass;
-    });
-
-    meetingsListEl.appendChild(btn);
+  if (unsubMeetings) unsubMeetings();
+  unsubMeetings = onSnapshot(q, (snap) => {
+    const rows = [];
+    snap.forEach((d) => rows.push({ id: d.id, ...d.data() }));
+    meetingsCache = rows;
+    renderMeetings();
   });
 }
 
-function escapeHtml(str){
-  return String(str)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+function renderMeetings() {
+  if (!listEl || !emptyEl) return;
+
+  const term = (searchEl?.value || "").trim().toLowerCase();
+
+  const filtered = meetingsCache.filter((m) => {
+    const id = String(m.meetingId || m.id || "").toLowerCase();
+    const title = String(m.title || "").toLowerCase();
+    const host = String(m.hostName || m.hostId || "").toLowerCase();
+    return !term || id.includes(term) || title.includes(term) || host.includes(term);
+  });
+
+  listEl.innerHTML = "";
+
+  if (!filtered.length) {
+    emptyEl.classList.remove("hidden");
+    return;
+  }
+  emptyEl.classList.add("hidden");
+
+  filtered.forEach((m) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "meeting-item";
+    btn.innerHTML = `
+      <div class="meeting-item-top">
+        <div class="meeting-item-title">${m.title || "Meeting"}</div>
+        <div class="meeting-item-id">#${m.meetingId || m.id}</div>
+      </div>
+      <div class="meeting-item-sub">
+        <span>Host: ${m.hostName || m.hostId || "—"}</span>
+        <span>•</span>
+        <span>${m.scheduledAt ? fmtWhen(m.scheduledAt) : "No time"}</span>
+      </div>
+    `;
+
+    btn.addEventListener("click", () => {
+      // auto-fill join
+      if (joinIdEl) joinIdEl.value = String(m.meetingId || m.id);
+      joinPassEl?.focus();
+    });
+
+    listEl.appendChild(btn);
+  });
 }
 
-// -------------------- Events --------------------
+// -------------------- Create meeting (Supervisor) --------------------
+async function createMeeting() {
+  const user = getCurrentUser();
+  if (!user || user.role !== "supervisor") return alert("Supervisor only.");
 
-// Search
-searchInput?.addEventListener("input", (e)=>{
-  renderMeetings(e.target.value || "");
-});
-searchClear?.addEventListener("click", ()=>{
-  if(searchInput) searchInput.value = "";
-  renderMeetings("");
-});
+  const title = (createTitleEl?.value || "").trim() || "Team meeting";
+  const dateStr = createDateEl?.value || todayKey();
+  const timeStr = createTimeEl?.value || "09:00";
+  const scheduled = parseDateTime(dateStr, timeStr);
+  if (!scheduled) return alert("Invalid date/time.");
 
-// Create meeting (Supervisor only)
-createBtn?.addEventListener("click", ()=>{
-  if(!isSupervisor()) return alert("Supervisors only.");
+  const meetingId = (createIdEl?.value || "").trim();
+  const password = (createPassEl?.value || "").trim();
 
-  const title = createTitle?.value.trim() || "Meeting";
-  const date  = createDate?.value;
-  const time  = createTime?.value;
+  if (!meetingId) return alert("Meeting ID missing.");
+  if (!password || password.length < 4) return alert("Password too short.");
 
-  if(!date || !time) return alert("Pick date & time.");
+  // doc id = meetingId (أسهل)
+  const ref = doc(db, MEETINGS_COL, meetingId);
 
-  const id   = (createId?.value || genId(4)).trim();
-  const pass = (createPass?.value || genId(4)).trim();
-
-  // Build ISO
-  const when = new Date(`${date}T${time}`).toISOString();
-  const hostCcms = getCcms() || "2001";
-
-  const list = loadMeetings();
-  if(list.some(m => String(m.id) === String(id))){
-    return alert("Meeting ID already exists. Change it.");
+  // prevent overwrite if exists
+  const exists = await getDoc(ref);
+  if (exists.exists()) {
+    alert("Meeting ID already exists. Generating a new one…");
+    const id = await nextMeetingId();
+    createIdEl.value = id;
+    return;
   }
 
-  list.push({ id, pass, title, when, hostCcms });
-  saveMeetings(list);
+  await setDoc(ref, {
+    meetingId,
+    title,
+    password, // ✅ demo only
+    hostId: user.id,
+    hostName: user.name,
+    scheduledAt: scheduled,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    status: "scheduled", // scheduled | live | ended
+  });
 
-  renderMeetings(searchInput?.value || "");
-
-  // regenerate for next create
-  if(createId) createId.value = genId(4);
-  if(createPass) createPass.value = genId(4);
-
-  alert(`Created ✅\nID: ${id}\nPass: ${pass}`);
-});
-
-// Join meeting -> validate -> open camera
-joinBtn?.addEventListener("click", async ()=>{
-  const id = document.getElementById("join-meeting-id")?.value.trim();
-  const pass = document.getElementById("join-meeting-pass")?.value.trim();
-
-  if(!id || !pass) return alert("Enter Meeting ID + Password.");
-
-  const v = validateJoin(id, pass);
-  if(!v.ok) return alert(v.msg);
-
-  joinedMeeting = v.meeting;
-
-  try{
-    localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-
-    if(videoEl) videoEl.srcObject = localStream;
-    if(stage) stage.classList.remove("hidden");
-
-    if(liveTitle) liveTitle.textContent = joinedMeeting.title || "In meeting";
-    if(liveMeta)  liveMeta.textContent  = `ID ${joinedMeeting.id}`;
-
-    // reset button labels
-    if(micBtn) micBtn.textContent = "🎤 Mute";
-    if(camBtn) camBtn.textContent = "📷 Camera off";
-  }catch(e){
-    alert("Camera/Mic blocked. Please allow permissions in browser.");
+  if (createHintEl) {
+    createHintEl.textContent = `✅ Created: ID ${meetingId} • PASS ${password}`;
   }
-});
 
-// Mic toggle
-micBtn?.addEventListener("click", ()=>{
-  if(!localStream) return;
-  const track = localStream.getAudioTracks()[0];
-  if(!track) return;
-  track.enabled = !track.enabled;
-  micBtn.textContent = track.enabled ? "🎤 Mute" : "🔇 Unmute";
-});
+  // refresh next defaults (for next meeting)
+  const nextId = await nextMeetingId();
+  createIdEl.value = nextId;
+  createPassEl.value = randPassword(6);
+  createTitleEl.value = "";
+}
 
-// Cam toggle
-camBtn?.addEventListener("click", ()=>{
-  if(!localStream) return;
-  const track = localStream.getVideoTracks()[0];
-  if(!track) return;
-  track.enabled = !track.enabled;
-  camBtn.textContent = track.enabled ? "📷 Camera off" : "🚫 Camera on";
-});
+// -------------------- Join meeting (validate + local preview) --------------------
+async function joinMeeting() {
+  const user = getCurrentUser();
+  if (!user) return alert("Please login first.");
 
-// Raise hand (local)
-handBtn?.addEventListener("click", ()=>{
-  if(!joinedMeeting) return;
-  const old = handBtn.textContent;
-  handBtn.textContent = "✋ Raised";
-  setTimeout(()=> handBtn.textContent = old, 1200);
-});
+  const id = (joinIdEl?.value || "").trim();
+  const pass = (joinPassEl?.value || "").trim();
+  if (!id || !pass) return alert("Enter Meeting ID + password.");
 
-// Leave
-leaveBtn?.addEventListener("click", ()=>{
-  if(localStream){
-    localStream.getTracks().forEach(t => t.stop());
+  const ref = doc(db, MEETINGS_COL, id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return alert("Meeting not found.");
+
+  const m = snap.data();
+  if (String(m.password || "") !== pass) return alert("Wrong password.");
+
+  // mark participation (optional)
+  try {
+    await setDoc(doc(db, MEETINGS_COL, id, "participants", user.id), {
+      userId: user.id,
+      name: user.name,
+      role: user.role,
+      joinedAt: serverTimestamp(),
+      lastSeenAt: serverTimestamp(),
+    }, { merge: true });
+  } catch {}
+
+  // local camera preview
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    videoEl.srcObject = localStream;
+
+    activeMeeting = { id, ...m };
+    stage.classList.remove("hidden");
+
+    if (liveTitleEl) liveTitleEl.textContent = m.title || "Meeting";
+    if (liveMetaEl) liveMetaEl.textContent = `#${id} • ${user.name}`;
+
+    // optional: update status
+    try {
+      await updateDoc(ref, { status: "live", updatedAt: serverTimestamp() });
+    } catch {}
+  } catch (e) {
+    alert("Camera/Mic blocked. Please allow permissions.");
+  }
+}
+
+function leaveMeeting() {
+  if (localStream) {
+    localStream.getTracks().forEach((t) => t.stop());
     localStream = null;
   }
-  joinedMeeting = null;
+  if (videoEl) videoEl.srcObject = null;
+  stage?.classList.add("hidden");
 
-  if(stage) stage.classList.add("hidden");
-  if(videoEl) videoEl.srcObject = null;
-  if(liveMeta) liveMeta.textContent = "";
-});
+  activeMeeting = null;
+}
+
+// -------------------- Controls --------------------
+function toggleMic() {
+  if (!localStream) return;
+  const track = localStream.getAudioTracks()[0];
+  if (!track) return;
+  track.enabled = !track.enabled;
+  micBtn.textContent = track.enabled ? "🎤 Mute" : "🔇 Unmute";
+  micBtn.classList.toggle("active", !track.enabled);
+}
+
+function toggleCam() {
+  if (!localStream) return;
+  const track = localStream.getVideoTracks()[0];
+  if (!track) return;
+  track.enabled = !track.enabled;
+  camBtn.textContent = track.enabled ? "📷 Camera off" : "🚫 Camera on";
+  camBtn.classList.toggle("active", !track.enabled);
+}
+
+async function raiseHand() {
+  const user = getCurrentUser();
+  if (!user || !activeMeeting) return;
+
+  handBtn.textContent = "✋ Raised";
+  handBtn.classList.add("active");
+
+  // ✅ اكتب event للـ supervisor (مثل messages)
+  try {
+    await setDoc(doc(db, MEETINGS_COL, activeMeeting.id, "events", `${user.id}_${Date.now()}`), {
+      type: "raise_hand",
+      userId: user.id,
+      name: user.name,
+      createdAt: serverTimestamp(),
+    });
+  } catch {}
+
+  setTimeout(() => {
+    handBtn.textContent = "✋ Raise hand";
+    handBtn.classList.remove("active");
+  }, 1200);
+}
+
+// -------------------- Hook UI --------------------
+function hookUI() {
+  clearSearchBtn?.addEventListener("click", () => {
+    if (searchEl) searchEl.value = "";
+    renderMeetings();
+    searchEl?.focus();
+  });
+
+  searchEl?.addEventListener("input", renderMeetings);
+
+  openCreateBtn?.addEventListener("click", async () => {
+    createBox?.classList.remove("hidden");
+    openCreateBtn.classList.add("hidden");
+    await prepareCreateDefaults();
+  });
+
+  closeCreateBtn?.addEventListener("click", () => {
+    createBox?.classList.add("hidden");
+    openCreateBtn?.classList.remove("hidden");
+  });
+
+  regenPassBtn?.addEventListener("click", () => {
+    if (createPassEl) createPassEl.value = randPassword(6);
+  });
+
+  createBtn?.addEventListener("click", createMeeting);
+
+  joinBtn?.addEventListener("click", joinMeeting);
+
+  micBtn?.addEventListener("click", toggleMic);
+  camBtn?.addEventListener("click", toggleCam);
+  handBtn?.addEventListener("click", raiseHand);
+  leaveBtn?.addEventListener("click", leaveMeeting);
+
+  // لما يصير logout/login
+  window.addEventListener("telesyriana:user-changed", () => {
+    applyRoleUI();
+  });
+}
 
 // -------------------- Boot --------------------
-initCreateBox();
-renderMeetings("");
+document.addEventListener("DOMContentLoaded", () => {
+  applyRoleUI();
+  hookUI();
+  subscribeMeetings();
+});
+
