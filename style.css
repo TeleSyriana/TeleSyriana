@@ -209,7 +209,7 @@ input:focus, textarea:focus, select:focus{
   border:none;
   padding:10px 14px;
   font-size:15px;
-  font-weight:600;
+  font-weight:300;
   cursor:pointer;
   margin-top:10px;
 }
@@ -1610,6 +1610,7 @@ input:focus, textarea:focus, select:focus{
   .meeting-join-row .btn-primary{ grid-column: 1 / -1; }
   .meeting-video-area{ height: 320px; }
 }
+
 
 
 
