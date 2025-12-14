@@ -1145,5 +1145,66 @@ input:focus, textarea:focus, select:focus{
 }
 
 
+/* =========================
+   ✅ Unread badges (ADD-ON ONLY)
+   - Nav badge: #nav-messages-badge
+   - Sidebar item badge: .unread-badge (inject via JS)
+========================= */
 
+/* Nav "Messages" badge */
+#nav-messages{
+  position:relative;
+}
+#nav-messages-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:18px;
+  padding:0 6px;
+  border-radius:999px;
+  background:#ff3b30;
+  color:#fff;
+  font-size:11px;
+  font-weight:900;
+  line-height:1;
+  margin-left:6px;
+  box-shadow:0 10px 18px rgba(0,0,0,.14);
+}
+#nav-messages-badge.hidden{ display:none !important; }
 
+/* Generic unread badge for sidebar items (DM/Room/Group/Recent) */
+.unread-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:18px;
+  padding:0 6px;
+  border-radius:999px;
+  background:#ff3b30;
+  color:#fff;
+  font-size:11px;
+  font-weight:900;
+  line-height:1;
+  box-shadow:0 10px 18px rgba(0,0,0,.14);
+}
+
+/* Place badge on the right side inside item */
+.chat-room,
+.chat-dm,
+.chat-recent,
+.chat-group{
+  position:relative;
+}
+
+.chat-room .unread-badge,
+.chat-dm .unread-badge,
+.chat-recent .unread-badge,
+.chat-group .unread-badge{
+  position:absolute;
+  right:10px;
+  top:10px;
+}
+
+.unread-badge.hidden{ display:none !important; }
