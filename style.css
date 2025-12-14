@@ -1308,7 +1308,6 @@ input:focus, textarea:focus, select:focus{
   max-height: 65vh;        /* مهم */
   overflow-y: auto;        /* scrolling */
   box-sizing: border-box;
-   padding: 0px !important;
 }
 
 /* members list container */
@@ -1328,6 +1327,7 @@ input:focus, textarea:focus, select:focus{
   border-radius: 8px;
   border: 1px solid #ccc;
 }
+
 
 
 
