@@ -1,16 +1,7 @@
 // messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots
 // ✅ Recents (CLOUD, AFTER SEND ONLY) + Search by name/room/CCMS + Glass sidebar support
 // ✅ Groups (CLOUD) + Groups open via events (telesyriana:open-group / telesyriana:open-room)
-// messages.js – TeleSyriana Firestore Chat
-// ✅ Rooms + DMs + Groups (CLOUD)
-// ✅ Recents (CLOUD, DM ONLY, AFTER SEND ONLY)
-// ✅ Lazy render (no limit())
-// ✅ Search + collapsible sidebar
-// ❌ No alerts spam
-// messages.js – TeleSyriana
-// ✅ Rooms + DMs + Groups (cloud) + Recents (cloud, AFTER SEND ONLY)
-// ✅ Lazy render on scroll up (no limit()) + Status dots
-// ✅ Collapsible sidebar sections (Rooms/Groups/Recent/DMs)
+// ✅ Unread counters (true count + 99+) on each chat item + nav Messages badge
 // ✅ NO alert() on firestore snapshot errors (console only)
 
 import { db, fs } from "./firebase.js";
@@ -49,7 +40,7 @@ let unsubscribeStatus = null;
 let unsubscribeGroups = null;
 let unsubscribeRecents = null;
 
-let roomCache = [];     // ASC
+let roomCache = []; // ASC
 let renderedCount = 0;
 let scrollBoundEl = null;
 
@@ -59,26 +50,17 @@ let recentListEl = null;
 let groupsListEl = null;
 
 // caches
-let groupsCache = [];   // [{id, name, rules, members, createdAt}]
-let recentsCache = [];  // [{id, type, roomId, title, desc, lastTs, otherId?}]
+let groupsCache = [];  // [{id, name, rules, members, createdAt}]
+let recentsCache = []; // [{id, type, roomId, title, desc, lastTs, otherId?}]
 
-// ---------------- ✅ Unread badges (NO limit()) ----------------
+// ---------------- ✅ Unread counters ----------------
 
 const LAST_SEEN_PREFIX = "telesyrianaLastSeen:";
+const unreadByRoom = new Map();     // roomId -> count
+const lastMsgTsByRoom = new Map();  // roomId -> ms (latest message ts we know)
+const unreadUnsubs = new Map();     // roomId -> unsubscribe()
+const roomButtons = new Map();      // roomId -> Set(buttons)
 
-// roomId -> unread count
-const unreadByRoom = new Map();
-
-// roomId -> last message ts (ms)
-const lastMsgTsByRoom = new Map();
-
-// roomId -> unsubscribe()
-const unreadUnsubs = new Map();
-
-// roomId -> Set(button elements)
-const roomButtons = new Map();
-
-// nav Messages button badge
 let navMessagesBtn = null;
 let navMessagesBadge = null;
 
@@ -96,28 +78,15 @@ function getLastSeen(roomId) {
 }
 function setLastSeen(roomId, ms) {
   try {
-    const v = Number(ms || 0);
+    const v = Number(ms || Date.now());
     localStorage.setItem(lastSeenKey(roomId), String(v));
   } catch {}
 }
 
-function applyBadgeStyle(el) {
-  if (!el) return;
-  // red circular counter (inline style so you don't need extra CSS)
-  el.style.display = "inline-flex";
-  el.style.alignItems = "center";
-  el.style.justifyContent = "center";
-  el.style.minWidth = "18px";
-  el.style.height = "18px";
-  el.style.padding = "0 6px";
-  el.style.borderRadius = "999px";
-  el.style.background = "#ff3b30";
-  el.style.color = "#fff";
-  el.style.fontSize = "11px";
-  el.style.fontWeight = "900";
-  el.style.lineHeight = "1";
-  el.style.marginLeft = "8px";
-  el.style.boxShadow = "0 6px 14px rgba(0,0,0,.18)";
+function formatBadgeNumber(n) {
+  const x = Number(n || 0);
+  if (x <= 0) return "0";
+  return x >= 100 ? "99+" : String(x);
 }
 
 function ensureNavBadge() {
@@ -126,44 +95,39 @@ function ensureNavBadge() {
 
   navMessagesBtn = btn;
 
+  if (!navMessagesBtn.id) navMessagesBtn.id = "nav-messages";
+  if (navMessagesBtn.id !== "nav-messages") navMessagesBtn.id = "nav-messages";
+
   navMessagesBadge = document.getElementById("nav-messages-badge");
   if (!navMessagesBadge) {
     navMessagesBadge = document.createElement("span");
     navMessagesBadge.id = "nav-messages-badge";
     navMessagesBadge.className = "hidden";
     navMessagesBadge.textContent = "0";
-    applyBadgeStyle(navMessagesBadge);
     navMessagesBtn.appendChild(navMessagesBadge);
-  } else {
-    applyBadgeStyle(navMessagesBadge);
   }
 }
 
 function ensureUnreadBadge(btnEl) {
   if (!btnEl) return null;
-
-  // keep the badge on the button itself (no name/id changes)
-  let b = btnEl.querySelector(".unread-badge");
+  // only on chat buttons (not inside message bubbles)
+  let b = btnEl.querySelector(":scope > .unread-badge");
   if (!b) {
     b = document.createElement("span");
     b.className = "unread-badge hidden";
     b.textContent = "0";
-    applyBadgeStyle(b);
     btnEl.appendChild(b);
-  } else {
-    applyBadgeStyle(b);
   }
   return b;
 }
 
 function setBadgeCountOnButton(btnEl, count) {
-  if (!btnEl) return;
   const b = ensureUnreadBadge(btnEl);
   if (!b) return;
 
   const n = Number(count || 0);
   if (n > 0) {
-    b.textContent = n >= 99 ? "99+" : String(n);
+    b.textContent = formatBadgeNumber(n);
     b.classList.remove("hidden");
   } else {
     b.classList.add("hidden");
@@ -178,7 +142,7 @@ function updateNavBadge() {
   unreadByRoom.forEach((v) => (total += Number(v || 0)));
 
   if (total > 0) {
-    navMessagesBadge.textContent = total >= 99 ? "99+" : String(total);
+    navMessagesBadge.textContent = formatBadgeNumber(total);
     navMessagesBadge.classList.remove("hidden");
   } else {
     navMessagesBadge.classList.add("hidden");
@@ -186,9 +150,7 @@ function updateNavBadge() {
 }
 
 function updateBadgesForRoom(roomId) {
-  const key = String(roomId || "");
-  if (!key) return;
-
+  const key = String(roomId);
   const count = Number(unreadByRoom.get(key) || 0);
 
   const btns = roomButtons.get(key);
@@ -200,81 +162,94 @@ function updateBadgesForRoom(roomId) {
 }
 
 function registerRoomButton(roomId, btnEl) {
-  const key = String(roomId || "");
-  if (!key || !btnEl) return;
+  if (!roomId || !btnEl) return;
+  const key = String(roomId);
 
   ensureUnreadBadge(btnEl);
 
   if (!roomButtons.has(key)) roomButtons.set(key, new Set());
   roomButtons.get(key).add(btnEl);
 
-  // render current count now
+  // render current state if we already have it
   updateBadgesForRoom(key);
 
   // start watcher
   ensureUnreadWatcher(key);
 }
 
-function markRoomRead(roomId) {
-  const key = String(roomId || "");
-  if (!key) return;
-
-  const lastTs = Number(lastMsgTsByRoom.get(key) || 0);
-  if (lastTs > 0) {
-    setLastSeen(key, lastTs);
-  } else {
-    // if no lastTs known yet, don't set Date.now() (avoids "read ghost")
-    setLastSeen(key, getLastSeen(key));
+function restartUnreadWatcher(roomId) {
+  const key = String(roomId);
+  const u = unreadUnsubs.get(key);
+  if (u) {
+    try { u(); } catch {}
   }
+  unreadUnsubs.delete(key);
+  ensureUnreadWatcher(key);
+}
 
+function markRoomRead(roomId) {
+  const key = String(roomId);
+  const lastTs = Number(lastMsgTsByRoom.get(key) || Date.now());
+  setLastSeen(key, lastTs);
   unreadByRoom.set(key, 0);
   updateBadgesForRoom(key);
+
+  // ✅ important: re-subscribe with new "seen" so Firestore stops streaming old unread docs
+  restartUnreadWatcher(key);
 }
 
 function ensureUnreadWatcher(roomId) {
-  const key = String(roomId || "");
+  const key = String(roomId);
   if (!key) return;
   if (unreadUnsubs.has(key)) return;
 
-  // ✅ NO limit(): we listen to the full room stream and count unread vs lastSeen.
-  const qRoomAll = query(
+  // ✅ true count: listen to messages newer than "last seen"
+  // (NO limit, and NOT affecting the main chat loading)
+  const seen = getLastSeen(key);
+  const seenDate = new Date(seen || 0);
+
+  const qUnread = query(
     collection(db, MESSAGES_COL),
     where("room", "==", key),
+    where("ts", ">", seenDate),
     orderBy("ts", "asc")
   );
 
   const unsub = onSnapshot(
-    qRoomAll,
+    qUnread,
     (snap) => {
       setCurrentUser();
 
-      const seen = getLastSeen(key);
-      let unreadCount = 0;
-      let lastTs = 0;
+      let cnt = 0;
+      let latest = 0;
 
       snap.forEach((d) => {
         const data = d.data() || {};
-        const tsMs = tsToNumber(data.ts) || 0;
-        if (tsMs > lastTs) lastTs = tsMs;
+        const ms = tsToNumber(data.ts) || 0;
+        if (ms > latest) latest = ms;
 
-        // count only messages after lastSeen, and (optionally) not from me
-        if (tsMs > seen) {
-          const fromMe = currentUser?.id && String(data.userId) === String(currentUser.id);
-          if (!fromMe) unreadCount += 1;
-        }
+        // count only messages not sent by me
+        const from = String(data.userId || "");
+        const me = String(currentUser?.id || "");
+        if (from && me && from === me) return;
+
+        cnt += 1;
       });
 
-      lastMsgTsByRoom.set(key, lastTs);
+      if (latest) lastMsgTsByRoom.set(key, latest);
 
-      // if active chat is open, unread is 0 immediately (as requested)
+      // if currently open => mark as read automatically
       if (activeChat?.roomId && String(activeChat.roomId) === key) {
-        if (lastTs > 0) setLastSeen(key, lastTs);
+        if (latest) setLastSeen(key, latest);
         unreadByRoom.set(key, 0);
         updateBadgesForRoom(key);
+
+        // re-subscribe with new lastSeen (so it doesn't keep the old unread set)
+        if (latest) restartUnreadWatcher(key);
         return;
       }
 
-      unreadByRoom.set(key, unreadCount);
+      unreadByRoom.set(key, cnt);
       updateBadgesForRoom(key);
     },
     (err) => console.error("Unread watcher error:", err)
@@ -538,16 +513,15 @@ function subscribeMainToRoom(roomId) {
       renderFresh(listEl, roomCache.slice(startIndex), true);
       attachScrollLoader(listEl);
 
-      // ✅ keep lastMsgTsByRoom updated for active room
+      // ✅ if chat open, keep lastSeen pinned to latest message
       const last = roomCache.length ? roomCache[roomCache.length - 1] : null;
       const lastTs = last ? tsToNumber(last.ts) : 0;
-      if (lastTs) lastMsgTsByRoom.set(String(roomId), lastTs);
-
-      // ✅ when chat is open it goes away
-      if (activeChat?.roomId && String(activeChat.roomId) === String(roomId)) {
-        if (lastTs) setLastSeen(String(roomId), lastTs);
+      if (activeChat?.roomId && String(activeChat.roomId) === String(roomId) && lastTs) {
+        lastMsgTsByRoom.set(String(roomId), lastTs);
+        setLastSeen(String(roomId), lastTs);
         unreadByRoom.set(String(roomId), 0);
         updateBadgesForRoom(String(roomId));
+        restartUnreadWatcher(String(roomId));
       }
     },
     (err) => {
@@ -640,7 +614,7 @@ function renderGroupsList() {
       );
     });
 
-    // ✅ unread badge for group room
+    // ✅ unread tracking for group room
     registerRoomButton(String(g.id), btn);
 
     frag.appendChild(btn);
@@ -656,7 +630,6 @@ function subscribeGroupsCloud() {
   const qG = query(
     collection(db, GROUPS_COL),
     where("members", "array-contains", String(currentUser.id))
-    // ✅ no orderBy -> no composite index popup
   );
 
   unsubscribeGroups = onSnapshot(
@@ -676,7 +649,6 @@ function subscribeGroupsCloud() {
     },
     (err) => {
       console.error("Groups snapshot error:", err);
-      // ✅ no alert
       groupsCache = [];
       renderGroupsList();
     }
@@ -684,10 +656,6 @@ function subscribeGroupsCloud() {
 }
 
 // ---------------- ✅ Cloud Recents (AFTER SEND ONLY) ----------------
-// recentId examples:
-// dm:1002
-// room:general
-// group:grp_xxx
 
 function recentsColRef(userId) {
   return collection(db, RECENTS_ROOT, String(userId), "items");
@@ -735,7 +703,7 @@ function renderRecentsList() {
       openChat({ type: r.type, roomId: r.roomId, title: r.title, desc: r.desc }, btn);
     });
 
-    // ✅ unread badge for recent roomId
+    // ✅ unread tracking for recent roomId
     if (r.roomId) registerRoomButton(String(r.roomId), btn);
 
     frag.appendChild(btn);
@@ -770,7 +738,6 @@ function subscribeRecentsCloud() {
     },
     (err) => {
       console.error("Recents snapshot error:", err);
-      // ✅ no alert
     }
   );
 }
@@ -841,7 +808,7 @@ function openChat(chat, clickedEl = null) {
   setEmpty(false);
   setInputEnabled(true);
 
-  // ✅ once chat is opened it goes away
+  // ✅ mark read immediately when opened
   markRoomRead(String(activeChat.roomId));
 
   subscribeMainToRoom(activeChat.roomId);
@@ -865,7 +832,6 @@ function makeCollapsible(headerText, listId) {
   const list = document.getElementById(listId);
   if (!h || !list) return;
 
-  // add caret
   if (!h.querySelector(".caret")) {
     const caret = document.createElement("span");
     caret.className = "caret";
@@ -892,7 +858,6 @@ function makeCollapsible(headerText, listId) {
 // ---------------- init ----------------
 
 document.addEventListener("DOMContentLoaded", () => {
-  // refs
   dmListEl = document.getElementById("dm-list");
   recentListEl = document.getElementById("recent-list");
   groupsListEl = document.getElementById("groups-list");
@@ -901,19 +866,16 @@ document.addEventListener("DOMContentLoaded", () => {
   ensureNavBadge();
   updateNavBadge();
 
-  // back button hidden
   const backBtn = document.getElementById("chat-back");
   if (backBtn) backBtn.style.display = "none";
 
   setCurrentUser();
 
-  // collapsible sections
   makeCollapsible("Rooms", "rooms-list");
   makeCollapsible("Groups", "groups-list");
   makeCollapsible("Recent", "recent-list");
   makeCollapsible("Direct messages", "dm-list");
 
-  // initial empty state
   setHeader("Messages", "Start chatting…");
   setEmpty(true);
   setInputEnabled(false);
@@ -922,9 +884,8 @@ document.addEventListener("DOMContentLoaded", () => {
   subscribeGroupsCloud();
   subscribeRecentsCloud();
 
-  // hook rooms
+  // hook rooms + unread register
   document.querySelectorAll(".chat-room[data-room]").forEach((btn) => {
-    // ✅ register unread watcher for rooms (except ai)
     const r = btn.dataset.room;
     if (r && r !== "ai") registerRoomButton(String(r), btn);
 
@@ -945,7 +906,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (room === "supervisors" && currentUser.role !== "supervisor") {
-        // ✅ no alert
         console.warn("Supervisor only room");
         return;
       }
@@ -960,14 +920,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // hook dms
+  // hook dms + unread register
   document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {
-    // ✅ register unread watcher for dm roomId
     setCurrentUser();
-    const otherIdBoot = btn.dataset.dm;
-    if (otherIdBoot && currentUser?.id) {
-      const dmId = dmRoomId(currentUser.id, otherIdBoot);
-      registerRoomButton(String(dmId), btn);
+    const otherId = btn.dataset.dm;
+    if (otherId && currentUser?.id) {
+      const rid = dmRoomId(currentUser.id, otherId);
+      registerRoomButton(String(rid), btn);
     }
 
     btn.addEventListener("click", () => {
@@ -1013,9 +972,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // ✅ Recents Cloud AFTER SEND ONLY (DM + Rooms + Groups)
       await bumpRecentAfterSendCloud();
+
+      // ✅ sending while chat open => keep it read
+      // (we don't know server ts immediately, but main snapshot will pin it; this avoids flicker)
+      setLastSeen(String(activeChat.roomId), Date.now());
+      unreadByRoom.set(String(activeChat.roomId), 0);
+      updateBadgesForRoom(String(activeChat.roomId));
+      restartUnreadWatcher(String(activeChat.roomId));
     } catch (err) {
       console.error("Send error:", err);
-      // ✅ no alert
     }
 
     inputEl.value = "";
@@ -1040,7 +1005,7 @@ window.addEventListener("telesyriana:user-changed", () => {
   setEmpty(true);
   setInputEnabled(false);
 
-  // ✅ reset unread watchers for new user context
+  // ✅ reset unread watchers
   stopAllUnreadWatchers();
   ensureNavBadge();
   updateNavBadge();
@@ -1059,8 +1024,10 @@ window.addEventListener("telesyriana:user-changed", () => {
     setCurrentUser();
     const otherId = btn.dataset.dm;
     if (otherId && currentUser?.id) {
-      const roomId = dmRoomId(currentUser.id, otherId);
-      registerRoomButton(String(roomId), btn);
+      const rid = dmRoomId(currentUser.id, otherId);
+      registerRoomButton(String(rid), btn);
     }
   });
 });
+
+
