@@ -564,8 +564,6 @@
     </div>
   </div>
 </div>
-
-      <!-- Meeting Page -->
 <!-- MEETINGS PAGE -->
 <section id="page-meetings" class="page-section hidden">
   <section class="card meetings-card">
@@ -580,19 +578,11 @@
             <input id="meeting-search" type="text" placeholder="Search meeting ID / title / host…" autocomplete="off" />
             <button type="button" id="meeting-search-clear" class="ms-search-x" title="Clear">×</button>
           </div>
-
-          <!-- ✅ Supervisor only -->
-          <button id="open-create-meeting" class="btn-secondary meetings-create-toggle hidden" type="button">
-            + Create meeting
-          </button>
         </div>
 
-        <!-- ✅ Create panel (Supervisor only) -->
+        <!-- Create (Supervisor only) -->
         <div id="create-meeting-box" class="create-meeting hidden">
-          <div class="create-head">
-            <div class="meetings-sidebar-header" style="margin:0">Create</div>
-            <button id="close-create-meeting" class="create-close" type="button">×</button>
-          </div>
+          <div class="meetings-sidebar-header small">Create</div>
 
           <div class="create-row">
             <input id="create-title" type="text" placeholder="Title (e.g. Daily briefing)" autocomplete="off" />
@@ -604,16 +594,16 @@
           </div>
 
           <div class="create-row two">
-            <input id="create-id" type="text" placeholder="Meeting ID (auto)" autocomplete="off" disabled />
-            <input id="create-pass" type="text" placeholder="Password (auto)" autocomplete="off" disabled />
+            <input id="create-id" type="text" placeholder="Meeting ID" autocomplete="off" readonly />
+            <input id="create-pass" type="text" placeholder="Password" autocomplete="off" readonly />
           </div>
 
           <div class="create-actions">
-            <button id="regen-pass-btn" class="btn-secondary" type="button">🔁 New password</button>
+            <button id="btn-new-pass" class="btn-secondary" type="button">🔁 New password</button>
             <button id="create-meeting-btn" class="btn-primary" type="button">Create</button>
           </div>
 
-          <div class="create-hint" id="create-hint"></div>
+          <div class="create-hint">ID is sequential. Password is random. Share them with agents.</div>
         </div>
 
         <div class="meetings-sidebar-header">Upcoming</div>
@@ -625,8 +615,8 @@
       <div class="meetings-main">
         <header class="chat-header">
           <div>
-            <div class="chat-room-name" id="meeting-right-title">Join meeting</div>
-            <div class="chat-room-desc" id="meeting-right-desc">Enter Meeting ID + password</div>
+            <div class="chat-room-name">Join meeting</div>
+            <div class="chat-room-desc">Enter Meeting ID + password</div>
           </div>
         </header>
 
@@ -634,7 +624,7 @@
           <div class="meeting-join-row">
             <input id="join-meeting-id" type="text" placeholder="Meeting ID" autocomplete="off" />
             <input id="join-meeting-pass" type="password" placeholder="Password" autocomplete="off" />
-            <button id="join-meeting-btn" class="btn-primary" type="button" style="width:auto;padding:10px 16px">Join</button>
+            <button id="join-meeting-btn" class="btn-primary" type="button">Join</button>
           </div>
 
           <!-- STAGE -->
@@ -656,8 +646,8 @@
             </div>
           </div>
 
-          <div class="meeting-note" id="meeting-note">
-            *Local preview فقط. Multi-user video لاحقاً (WebRTC server).
+          <div class="meeting-note">
+            *Local preview only. Real multi-user video needs WebRTC signaling/server later.
           </div>
         </div>
       </div>
@@ -722,10 +712,11 @@
   <script type="module" src="tasks.js"></script>
   <script type="module" src="messages.js"></script>
   <script type="module" src="groups.js"></script>
-  <script type="module" src="meeting.js"></script>
+  <script type="module" src="meetings.js"></script>
 
 </body>
 </html>
+
 
 
 
