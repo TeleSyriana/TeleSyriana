@@ -1358,11 +1358,16 @@ input:focus, textarea:focus, select:focus{
       margin-top: 10px;
     }
 /* =========================
-   Meetings page (MVP)
+   Meetings Page
 ========================= */
-.meetings-card{ padding:0; overflow:hidden; background:transparent; }
 #page-meetings{ height: calc(100vh - var(--header-offset)); }
-#page-meetings .meetings-card{ height: calc(100vh - var(--header-offset)); display:flex; }
+#page-meetings .meetings-card{
+  height: calc(100vh - var(--header-offset));
+  display:flex;
+  padding:0;
+  background:transparent;
+  overflow:hidden;
+}
 
 .meetings-layout{
   display:flex;
@@ -1373,69 +1378,166 @@ input:focus, textarea:focus, select:focus{
   padding:12px;
 }
 
+/* Sidebar same "glass" feel */
 .meetings-sidebar{
   width:280px;
   flex:0 0 auto;
   border-radius:18px;
-  overflow:auto;                 /* ✅ scrolling */
-  max-height:100%;               /* ✅ */
+  overflow:hidden;
+
   background: rgba(255,255,255,.28);
   border: 1px solid rgba(255,255,255,.45);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 18px 40px rgba(0,0,0,.08);
+
   display:flex;
   flex-direction:column;
 }
 
+/* ✅ make sidebar scrollable */
+.meetings-sidebar{
+  min-height:0;
+}
+.meetings-sidebar .ms-top{ flex:0 0 auto; }
+.meetings-sidebar .create-meeting{ flex:0 0 auto; }
+.meetings-sidebar #meetings-list{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  padding-right:4px;
+}
+
+/* main panel */
 .meetings-main{
   flex:1;
   min-width:0;
   height:100%;
+
   border-radius:18px;
   overflow:hidden;
+
   background: rgba(255,255,255,.72);
   border: 1px solid rgba(255,255,255,.55);
   box-shadow: 0 18px 40px rgba(0,0,0,.08);
+
   display:flex;
   flex-direction:column;
 }
 
-.meeting-join{ padding:14px; }
+.meeting-join{ padding:12px 14px; }
 .meeting-join-row{
   display:flex;
   gap:10px;
   align-items:center;
 }
-.meeting-join-row input{ margin-top:0; }
+.meeting-join-row input{
+  border-radius:12px;
+}
+.meeting-join-row #join-meeting-id{ max-width:220px; }
+.meeting-join-row #join-meeting-pass{ max-width:260px; }
 
-.meeting-stage{ margin-top:14px; }
-.meeting-video-wrap{
-  background:#111;
+.meeting-stage{
+  margin-top:12px;
   border-radius:16px;
   overflow:hidden;
-  height:420px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  border:1px solid rgba(0,0,0,.08);
+  background:#111;
+  box-shadow:0 14px 36px rgba(0,0,0,.18);
 }
-.meeting-video-wrap video{
+
+.meeting-video-area{
+  position:relative;
+  width:100%;
+  aspect-ratio: 16 / 9;
+  background:#0b0b0b;
+}
+.meeting-video-area video{
   width:100%;
   height:100%;
   object-fit:cover;
+  display:block;
+}
+
+.meeting-label{
+  position:absolute;
+  left:10px;
+  bottom:10px;
+  display:flex;
+  gap:8px;
+  align-items:center;
+  padding:6px 10px;
+  border-radius:999px;
+  background: rgba(0,0,0,.45);
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+  backdrop-filter: blur(6px);
+}
+#meeting-live-meta{
+  font-weight:600;
+  opacity:.85;
 }
 
 .meeting-controls{
   display:flex;
   gap:10px;
-  justify-content:center;
-  margin-top:12px;
-  flex-wrap:wrap;
+  padding:10px;
+  background: rgba(255,255,255,.95);
+}
+.meeting-controls .btn-secondary{
+  width:auto;
+  padding:10px 14px;
+  margin-top:0;
+  border-radius:999px;
+}
+.meeting-controls .btn-secondary.danger{
+  background:#ffe9e9;
+  color:#8b1f1f;
+}
+.meeting-controls .btn-secondary.danger:hover{
+  background:#ffdcdc;
 }
 
+.create-meeting{ padding:10px 12px 12px; }
+.create-row{ margin-top:8px; }
+.create-row.two{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.create-meeting input{
+  border-radius:12px;
+  font-size:13px;
+}
+#create-meeting-btn{ margin-top:10px; }
+.create-hint{
+  margin-top:6px;
+  font-size:11px;
+  color:#666;
+  opacity:.9;
+}
 
+.meeting-note{
+  margin-top:10px;
+  font-size:11px;
+  color:#666;
+  opacity:.85;
+}
 
-
-
-
-
+/* Responsive */
+@media (max-width:768px){
+  .meetings-layout{
+    flex-direction:column;
+    padding:10px;
+  }
+  .meetings-sidebar{ width:100%; }
+  .meeting-join-row{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .meeting-join-row #join-meeting-id,
+  .meeting-join-row #join-meeting-pass{
+    max-width:none;
+  }
+}
