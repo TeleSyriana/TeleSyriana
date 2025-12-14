@@ -1019,6 +1019,24 @@ window.addEventListener("telesyriana:user-changed", () => {
     const r = btn.dataset.room;
     if (r && r !== "ai") registerRoomButton(String(r), btn);
   });
+window.addEventListener("telesyriana:user-changed", () => {
+  setCurrentUser();
+
+  unsubscribeAllMain();
+  unsubscribeGroupsCloud();
+  unsubscribeRecentsCloud();
+
+  clearActiveButtons();
+  activeChat = null;
+
+  setHeader("Messages", "Start chatting…");
+  setEmpty(true);
+  setInputEnabled(false);
+
+  subscribeGroupsCloud();
+  subscribeRecentsCloud();
+  subscribeStatusDots();
+});
 
   document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {
     setCurrentUser();
@@ -1029,5 +1047,6 @@ window.addEventListener("telesyriana:user-changed", () => {
     }
   });
 });
+
 
 
