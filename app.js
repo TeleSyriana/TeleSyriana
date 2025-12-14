@@ -43,6 +43,12 @@ let clockIntervalId = null;
 // floating chat UI
 let floatUIHooked = false;
 
+// 🔥 Firestore sync throttle (prevents 429)
+const SYNC_EVERY_MS = 60 * 1000; // 1 minute
+let lastSyncMs = 0;
+let lastSyncStatus = null;
+let lastSyncPayloadHash = "";
+
 /* ------------------------------ helpers --------------------------------- */
 
 function getTodayKey() {
@@ -285,10 +291,7 @@ function applyElapsedToState(nowMs) {
       state.operationMinutes += elapsedMin;
       break;
     case "break":
-      state.breakUsedMinutes = Math.min(
-        BREAK_LIMIT_MIN,
-        state.breakUsedMinutes + elapsedMin
-      );
+      state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin);
       break;
     case "meeting":
       state.meetingMinutes += elapsedMin;
@@ -306,12 +309,36 @@ function applyElapsedToState(nowMs) {
 
 /* --------------------------- Firestore sync ----------------------------- */
 
-async function syncStateToFirestore(live) {
+async function syncStateToFirestore(live, force = false) {
   if (!currentUser || !state) return;
+
+  const now = Date.now();
+
+  // ✅ don't spam Firestore
+  if (!force) {
+    // if tab is hidden, skip periodic sync
+    if (document.hidden) return;
+
+    if (now - lastSyncMs < SYNC_EVERY_MS) return;
+  }
 
   const today = state.day || getTodayKey();
   const id = `${today}_${currentUser.id}`;
-  const usage = live || recomputeLiveUsage(Date.now());
+  const usage = live || recomputeLiveUsage(now);
+
+  // ✅ small hash to avoid writing same data repeatedly
+  const payloadHash = [
+    state.status,
+    Math.floor(usage.breakUsed),
+    Math.floor(usage.operation),
+    Math.floor(usage.meeting),
+    Math.floor(usage.handling),
+    Math.floor(usage.unavailable),
+  ].join("|");
+
+  if (!force && payloadHash === lastSyncPayloadHash && state.status === lastSyncStatus) {
+    return; // no meaningful change
+  }
 
   const payload = {
     userId: currentUser.id,
@@ -330,6 +357,10 @@ async function syncStateToFirestore(live) {
   };
 
   await setDoc(doc(collection(db, AGENT_DAYS_COL), id), payload, { merge: true });
+
+  lastSyncMs = now;
+  lastSyncStatus = state.status;
+  lastSyncPayloadHash = payloadHash;
 }
 
 function subscribeSupervisorDashboard() {
@@ -380,7 +411,7 @@ function openFloatingChat() {
 }
 
 function toggleFloatingChat() {
-  if (!currentUser) return; // no user logged in
+  if (!currentUser) return;
   const panel = document.getElementById("float-chat-panel");
   if (!panel) return;
   const isHidden = panel.classList.contains("hidden");
@@ -397,21 +428,17 @@ function hookFloatingChatUI() {
   const panel = document.getElementById("float-chat-panel");
 
   toggleBtn?.addEventListener("click", () => {
-    // if user not logged in, do nothing
     if (!currentUser) return;
     toggleFloatingChat();
   });
 
-  closeBtn?.addEventListener("click", () => {
-    closeFloatingChat();
-  });
+  closeBtn?.addEventListener("click", () => closeFloatingChat());
 
   // Click outside panel closes it
   document.addEventListener("mousedown", (e) => {
     if (!panel || panel.classList.contains("hidden")) return;
     if (panel.contains(e.target)) return;
 
-    // allow clicking the toggle button without instant-close
     if (toggleBtn && (e.target === toggleBtn || toggleBtn.contains(e.target))) return;
 
     closeFloatingChat();
@@ -422,20 +449,18 @@ function hookFloatingChatUI() {
     if (e.key === "Escape") closeFloatingChat();
   });
 
-  // If user changes (login/logout) close it
-  window.addEventListener("telesyriana:user-changed", () => {
-    closeFloatingChat();
-  });
+  // user changes => close it
+  window.addEventListener("telesyriana:user-changed", () => closeFloatingChat());
 }
 
 /* --------------------------- UI init ------------------------------------ */
 
 document.addEventListener("DOMContentLoaded", () => {
-  // ✅ FIX: make sure menu taps always work (even if HTML changes slightly)
+  // ✅ menu navigation
   document.querySelectorAll(".nav-link").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       const page = btn.dataset.page;
-      if (!page) return; // ignore logout
+      if (!page) return;
       e.preventDefault();
       switchPage(page);
     });
@@ -446,8 +471,18 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
   document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
 
-  // ✅ hook floating shell once
   hookFloatingChatUI();
+
+  // ✅ final sync when user leaves tab or hides it
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden && currentUser && state) {
+      try {
+        const now = Date.now();
+        const live = recomputeLiveUsage(now);
+        await syncStateToFirestore(live, true);
+      } catch {}
+    }
+  });
 
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
@@ -466,7 +501,6 @@ document.addEventListener("DOMContentLoaded", () => {
 /* -------------------------- Pages switching ----------------------------- */
 
 function switchPage(pageId) {
-  // hide all pages
   document.querySelectorAll(".page-section").forEach((pg) => pg.classList.add("hidden"));
 
   const target = document.getElementById(`page-${pageId}`);
@@ -476,7 +510,6 @@ function switchPage(pageId) {
   }
   target.classList.remove("hidden");
 
-  // activate nav
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.page === pageId);
   });
@@ -507,9 +540,12 @@ function handleLogin(e) {
   currentUser = { id, name: USERS[id].name, role: USERS[id].role };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
-  // let messages.js know user changed
-  window.dispatchEvent(new Event("telesyriana:user-changed"));
+  // reset throttling for new session
+  lastSyncMs = 0;
+  lastSyncStatus = null;
+  lastSyncPayloadHash = "";
 
+  window.dispatchEvent(new Event("telesyriana:user-changed"));
   document.getElementById("login-error")?.classList.add("hidden");
 
   initStateForUser();
@@ -517,7 +553,6 @@ function handleLogin(e) {
 }
 
 async function handleLogout() {
-  // close floating chat on logout
   closeFloatingChat();
 
   if (currentUser && state) {
@@ -526,12 +561,14 @@ async function handleLogout() {
     state.status = "unavailable";
     state.lastStatusChange = now;
     saveState();
-    await syncStateToFirestore(recomputeLiveUsage(now));
+
+    try {
+      await syncStateToFirestore(recomputeLiveUsage(now), true); // ✅ force
+    } catch {}
   }
 
   localStorage.removeItem(USER_KEY);
 
-  // let messages.js know user changed
   window.dispatchEvent(new Event("telesyriana:user-changed"));
 
   if (timerId) clearInterval(timerId);
@@ -580,7 +617,13 @@ async function handleStatusChange(e) {
   saveState();
 
   const live = recomputeLiveUsage(now);
-  await syncStateToFirestore(live);
+
+  try {
+    await syncStateToFirestore(live, true); // ✅ force on real change
+  } catch (err) {
+    console.error("sync failed:", err);
+  }
+
   updateDashboardUI();
 }
 
@@ -642,26 +685,23 @@ function finishInit(now) {
 
   const live = recomputeLiveUsage(now);
 
-  // ✅ update UI immediately
   updateBreakUI(live.breakUsed);
   updateStatusMinutesUI(live);
-
-  // ✅ worked hours box
   updateWorkUI(computeWorkedMinutes(live));
 
-  // ✅ widgets (safe if elements not found)
   renderClockWidget();
   buildMiniCalendar();
   hookCalendarButtons();
 
-  syncStateToFirestore(live);
+  // ✅ one forced sync at init
+  syncStateToFirestore(live, true).catch(() => {});
 }
 
 /* ----------------------------- Timer ------------------------------------ */
 
 function startTimer() {
   if (timerId) clearInterval(timerId);
-  timerId = setInterval(tick, 10000);
+  timerId = setInterval(tick, 60000); // ✅ every 1 minute (prevents 429)
   tick();
 }
 
@@ -678,7 +718,10 @@ async function tick() {
     saveState();
     alert("Break limit reached. Status set to Unavailable.");
 
-    await syncStateToFirestore(recomputeLiveUsage(now));
+    try {
+      await syncStateToFirestore(recomputeLiveUsage(now), true); // ✅ force
+    } catch {}
+
     updateDashboardUI();
     return;
   }
@@ -687,7 +730,12 @@ async function tick() {
   updateStatusMinutesUI(live);
   updateWorkUI(computeWorkedMinutes(live));
 
-  await syncStateToFirestore(live);
+  // ✅ throttled sync (won't spam)
+  try {
+    await syncStateToFirestore(live, false);
+  } catch (err) {
+    console.error("tick sync error:", err);
+  }
 }
 
 /* ------------------------- Dashboard UI --------------------------------- */
@@ -788,10 +836,9 @@ function buildSupervisorTableFromFirestore(rows) {
 }
 
 /* ----------------------------- Settings --------------------------------- */
-function applyTheme(gender) {
-  // gender: "male" | "female" | "" (default)
-  const g = String(gender || "").toLowerCase().trim();
 
+function applyTheme(gender) {
+  const g = String(gender || "").toLowerCase().trim();
   document.body.removeAttribute("data-theme");
   if (g === "male" || g === "female") {
     document.body.setAttribute("data-theme", g);
@@ -807,7 +854,6 @@ async function loadUserProfile() {
   const nameEl = document.getElementById("set-name");
   if (nameEl) nameEl.value = currentUser.name;
 
-  // defaults
   const bdayEl = document.getElementById("set-birthday");
   const notesEl = document.getElementById("set-notes");
   const genderEl = document.getElementById("set-gender");
@@ -819,15 +865,12 @@ async function loadUserProfile() {
     if (notesEl) notesEl.value = d.notes || "";
     if (genderEl) genderEl.value = d.gender || "";
 
-    // ✅ apply theme on load
     applyTheme(d.gender);
   } else {
-    // no profile yet
     if (genderEl) genderEl.value = "";
     applyTheme("");
   }
 }
-
 
 async function handleSettingsSave(e) {
   e.preventDefault();
@@ -846,15 +889,13 @@ async function handleSettingsSave(e) {
       name: currentUser.name,
       birthday,
       notes,
-      gender, // ✅ NEW
+      gender,
       updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
 
-  // ✅ apply immediately without refresh
   applyTheme(gender);
-
   alert("Settings saved successfully.");
 }
 
@@ -890,5 +931,3 @@ function showDashboard() {
     clockIntervalId = setInterval(renderClockWidget, 1000);
   }
 }
-
-
