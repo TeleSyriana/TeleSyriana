@@ -126,6 +126,7 @@ body{
   color:var(--brand);
   box-shadow:0 8px 18px color-mix(in srgb, var(--brand) 22%, transparent);
   transform:translateY(-1px);
+   font-weight: 600;
 }
 
 .header-right{ text-align:right; }
@@ -1610,6 +1611,7 @@ input:focus, textarea:focus, select:focus{
   .meeting-join-row .btn-primary{ grid-column: 1 / -1; }
   .meeting-video-area{ height: 320px; }
 }
+
 
 
 
