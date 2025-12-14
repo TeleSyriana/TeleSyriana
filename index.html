@@ -553,51 +553,52 @@
       </section>
 
       <!-- GROUP MODAL -->
-      <div id="group-modal" class="modal hidden">
-        <div class="modal-title">Create Group</div>
-        <div class="modal-card">
-          <div class="modal-head">
-            <button id="group-modal-close" type="button" class="modal-x">×</button>
-          </div>
+<div id="group-modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">Create Group</div>
+      <button id="group-modal-close" type="button" class="modal-x">×</button>
+    </div>
 
-          <form id="group-create-form">
-            <label class="field">
-              <div class="label">Group name</div>
-              <input id="group-name" type="text" autocomplete="off" />
-            </label>
+    <!-- ✅ modal body padding + scroll (إذا احتجت) -->
+    <div class="modal-body" style="padding:20px; max-height:70vh; overflow:auto;">
+      <form id="group-create-form">
+        <label class="field">
+          <div class="label">Group name</div>
+          <input id="group-name" type="text" autocomplete="off" />
+        </label>
 
-            <label class="field">
-              <div class="label">Rules (optional)</div>
-              <textarea id="group-rules" rows="3"></textarea>
-            </label>
+        <label class="field">
+          <div class="label">Rules (optional)</div>
+          <textarea id="group-rules" rows="3"></textarea>
+        </label>
 
-            <div class="label" style="margin-top:10px;">Select members</div>
+        <div class="label" style="margin-top:10px;">Select members</div>
 
-            <!-- ✅ search -->
-            <input
-              type="text"
-              id="group-member-search"
-              placeholder="Search by CCMS or name..."
-              class="group-search"
-              autocomplete="off"
-            />
+        <input
+          type="text"
+          id="group-member-search"
+          placeholder="Search by CCMS or name..."
+          class="group-search"
+          autocomplete="off"
+        />
 
-            <!-- ✅ scroll container -->
-            <div id="group-members-list">
-              <label class="group-member-item"><input type="checkbox" name="group-members" value="1001"> Agent 01 (CCMS 1001)</label>
-              <label class="group-member-item"><input type="checkbox" name="group-members" value="1002"> Agent 02 (CCMS 1002)</label>
-              <label class="group-member-item"><input type="checkbox" name="group-members" value="1003"> Agent 03 (CCMS 1003)</label>
-              <label class="group-member-item"><input type="checkbox" name="group-members" value="2001"> Supervisor Dema (CCMS 2001)</label>
-              <label class="group-member-item"><input type="checkbox" name="group-members" value="2002"> Supervisor Moustafa (CCMS 2002)</label>
-            </div>
-
-            <div class="modal-actions">
-              <button type="button" id="group-cancel" class="btn-secondary">Cancel</button>
-              <button id="group-create-btn" type="submit" class="btn-primary">Create</button>
-            </div>
-          </form>
+        <div id="group-members-list">
+          <label class="group-member-item"><input type="checkbox" name="group-members" value="1001"> Agent 01 (CCMS 1001)</label>
+          <label class="group-member-item"><input type="checkbox" name="group-members" value="1002"> Agent 02 (CCMS 1002)</label>
+          <label class="group-member-item"><input type="checkbox" name="group-members" value="1003"> Agent 03 (CCMS 1003)</label>
+          <label class="group-member-item"><input type="checkbox" name="group-members" value="2001"> Supervisor Dema (CCMS 2001)</label>
+          <label class="group-member-item"><input type="checkbox" name="group-members" value="2002"> Supervisor Moustafa (CCMS 2002)</label>
         </div>
-      </div>
+
+        <div class="modal-actions">
+          <button type="button" id="group-cancel" class="btn-secondary">Cancel</button>
+          <button id="group-create-btn" type="submit" class="btn-primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
       <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
@@ -657,4 +658,5 @@
   <script type="module" src="groups.js"></script>
 </body>
 </html>
+
 
