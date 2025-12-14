@@ -15,7 +15,13 @@
       <nav id="main-nav" class="main-nav hidden">
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
-        <button class="nav-link" data-page="messages">Messages</button>
+
+        <!-- ✅ UPDATED: Messages nav badge holder -->
+        <button class="nav-link" data-page="messages" id="nav-messages">
+          Messages
+          <span id="nav-messages-badge" class="nav-unread-badge hidden">0</span>
+        </button>
+
         <button class="nav-link" data-page="settings">Settings</button>
 
         <div class="actions">
@@ -602,21 +608,3 @@
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
