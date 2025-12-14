@@ -203,6 +203,20 @@ async function fileToDataURL(file) {
   });
 }
 
+const memberSearchInput = document.getElementById("group-member-search");
+const membersList = document.getElementById("group-members-list");
+
+if (memberSearchInput && membersList) {
+  memberSearchInput.addEventListener("input", () => {
+    const q = memberSearchInput.value.toLowerCase().trim();
+
+    membersList.querySelectorAll(".group-member-item").forEach((item) => {
+      const text = item.textContent.toLowerCase();
+      item.style.display = text.includes(q) ? "" : "none";
+    });
+  });
+}
+
 // --------- state ----------
 let unsubGroups = null;
 let groupsCache = []; // latest visible groups
