@@ -1341,8 +1341,8 @@ input:focus, textarea:focus, select:focus{
 
     /* member item spacing */
     .group-member-item {
-      display: auto;
-      padding: 10px 8px;
+      display: bock;
+      padding: auto;
       border-radius: 10px;
     }
     .group-member-item:hover {
