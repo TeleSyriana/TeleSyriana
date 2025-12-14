@@ -21,6 +21,8 @@
           Messages
           <span id="nav-messages-badge" class="nav-unread-badge hidden">0</span>
         </button>
+        <button class="nav-link" data-page="meetings">Meetings</button>
+
 
         <button class="nav-link" data-page="settings">Settings</button>
 
@@ -563,6 +565,62 @@
   </div>
 </div>
 
+      <!-- Meeting Page -->
+      <section id="page-meetings" class="page-section hidden">
+  <section class="card meetings-card">
+    <div class="meetings-layout">
+      <!-- LEFT: upcoming + search -->
+      <aside class="meetings-sidebar glass">
+        <div class="ms-top">
+          <div class="ms-title">Meetings</div>
+
+          <div class="ms-search">
+            <input id="meeting-search" type="text" placeholder="Search meeting ID / agent…" autocomplete="off" />
+            <button type="button" class="ms-search-x" title="Clear">×</button>
+          </div>
+        </div>
+
+        <div class="meetings-sidebar-header">Upcoming</div>
+        <div id="meetings-list" class="ms-list"></div>
+        <div class="ms-empty" id="meetings-empty">No upcoming meetings</div>
+      </aside>
+
+      <!-- RIGHT: join panel + video -->
+      <div class="meetings-main">
+        <header class="chat-header">
+          <div>
+            <div class="chat-room-name">Join meeting</div>
+            <div class="chat-room-desc">Enter Meeting ID + password</div>
+          </div>
+        </header>
+
+        <div class="meeting-join">
+          <div class="meeting-join-row">
+            <input id="join-meeting-id" type="text" placeholder="Meeting ID" />
+            <input id="join-meeting-pass" type="password" placeholder="Password" />
+            <button id="join-meeting-btn" class="btn-primary" type="button" style="width:auto;padding:10px 16px">Join</button>
+          </div>
+
+          <div class="meeting-stage hidden" id="meeting-stage">
+            <div class="meeting-video-wrap">
+              <video id="local-video" autoplay playsinline muted></video>
+            </div>
+
+            <div class="meeting-controls">
+              <button id="btn-mic" class="btn-secondary" type="button">🎤 Mute</button>
+              <button id="btn-cam" class="btn-secondary" type="button">📷 Camera off</button>
+              <button id="btn-hand" class="btn-secondary" type="button">✋ Raise hand</button>
+              <button id="btn-leave" class="btn-secondary" type="button">⛔ Leave</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</section>
+
+
       <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
         <div class="card">
@@ -619,8 +677,11 @@
   <script type="module" src="tasks.js"></script>
   <script type="module" src="messages.js"></script>
   <script type="module" src="groups.js"></script>
+  <script type="module" src="meetings.js"></script>
+
 </body>
 </html>
+
 
 
 
