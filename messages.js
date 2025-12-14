@@ -1,754 +1,1149 @@
-// meetings.js — Firestore meetings + WebRTC Mesh (10 ppl demo)
-// ✅ GitHub Pages compatible (no server), Firestore signaling
-// ✅ delete meeting (soft cancel), one meeting per host (client-enforced), show/copy password
-// ⚠️ For some networks you may need TURN later
+// messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots
+// ✅ Recents (CLOUD, AFTER SEND ONLY) + Search by name/room/CCMS + Glass sidebar support
+// ✅ Groups (CLOUD) + Groups open via events (telesyriana:open-group / telesyriana:open-room)
+// ✅ Unread counters (true count + 99+) on each chat item + nav Messages badge
+// ✅ Beep sound on new incoming messages (Sounds/Beep.mp3)
+// ✅ NO alert() on firestore snapshot errors (console only)
 
 import { db, fs } from "./firebase.js";
 
 const {
   collection,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
+  addDoc,
   query,
   where,
   orderBy,
-  limit,
   onSnapshot,
   serverTimestamp,
-  Timestamp,
-  runTransaction,
+  doc,
+  setDoc,
 } = fs;
 
-const MEETINGS_COL = "meetings";
+const USER_KEY = "telesyrianaUser";
 
-// guard
-if (window.__TS_MEETINGS_INIT__) {
-  // do nothing
-} else {
-  window.__TS_MEETINGS_INIT__ = true;
+const MESSAGES_COL = "globalMessages";
+const AGENT_DAYS_COL = "agentDays";
+const GROUPS_COL = "groups";
 
-  let unsubUpcoming = null;
+// Cloud recents:
+// userRecents/{userId}/items/{recentId}
+const RECENTS_ROOT = "userRecents";
 
-  // ---- WebRTC state ----
-  let localStream = null;
-  let activeMeetingId = null;
-  let pcs = new Map(); // peerId -> RTCPeerConnection
-  let remoteStreams = new Map(); // peerId -> MediaStream
-  let unsubParticipants = null;
-  let unsubsCalls = new Map(); // callId -> unsub
-  let myUser = null;
+const PAGE_SIZE = 50;
+const MAX_RENDER = 600;
 
-  let allUpcoming = [];
+let currentUser = null;
+let activeChat = null;
 
-  // -------------------- DOM --------------------
-  const elSearch = document.getElementById("meeting-search");
-  const elSearchClear = document.getElementById("meeting-search-clear");
+let unsubscribeMain = null;
+let unsubscribeFloat = null;
+let unsubscribeStatus = null;
+let unsubscribeGroups = null;
+let unsubscribeRecents = null;
 
-  const elCreateBox = document.getElementById("create-meeting-box");
-  const elCreateTitle = document.getElementById("create-title");
-  const elCreateDate = document.getElementById("create-date");
-  const elCreateTime = document.getElementById("create-time");
-  const elCreateId = document.getElementById("create-id");
-  const elCreatePass = document.getElementById("create-pass");
-  const btnNewPass = document.getElementById("btn-new-pass");
-  const btnCreate = document.getElementById("create-meeting-btn");
-  const btnShowPass = document.getElementById("btn-show-pass");
-  const btnCopyPass = document.getElementById("btn-copy-pass");
+let roomCache = []; // ASC
+let renderedCount = 0;
+let scrollBoundEl = null;
 
-  const elList = document.getElementById("meetings-list");
-  const elEmpty = document.getElementById("meetings-empty");
+// sidebar refs
+let dmListEl = null;
+let recentListEl = null;
+let groupsListEl = null;
 
-  const joinId = document.getElementById("join-meeting-id");
-  const joinPass = document.getElementById("join-meeting-pass");
-  const joinBtn = document.getElementById("join-meeting-btn");
+// caches
+let groupsCache = [];  // [{id, name, rules, members, createdAt}]
+let recentsCache = []; // [{id, type, roomId, title, desc, lastTs, otherId?}]
 
-  const stage = document.getElementById("meeting-stage");
-  const grid = document.getElementById("meeting-grid");
-  const liveTitle = document.getElementById("meeting-live-title");
-  const liveMeta = document.getElementById("meeting-live-meta");
+// ---------------- ✅ Beep (Sounds/Beep.mp3) ----------------
 
-  const micBtn = document.getElementById("btn-mic");
-  const camBtn = document.getElementById("btn-cam");
-  const handBtn = document.getElementById("btn-hand");
-  const leaveBtn = document.getElementById("btn-leave");
+const BEEP_SRC = "Sounds/Beep.mp3";
+let beepAudio = null;
 
-  // -------------------- helpers --------------------
-  function getCurrentUser() {
-    try {
-      return JSON.parse(localStorage.getItem("telesyrianaUser") || "null");
-    } catch {
-      return null;
+// per-room last beep guard (ms)
+const lastBeepMsByRoom = new Map();
+
+function initBeep() {
+  try {
+    if (!beepAudio) {
+      beepAudio = new Audio(BEEP_SRC);
+      beepAudio.preload = "auto";
+      beepAudio.volume = 1;
     }
+  } catch (e) {
+    console.warn("Beep init failed:", e);
   }
-
-  function pad4(n) {
-    return String(n).padStart(4, "0");
-  }
-
-  function randomPassword(len = 6) {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let out = "";
-    for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
-    return out;
-  }
-
-  function toLocalDateInput(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  }
-
-  function toLocalTimeInput(d) {
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    return `${hh}:${mm}`;
-  }
-
-  function parseStartAt(dateStr, timeStr) {
-    if (!dateStr || !timeStr) return null;
-    const [y, m, d] = dateStr.split("-").map(Number);
-    const [hh, mm] = timeStr.split(":").map(Number);
-    const local = new Date(y, m - 1, d, hh, mm, 0, 0);
-    return Timestamp.fromDate(local);
-  }
-
-  function formatStartAt(ts) {
-    try {
-      const d = ts?.toDate?.();
-      if (!d) return "";
-      return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-    } catch {
-      return "";
-    }
-  }
-
-  function escapeHtml(s) {
-    return String(s || "").replace(/[&<>"']/g, (m) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;",
-    }[m]));
-  }
-
-  function pairId(a, b) {
-    const x = String(a), y = String(b);
-    return x < y ? `${x}_${y}` : `${y}_${x}`;
-  }
-
-  function isInitiator(meId, otherId) {
-    // smaller id is initiator to avoid double offers
-    const x = String(meId), y = String(otherId);
-    return x < y;
-  }
-
-  // -------------------- meeting ID transaction --------------------
-  async function nextMeetingId() {
-    const ref = doc(db, "meta", "counters");
-    const idNum = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(ref);
-      let next = 1;
-      if (snap.exists()) {
-        const d = snap.data();
-        next = Number(d.meetingNext || 1);
-      }
-      tx.set(ref, { meetingNext: next + 1 }, { merge: true });
-      return next;
-    });
-    return pad4(idNum);
-  }
-
-  // -------------------- UI: render upcoming --------------------
-  function renderList(list) {
-    if (!elList || !elEmpty) return;
-
-    elList.innerHTML = "";
-    if (!list.length) {
-      elEmpty.classList.remove("hidden");
-      return;
-    }
-    elEmpty.classList.add("hidden");
-
-    const user = getCurrentUser();
-
-    list.forEach((m) => {
-      const wrap = document.createElement("div");
-      wrap.style.display = "flex";
-      wrap.style.gap = "8px";
-      wrap.style.alignItems = "center";
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "meeting-item";
-      btn.style.flex = "1";
-
-      btn.innerHTML = `
-        <div class="meeting-row">
-          <div class="meeting-badge">M</div>
-          <div class="meeting-text">
-            <div class="meeting-title">
-              ${escapeHtml(m.title || "Meeting")} <span class="meeting-id">#${escapeHtml(m.meetingId)}</span>
-            </div>
-            <div class="meeting-sub">
-              ${escapeHtml(formatStartAt(m.startAt))} • Host: ${escapeHtml(m.hostName || m.hostId || "-")}
-              ${m.status === "cancelled" ? " • (cancelled)" : ""}
-            </div>
-          </div>
-        </div>
-      `;
-
-      btn.addEventListener("click", () => {
-        if (joinId) joinId.value = m.meetingId || "";
-        joinPass?.focus?.();
-      });
-
-      wrap.appendChild(btn);
-
-      // ✅ supervisor can cancel own meeting
-      const canDelete = user?.role === "supervisor" && String(m.hostId || "") === String(user.id || "");
-      if (canDelete) {
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "btn-secondary danger";
-        del.textContent = "🗑";
-        del.title = "Cancel meeting";
-        del.addEventListener("click", async () => {
-          if (!confirm(`Cancel meeting #${m.meetingId}?`)) return;
-          try {
-            await updateDoc(doc(db, MEETINGS_COL, String(m.meetingId)), {
-              status: "cancelled",
-              cancelledAt: serverTimestamp(),
-            });
-          } catch (e) {
-            console.error(e);
-            alert("Cancel failed (rules/quota).");
-          }
-        });
-        wrap.appendChild(del);
-      }
-
-      elList.appendChild(wrap);
-    });
-  }
-
-  function applySearch(q) {
-    const s = String(q || "").trim().toLowerCase();
-    const filtered = !s
-      ? allUpcoming
-      : allUpcoming.filter((m) => {
-          const hay = `${m.meetingId || ""} ${m.title || ""} ${m.hostName || ""} ${m.hostId || ""}`.toLowerCase();
-          return hay.includes(s);
-        });
-
-    renderList(filtered);
-  }
-
-  // -------------------- Firestore: subscribe upcoming --------------------
-  function subscribeUpcoming() {
-    if (unsubUpcoming) return;
-
-    const now = Timestamp.fromDate(new Date());
-    const qy = query(
-      collection(db, MEETINGS_COL),
-      where("startAt", ">=", now),
-      orderBy("startAt", "asc"),
-      limit(50)
-    );
-
-    unsubUpcoming = onSnapshot(
-      qy,
-      (snap) => {
-        const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        // ✅ filter cancelled locally (avoid composite indexes)
-        allUpcoming = arr.filter((m) => (m.status || "scheduled") !== "cancelled");
-        applySearch(elSearch?.value || "");
-      },
-      (err) => {
-        console.error("Meetings snapshot error:", err);
-        allUpcoming = [];
-        renderList([]);
-      }
-    );
-  }
-
-  // -------------------- Create meeting (supervisor) --------------------
-  async function prepareCreateDefaults() {
-    if (!elCreateId || !elCreatePass || !elCreateDate || !elCreateTime) return;
-
-    const d = new Date();
-    d.setMinutes(d.getMinutes() + 15);
-
-    elCreateDate.value = toLocalDateInput(d);
-    elCreateTime.value = toLocalTimeInput(d);
-
-    elCreateId.value = await nextMeetingId();
-    elCreatePass.value = randomPassword(6);
-  }
-
-  async function createMeeting() {
-    const user = getCurrentUser();
-    if (!user || user.role !== "supervisor") return alert("Supervisor only.");
-
-    // ✅ one active meeting per host (client-enforced)
-    // check if there is already a scheduled meeting by me in upcoming cache:
-    const already = allUpcoming.find((m) => String(m.hostId || "") === String(user.id) && (m.status || "scheduled") === "scheduled");
-    if (already) {
-      return alert(`You already have one upcoming meeting (#${already.meetingId}). Cancel it first.`);
-    }
-
-    const title = (elCreateTitle?.value || "").trim() || "Meeting";
-    const startAt = parseStartAt(elCreateDate?.value, elCreateTime?.value);
-    if (!startAt) return alert("Choose date & time.");
-
-    const meetingId = (elCreateId?.value || "").trim();
-    const password = (elCreatePass?.value || "").trim();
-    if (!meetingId || !password) return alert("Missing Meeting ID or password.");
-
-    const payload = {
-      meetingId,
-      password, // demo only (later: hash or move to server)
-      title,
-      startAt,
-      hostId: user.id,
-      hostName: user.name,
-      createdAt: serverTimestamp(),
-      status: "scheduled",
-    };
-
-    await setDoc(doc(db, MEETINGS_COL, meetingId), payload, { merge: true });
-
-    await prepareCreateDefaults();
-    alert(`Created ✅\nMeeting ID: ${meetingId}\nPassword: ${password}`);
-  }
-
-  // -------------------- WebRTC: UI tiles --------------------
-  function clearGrid() {
-    if (!grid) return;
-    grid.innerHTML = "";
-  }
-
-  function ensureTile(peerId, label, stream, isLocal = false) {
-    if (!grid) return;
-
-    const id = `tile_${String(peerId)}`;
-    let tile = document.getElementById(id);
-    if (!tile) {
-      tile = document.createElement("div");
-      tile.className = "video-tile";
-      tile.id = id;
-
-      const vid = document.createElement("video");
-      vid.autoplay = true;
-      vid.playsInline = true;
-      vid.muted = !!isLocal; // local muted to prevent echo
-
-      const bar = document.createElement("div");
-      bar.className = "tile-bar";
-      bar.innerHTML = `
-        <span>${escapeHtml(label || peerId)}</span>
-        <span style="display:flex; gap:8px; align-items:center;">
-          <button class="tile-btn" data-full>⛶</button>
-        </span>
-      `;
-
-      bar.querySelector("[data-full]")?.addEventListener("click", () => {
-        try {
-          const el = tile;
-          if (el.requestFullscreen) el.requestFullscreen();
-        } catch {}
-      });
-
-      tile.appendChild(vid);
-      tile.appendChild(bar);
-      grid.appendChild(tile);
-    }
-
-    const video = tile.querySelector("video");
-    if (video && stream && video.srcObject !== stream) {
-      video.srcObject = stream;
-    }
-  }
-
-  // -------------------- WebRTC: create PC --------------------
-  function createPeerConnection(otherId) {
-    const iceServers = [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-    ];
-
-    const pc = new RTCPeerConnection({ iceServers });
-
-    // send my tracks
-    if (localStream) {
-      localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
-    }
-
-    // receive remote
-    pc.ontrack = (ev) => {
-      const [stream] = ev.streams;
-      if (!stream) return;
-      remoteStreams.set(otherId, stream);
-      ensureTile(otherId, `CCMS ${otherId}`, stream, false);
-    };
-
-    pc.onconnectionstatechange = () => {
-      const st = pc.connectionState;
-      // console.log("pc state", otherId, st);
-      if (st === "failed" || st === "disconnected" || st === "closed") {
-        // keep UI, but you can remove tile if you want
-      }
-    };
-
-    pcs.set(otherId, pc);
-    return pc;
-  }
-
-  function pcFor(otherId) {
-    return pcs.get(otherId) || createPeerConnection(otherId);
-  }
-
-  // -------------------- WebRTC: signaling paths --------------------
-  function callDocRef(meetingId, callId) {
-    return doc(db, MEETINGS_COL, String(meetingId), "calls", String(callId));
-  }
-  function callCandidatesCol(meetingId, callId, side) {
-    // side: "offerCandidates" | "answerCandidates"
-    return collection(db, MEETINGS_COL, String(meetingId), "calls", String(callId), side);
-  }
-  function participantsCol(meetingId) {
-    return collection(db, MEETINGS_COL, String(meetingId), "participants");
-  }
-  function participantRef(meetingId, userId) {
-    return doc(db, MEETINGS_COL, String(meetingId), "participants", String(userId));
-  }
-
-  // initiator (smaller id) creates offer
-  async function startCallAsInitiator(meetingId, otherId) {
-    const callId = pairId(myUser.id, otherId);
-    if (unsubsCalls.has(callId)) return; // already
-
-    const pc = pcFor(otherId);
-    const callRef = callDocRef(meetingId, callId);
-
-    // ICE -> offerCandidates
-    pc.onicecandidate = async (ev) => {
-      if (!ev.candidate) return;
-      try {
-        const col = callCandidatesCol(meetingId, callId, "offerCandidates");
-        await setDoc(doc(col), ev.candidate.toJSON());
-      } catch (e) {
-        console.warn("offerCandidates write failed", e);
-      }
-    };
-
-    // create offer
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    await setDoc(callRef, {
-      a: String(myUser.id),
-      b: String(otherId),
-      offer: { type: offer.type, sdp: offer.sdp },
-      createdAt: serverTimestamp(),
-    }, { merge: true });
-
-    // listen for answer
-    const unsub = onSnapshot(callRef, async (snap) => {
-      const data = snap.data();
-      if (!data) return;
-
-      if (data.answer && !pc.currentRemoteDescription) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      }
-    });
-    unsubsCalls.set(callId, unsub);
-
-    // listen answer candidates
-    onSnapshot(callCandidatesCol(meetingId, callId, "answerCandidates"), (snap) => {
-      snap.docChanges().forEach(async (ch) => {
-        if (ch.type !== "added") return;
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(ch.doc.data()));
-        } catch {}
-      });
-    });
-  }
-
-  // callee (bigger id) answers
-  async function ensureAnsweringListener(meetingId, otherId) {
-    const callId = pairId(myUser.id, otherId);
-    if (unsubsCalls.has(callId)) return;
-
-    const callRef = callDocRef(meetingId, callId);
-    const pc = pcFor(otherId);
-
-    // ICE -> answerCandidates
-    pc.onicecandidate = async (ev) => {
-      if (!ev.candidate) return;
-      try {
-        const col = callCandidatesCol(meetingId, callId, "answerCandidates");
-        await setDoc(doc(col), ev.candidate.toJSON());
-      } catch (e) {
-        console.warn("answerCandidates write failed", e);
-      }
-    };
-
-    const unsub = onSnapshot(callRef, async (snap) => {
-      const data = snap.data();
-      if (!data) return;
-
-      // only if offer exists and answer not set
-      if (data.offer && !data.answer) {
-        if (!pc.currentRemoteDescription) {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        }
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        await setDoc(callRef, {
-          answer: { type: answer.type, sdp: answer.sdp },
-          answeredAt: serverTimestamp(),
-        }, { merge: true });
-      }
-
-      // if offer exists and we haven't set it yet, still set it
-      if (data.offer && !pc.currentRemoteDescription) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      }
-    });
-
-    unsubsCalls.set(callId, unsub);
-
-    // listen offer candidates
-    onSnapshot(callCandidatesCol(meetingId, callId, "offerCandidates"), (snap) => {
-      snap.docChanges().forEach(async (ch) => {
-        if (ch.type !== "added") return;
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(ch.doc.data()));
-        } catch {}
-      });
-    });
-  }
-
-  // -------------------- Join meeting (REAL WebRTC) --------------------
-  async function joinMeeting() {
-    const user = getCurrentUser();
-    if (!user) return alert("Login first.");
-    myUser = user;
-
-    const id = (joinId?.value || "").trim();
-    const pass = (joinPass?.value || "").trim();
-    if (!id || !pass) return alert("Enter Meeting ID + password.");
-
-    // validate
-    const snap = await getDoc(doc(db, MEETINGS_COL, id));
-    if (!snap.exists()) return alert("Meeting not found.");
-
-    const data = snap.data();
-    if ((data.password || "") !== pass) return alert("Wrong password.");
-    if ((data.status || "scheduled") === "cancelled") return alert("Meeting cancelled.");
-
-    activeMeetingId = String(id);
-
-    // local media
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    } catch {
-      return alert("Camera/Mic blocked. Please allow permissions.");
-    }
-
-    // UI
-    stage?.classList.remove("hidden");
-    if (liveTitle) liveTitle.textContent = data.title || "In meeting";
-    if (liveMeta) liveMeta.textContent = `#${data.meetingId} • ${formatStartAt(data.startAt)}`;
-    clearGrid();
-    ensureTile(myUser.id, `${myUser.name || "Me"} (You)`, localStream, true);
-
-    // add me to participants
-    try {
-      await setDoc(participantRef(activeMeetingId, myUser.id), {
-        userId: String(myUser.id),
-        name: myUser.name || "",
-        role: myUser.role || "",
-        joinedAt: serverTimestamp(),
-        lastSeen: serverTimestamp(),
-      }, { merge: true });
-    } catch (e) {
-      console.error(e);
-      alert("Join failed (Firestore rules/quota).");
-      return;
-    }
-
-    // subscribe participants (auto-manage 2..10)
-    unsubParticipants?.();
-    unsubParticipants = onSnapshot(participantsCol(activeMeetingId), async (psnap) => {
-      const ids = [];
-      psnap.forEach((d) => {
-        const p = d.data() || {};
-        if (p.userId) ids.push(String(p.userId));
-      });
-
-      const others = ids.filter((x) => x !== String(myUser.id));
-
-      // create connections for everyone (mesh)
-      for (const otherId of others.slice(0, 9)) { // allow up to 10 total (me + 9)
-        if (!pcs.has(otherId)) {
-          createPeerConnection(otherId);
-        }
-
-        if (isInitiator(myUser.id, otherId)) {
-          startCallAsInitiator(activeMeetingId, otherId).catch(console.error);
-        } else {
-          ensureAnsweringListener(activeMeetingId, otherId).catch(console.error);
-        }
-      }
-    });
-  }
-
-  // -------------------- Leave meeting --------------------
-  async function leaveMeeting() {
-    // stop listeners
-    unsubParticipants?.();
-    unsubParticipants = null;
-
-    unsubsCalls.forEach((u) => {
-      try { u?.(); } catch {}
-    });
-    unsubsCalls.clear();
-
-    // close peer connections
-    pcs.forEach((pc) => {
-      try { pc.close(); } catch {}
-    });
-    pcs.clear();
-    remoteStreams.clear();
-
-    // stop local
-    if (localStream) {
-      localStream.getTracks().forEach((t) => t.stop());
-      localStream = null;
-    }
-
-    // remove participant doc (best-effort)
-    if (activeMeetingId && myUser?.id) {
-      try {
-        // Firestore client deleteDoc not imported; do soft "leftAt"
-        await setDoc(participantRef(activeMeetingId, myUser.id), {
-          leftAt: serverTimestamp(),
-          active: false,
-        }, { merge: true });
-      } catch {}
-    }
-
-    activeMeetingId = null;
-    clearGrid();
-    stage?.classList.add("hidden");
-  }
-
-  // -------------------- controls --------------------
-  function toggleMic() {
-    if (!localStream) return;
-    const t = localStream.getAudioTracks()[0];
-    if (!t) return;
-    t.enabled = !t.enabled;
-    if (micBtn) micBtn.textContent = t.enabled ? "🎤 Mute" : "🔇 Unmute";
-  }
-
-  function toggleCam() {
-    if (!localStream) return;
-    const t = localStream.getVideoTracks()[0];
-    if (!t) return;
-    t.enabled = !t.enabled;
-    if (camBtn) camBtn.textContent = t.enabled ? "📷 Camera off" : "🚫 Camera on";
-  }
-
-  function raiseHand() {
-    if (!handBtn) return;
-    handBtn.textContent = "✋ Raised";
-    setTimeout(() => (handBtn.textContent = "✋ Raise hand"), 1200);
-  }
-
-  // -------------------- init --------------------
-  function initMeetings() {
-    const user = getCurrentUser();
-
-    // supervisor create UI
-    if (elCreateBox) {
-      const show = !!user && user.role === "supervisor";
-      elCreateBox.classList.toggle("hidden", !show);
-      if (show) prepareCreateDefaults().catch(console.error);
-    }
-
-    subscribeUpcoming();
-
-    // search
-    elSearch?.addEventListener("input", () => applySearch(elSearch.value));
-    elSearchClear?.addEventListener("click", () => {
-      if (elSearch) elSearch.value = "";
-      applySearch("");
-    });
-
-    // create
-    btnNewPass?.addEventListener("click", () => {
-      if (elCreatePass) {
-        elCreatePass.value = randomPassword(6);
-      }
-    });
-
-    btnCreate?.addEventListener("click", () => {
-      createMeeting().catch((e) => {
-        console.error(e);
-        alert("Create failed (check Firestore rules/quota).");
-      });
-    });
-
-    // show/copy password
-    btnShowPass?.addEventListener("click", () => {
-      if (!elCreatePass) return;
-      elCreatePass.type = elCreatePass.type === "password" ? "text" : "password";
-      btnShowPass.textContent = elCreatePass.type === "password" ? "👁 Show" : "🙈 Hide";
-    });
-
-    btnCopyPass?.addEventListener("click", async () => {
-      const v = (elCreatePass?.value || "").trim();
-      if (!v) return;
-      try {
-        await navigator.clipboard.writeText(v);
-        btnCopyPass.textContent = "✅ Copied";
-        setTimeout(() => (btnCopyPass.textContent = "📋 Copy"), 900);
-      } catch {
-        alert("Copy failed (browser permissions).");
-      }
-    });
-
-    // join
-    joinBtn?.addEventListener("click", () => {
-      joinMeeting().catch((e) => {
-        console.error(e);
-        alert("Join failed (rules / network).");
-      });
-    });
-
-    micBtn?.addEventListener("click", toggleMic);
-    camBtn?.addEventListener("click", toggleCam);
-    handBtn?.addEventListener("click", raiseHand);
-    leaveBtn?.addEventListener("click", () => {
-      leaveMeeting().catch(console.error);
-    });
-
-    // user changed
-    window.addEventListener("telesyriana:user-changed", () => {
-      const u = getCurrentUser();
-      const show = !!u && u.role === "supervisor";
-      elCreateBox?.classList.toggle("hidden", !show);
-      if (show) prepareCreateDefaults().catch(console.error);
-    });
-  }
-
-  document.addEventListener("DOMContentLoaded", initMeetings);
 }
+
+function playBeepOnce(roomId, ms) {
+  try {
+    initBeep();
+    if (!beepAudio) return;
+
+    const key = String(roomId || "");
+    const t = Number(ms || Date.now());
+    const last = Number(lastBeepMsByRoom.get(key) || 0);
+    if (t && t <= last) return;
+
+    lastBeepMsByRoom.set(key, t);
+
+    beepAudio.currentTime = 0;
+    const p = beepAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {
+        // autoplay restrictions ممكن تمنع أول مرة قبل أي تفاعل
+      });
+    }
+  } catch (e) {
+    console.warn("Beep play failed:", e);
+  }
+}
+
+// ---------------- ✅ Unread counters ----------------
+
+const LAST_SEEN_PREFIX = "telesyrianaLastSeen:";
+const unreadByRoom = new Map();     // roomId -> count
+const lastMsgTsByRoom = new Map();  // roomId -> ms
+const unreadUnsubs = new Map();     // roomId -> unsubscribe()
+const roomButtons = new Map();      // roomId -> Set(buttons)
+
+let navMessagesBtn = null;
+let navMessagesBadge = null;
+
+function lastSeenKey(roomId) {
+  return `${LAST_SEEN_PREFIX}${String(roomId || "")}`;
+}
+function getLastSeen(roomId) {
+  try {
+    const raw = localStorage.getItem(lastSeenKey(roomId));
+    const n = Number(raw || 0);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+function setLastSeen(roomId, ms) {
+  try {
+    const v = Number(ms || Date.now());
+    localStorage.setItem(lastSeenKey(roomId), String(v));
+  } catch {}
+}
+
+function formatBadgeNumber(n) {
+  const x = Number(n || 0);
+  if (x <= 0) return "0";
+  return x >= 100 ? "99+" : String(x);
+}
+
+function ensureNavBadge() {
+  const btn = document.querySelector(`.nav-link[data-page="messages"]`);
+  if (!btn) return;
+
+  navMessagesBtn = btn;
+
+  if (!navMessagesBtn.id) navMessagesBtn.id = "nav-messages";
+  if (navMessagesBtn.id !== "nav-messages") navMessagesBtn.id = "nav-messages";
+
+  navMessagesBadge = document.getElementById("nav-messages-badge");
+  if (!navMessagesBadge) {
+    navMessagesBadge = document.createElement("span");
+    navMessagesBadge.id = "nav-messages-badge";
+    navMessagesBadge.className = "hidden";
+    navMessagesBadge.textContent = "0";
+    navMessagesBtn.appendChild(navMessagesBadge);
+  }
+}
+
+function ensureUnreadBadge(btnEl) {
+  if (!btnEl) return null;
+  let b = btnEl.querySelector(":scope > .unread-badge");
+  if (!b) {
+    b = document.createElement("span");
+    b.className = "unread-badge hidden";
+    b.textContent = "0";
+    btnEl.appendChild(b);
+  }
+  return b;
+}
+
+function setBadgeCountOnButton(btnEl, count) {
+  const b = ensureUnreadBadge(btnEl);
+  if (!b) return;
+
+  const n = Number(count || 0);
+  if (n > 0) {
+    b.textContent = formatBadgeNumber(n);
+    b.classList.remove("hidden");
+  } else {
+    b.classList.add("hidden");
+  }
+}
+
+function updateNavBadge() {
+  ensureNavBadge();
+  if (!navMessagesBadge) return;
+
+  let total = 0;
+  unreadByRoom.forEach((v) => (total += Number(v || 0)));
+
+  if (total > 0) {
+    navMessagesBadge.textContent = formatBadgeNumber(total);
+    navMessagesBadge.classList.remove("hidden");
+  } else {
+    navMessagesBadge.classList.add("hidden");
+  }
+}
+
+function updateBadgesForRoom(roomId) {
+  const key = String(roomId);
+  const count = Number(unreadByRoom.get(key) || 0);
+
+  const btns = roomButtons.get(key);
+  if (btns && btns.size) {
+    btns.forEach((btn) => setBadgeCountOnButton(btn, count));
+  }
+
+  updateNavBadge();
+}
+
+function registerRoomButton(roomId, btnEl) {
+  if (!roomId || !btnEl) return;
+  const key = String(roomId);
+
+  ensureUnreadBadge(btnEl);
+
+  if (!roomButtons.has(key)) roomButtons.set(key, new Set());
+  roomButtons.get(key).add(btnEl);
+
+  updateBadgesForRoom(key);
+  ensureUnreadWatcher(key);
+}
+
+function restartUnreadWatcher(roomId) {
+  const key = String(roomId);
+  const u = unreadUnsubs.get(key);
+  if (u) {
+    try { u(); } catch {}
+  }
+  unreadUnsubs.delete(key);
+  ensureUnreadWatcher(key);
+}
+
+function markRoomRead(roomId) {
+  const key = String(roomId);
+  const lastTs = Number(lastMsgTsByRoom.get(key) || Date.now());
+  setLastSeen(key, lastTs);
+  unreadByRoom.set(key, 0);
+  updateBadgesForRoom(key);
+  restartUnreadWatcher(key);
+}
+
+function ensureUnreadWatcher(roomId) {
+  const key = String(roomId);
+  if (!key) return;
+  if (unreadUnsubs.has(key)) return;
+
+  const seen = getLastSeen(key);
+  const seenDate = new Date(seen || 0);
+
+  const qUnread = query(
+    collection(db, MESSAGES_COL),
+    where("room", "==", key),
+    where("ts", ">", seenDate),
+    orderBy("ts", "asc")
+  );
+
+  const unsub = onSnapshot(
+    qUnread,
+    (snap) => {
+      setCurrentUser();
+
+      let cnt = 0;
+      let latest = 0;
+
+      // ✅ Beep only on newly added docs (not every render)
+      const changes = snap.docChanges ? snap.docChanges() : [];
+      changes.forEach((ch) => {
+        if (ch.type !== "added") return;
+        const data = ch.doc?.data?.() || {};
+        const ms = tsToNumber(data.ts) || 0;
+        const from = String(data.userId || "");
+        const me = String(currentUser?.id || "");
+
+        if (ms && ms > latest) latest = ms;
+
+        // ✅ Beep only if user is NOT inside this chat
+        if (activeChat?.roomId && String(activeChat.roomId) === key) return;
+
+        // beep on incoming only
+        if (from && me && from !== me) {
+          playBeepOnce(key, ms || Date.now());
+        }
+      });
+
+      // count all unread (excluding my own)
+      snap.forEach((d) => {
+        const data = d.data() || {};
+        const ms = tsToNumber(data.ts) || 0;
+        if (ms > latest) latest = ms;
+
+        const from = String(data.userId || "");
+        const me = String(currentUser?.id || "");
+        if (from && me && from === me) return;
+
+        cnt += 1;
+      });
+
+      if (latest) lastMsgTsByRoom.set(key, latest);
+
+      // if currently open => auto read
+      if (activeChat?.roomId && String(activeChat.roomId) === key) {
+        if (latest) setLastSeen(key, latest);
+        unreadByRoom.set(key, 0);
+        updateBadgesForRoom(key);
+
+        if (latest) restartUnreadWatcher(key);
+        return;
+      }
+
+      unreadByRoom.set(key, cnt);
+      updateBadgesForRoom(key);
+    },
+    (err) => console.error("Unread watcher error:", err)
+  );
+
+  unreadUnsubs.set(key, unsub);
+}
+
+function stopAllUnreadWatchers() {
+  unreadUnsubs.forEach((u) => {
+    try { u?.(); } catch {}
+  });
+  unreadUnsubs.clear();
+  unreadByRoom.clear();
+  lastMsgTsByRoom.clear();
+  roomButtons.clear();
+  updateNavBadge();
+}
+
+// ---------------- helpers ----------------
+
+function getUserFromStorage() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    if (u?.id && u?.name && u?.role) return u;
+  } catch {}
+  return null;
+}
+function setCurrentUser() {
+  currentUser = getUserFromStorage();
+}
+
+function dmRoomId(a, b) {
+  const x = String(a);
+  const y = String(b);
+  return x < y ? `dm_${x}_${y}` : `dm_${y}_${x}`;
+}
+function getOtherIdFromDmRoom(roomId, myId) {
+  const parts = String(roomId || "").split("_"); // dm_1001_2002
+  if (parts.length !== 3) return null;
+  const a = parts[1], b = parts[2];
+  return String(myId) === a ? b : a;
+}
+
+function tsToNumber(ts) {
+  if (!ts) return 0;
+  if (typeof ts === "number") return ts;
+  if (ts.toMillis) return ts.toMillis();
+  if (ts.toDate) return ts.toDate().getTime();
+  return 0;
+}
+
+function formatTime(ts) {
+  if (!ts) return "";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function statusToDotClass(status) {
+  if (status === "in_operation" || status === "handling") return "dot-online";
+  if (status === "meeting" || status === "break") return "dot-warn";
+  return "dot-offline";
+}
+
+function getInitials(name = "") {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase() || "").join("") || "U";
+}
+
+function ensureTopLoader(listEl) {
+  if (!listEl) return null;
+  let loader = listEl.querySelector("#chat-top-loader");
+  if (!loader) {
+    loader = document.createElement("div");
+    loader.id = "chat-top-loader";
+    loader.style.display = "none";
+    loader.style.padding = "8px";
+    loader.style.textAlign = "center";
+    loader.style.fontSize = "12px";
+    loader.style.color = "#777";
+    loader.textContent = "Loading older messages…";
+    listEl.prepend(loader);
+  }
+  return loader;
+}
+
+function createMessageNode(m, showRole) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "chat-message";
+  if (currentUser && m.userId === currentUser.id) wrapper.classList.add("me");
+
+  const avatar = document.createElement("div");
+  avatar.className = "msg-avatar";
+  avatar.textContent = getInitials(m.name || "User");
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
+
+  const meta = document.createElement("div");
+  meta.className = "msg-meta";
+
+  const nameEl = document.createElement("span");
+  nameEl.className = "msg-name";
+  nameEl.textContent = showRole ? `${m.name} (${m.role})` : (m.name || "User");
+
+  const timeEl = document.createElement("span");
+  timeEl.textContent = `• ${formatTime(m.ts)}`;
+
+  meta.appendChild(nameEl);
+  meta.appendChild(timeEl);
+
+  const text = document.createElement("div");
+  text.className = "chat-message-text";
+  text.textContent = m.text || "";
+
+  body.appendChild(meta);
+  body.appendChild(text);
+
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(body);
+
+  return wrapper;
+}
+
+function renderFresh(listEl, msgs, showRole) {
+  const loader = ensureTopLoader(listEl);
+  Array.from(listEl.children).forEach((ch) => {
+    if (ch !== loader) ch.remove();
+  });
+  const frag = document.createDocumentFragment();
+  msgs.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
+  listEl.appendChild(frag);
+  listEl.scrollTop = listEl.scrollHeight;
+}
+
+function renderChunkToTop(listEl, items, showRole) {
+  const loader = ensureTopLoader(listEl);
+  const prevH = listEl.scrollHeight;
+  const prevTop = listEl.scrollTop;
+
+  const frag = document.createDocumentFragment();
+  items.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
+
+  const afterLoader = loader?.nextSibling;
+  if (afterLoader) listEl.insertBefore(frag, afterLoader);
+  else listEl.appendChild(frag);
+
+  const newH = listEl.scrollHeight;
+  listEl.scrollTop = prevTop + (newH - prevH);
+}
+
+function setHeader(title, desc) {
+  const roomNameEl = document.getElementById("chat-room-name");
+  const roomDescEl = document.getElementById("chat-room-desc");
+  if (roomNameEl) roomNameEl.textContent = title || "Messages";
+  if (roomDescEl) roomDescEl.textContent = desc || "Start chatting…";
+}
+
+function setEmpty(on) {
+  const emptyEl = document.getElementById("chat-empty");
+  const listEl = document.getElementById("chat-message-list");
+  if (!emptyEl || !listEl) return;
+  emptyEl.style.display = on ? "block" : "none";
+  listEl.style.display = on ? "none" : "block";
+}
+
+function setInputEnabled(enabled) {
+  const formEl = document.getElementById("chat-form");
+  const inputEl = document.getElementById("chat-input");
+  if (!formEl || !inputEl) return;
+  const btn = formEl.querySelector("button[type='submit']");
+  inputEl.disabled = !enabled;
+  if (btn) btn.disabled = !enabled;
+}
+
+function clearActiveButtons() {
+  document
+    .querySelectorAll(".chat-room, .chat-dm, .chat-recent, .chat-group")
+    .forEach((b) => b.classList.remove("active", "chat-item-active"));
+}
+function setActiveButton(el) {
+  clearActiveButtons();
+  if (el) el.classList.add("active", "chat-item-active");
+}
+
+// ---------------- lazy scroll ----------------
+
+function attachScrollLoader(listEl) {
+  if (!listEl) return;
+  if (scrollBoundEl === listEl) return;
+  scrollBoundEl = listEl;
+
+  const loader = ensureTopLoader(listEl);
+
+  listEl.addEventListener("scroll", () => {
+    if (listEl.scrollTop > 40) return;
+
+    const total = roomCache.length;
+    const alreadyRenderedStartIndex = Math.max(0, total - renderedCount);
+
+    if (alreadyRenderedStartIndex <= 0) return;
+    if (renderedCount >= MAX_RENDER) return;
+
+    if (loader) loader.style.display = "block";
+
+    const addCount = Math.min(PAGE_SIZE, alreadyRenderedStartIndex);
+    const newStart = alreadyRenderedStartIndex - addCount;
+    const chunk = roomCache.slice(newStart, alreadyRenderedStartIndex);
+
+    renderedCount += chunk.length;
+    renderChunkToTop(listEl, chunk, true);
+
+    setTimeout(() => {
+      if (loader) loader.style.display = "none";
+    }, 150);
+  });
+}
+
+// ---------------- Firestore main chat ----------------
+
+function unsubscribeAllMain() {
+  unsubscribeMain?.();
+  unsubscribeMain = null;
+  roomCache = [];
+  renderedCount = 0;
+  scrollBoundEl = null;
+}
+
+function subscribeMainToRoom(roomId) {
+  const listEl = document.getElementById("chat-message-list");
+  if (!listEl) return;
+
+  unsubscribeAllMain();
+
+  const qRoom = query(
+    collection(db, MESSAGES_COL),
+    where("room", "==", roomId),
+    orderBy("ts", "desc")
+  );
+
+  unsubscribeMain = onSnapshot(
+    qRoom,
+    (snapshot) => {
+      setCurrentUser();
+
+      const all = [];
+      snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
+      all.reverse(); // ASC
+      roomCache = all;
+
+      renderedCount = Math.min(PAGE_SIZE, roomCache.length);
+      const startIndex = Math.max(0, roomCache.length - renderedCount);
+      renderFresh(listEl, roomCache.slice(startIndex), true);
+      attachScrollLoader(listEl);
+
+      const last = roomCache.length ? roomCache[roomCache.length - 1] : null;
+      const lastTs = last ? tsToNumber(last.ts) : 0;
+      if (activeChat?.roomId && String(activeChat.roomId) === String(roomId) && lastTs) {
+        lastMsgTsByRoom.set(String(roomId), lastTs);
+        setLastSeen(String(roomId), lastTs);
+        unreadByRoom.set(String(roomId), 0);
+        updateBadgesForRoom(String(roomId));
+        restartUnreadWatcher(String(roomId));
+      }
+    },
+    (err) => {
+      console.error("Main snapshot error:", err);
+    }
+  );
+}
+
+// ---------------- Status dots ----------------
+
+function subscribeStatusDots() {
+  unsubscribeStatus?.();
+  unsubscribeStatus = null;
+
+  const qS = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
+
+  unsubscribeStatus = onSnapshot(
+    qS,
+    (snap) => {
+      document.querySelectorAll("[data-status-dot]").forEach((d) => {
+        d.classList.remove("dot-online", "dot-warn", "dot-offline");
+        d.classList.add("dot-offline");
+      });
+
+      snap.forEach((docu) => {
+        const d = docu.data() || {};
+        const userId = String(d.userId || "");
+        if (!userId) return;
+
+        const dot = document.querySelector(`[data-status-dot="${userId}"]`);
+        if (!dot) return;
+
+        const cls = statusToDotClass(d.status || "unavailable");
+        dot.classList.remove("dot-online", "dot-warn", "dot-offline");
+        dot.classList.add(cls);
+
+        const sub = document.querySelector(`[data-sub="${userId}"]`);
+        if (sub) sub.textContent = d.status ? String(d.status).replaceAll("_", " ") : "unavailable";
+      });
+    },
+    (err) => console.error("Status snapshot error:", err)
+  );
+}
+
+// ---------------- ✅ Cloud Groups sidebar (NO orderBy to avoid index) ----------------
+
+function unsubscribeGroupsCloud() {
+  unsubscribeGroups?.();
+  unsubscribeGroups = null;
+  groupsCache = [];
+}
+
+function renderGroupsList() {
+  if (!groupsListEl) groupsListEl = document.getElementById("groups-list");
+  if (!groupsListEl) return;
+
+  groupsListEl.innerHTML = "";
+
+  if (!groupsCache.length) {
+    groupsListEl.innerHTML = `<div class="ms-empty" id="groups-empty">No groups yet</div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+
+  groupsCache.forEach((g) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chat-room chat-group";
+    btn.dataset.groupId = g.id;
+
+    const avatarLetter = String(g.name || "G").trim().slice(0, 1).toUpperCase();
+    const membersCount = Array.isArray(g.members) ? g.members.length : 0;
+
+    btn.innerHTML = `
+      <div class="chat-row">
+        <div class="chat-avatar role-room">${avatarLetter}</div>
+        <div class="chat-row-text">
+          <div class="chat-room-title">${g.name || "Group"}</div>
+          <div class="chat-room-sub">${membersCount} members</div>
+        </div>
+      </div>
+    `;
+
+    btn.addEventListener("click", () => {
+      openChat(
+        { type: "group", roomId: g.id, title: g.name, desc: g.rules ? `Rules: ${g.rules}` : "Group chat" },
+        btn
+      );
+    });
+
+    registerRoomButton(String(g.id), btn);
+    frag.appendChild(btn);
+  });
+
+  groupsListEl.appendChild(frag);
+  applySearchFilter();
+}
+
+function subscribeGroupsCloud() {
+  unsubscribeGroupsCloud();
+  if (!currentUser?.id) return;
+
+  const qG = query(
+    collection(db, GROUPS_COL),
+    where("members", "array-contains", String(currentUser.id))
+  );
+
+  unsubscribeGroups = onSnapshot(
+    qG,
+    (snap) => {
+      const arr = [];
+      snap.forEach((d) => {
+        const data = d.data() || {};
+        arr.push({ id: d.id, ...data });
+      });
+
+      arr.sort((a, b) => (tsToNumber(b.createdAt) || 0) - (tsToNumber(a.createdAt) || 0));
+      groupsCache = arr;
+
+      renderGroupsList();
+    },
+    (err) => {
+      console.error("Groups snapshot error:", err);
+      groupsCache = [];
+      renderGroupsList();
+    }
+  );
+}
+
+// ---------------- ✅ Cloud Recents (AFTER SEND ONLY) ----------------
+
+function recentsColRef(userId) {
+  return collection(db, RECENTS_ROOT, String(userId), "items");
+}
+
+function unsubscribeRecentsCloud() {
+  unsubscribeRecents?.();
+  unsubscribeRecents = null;
+  recentsCache = [];
+}
+
+function renderRecentsList() {
+  if (!recentListEl) recentListEl = document.getElementById("recent-list");
+  if (!recentListEl) return;
+
+  recentListEl.innerHTML = "";
+
+  if (!recentsCache.length) {
+    recentListEl.innerHTML = `<div class="ms-empty" id="recent-empty">No recent chats yet</div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+
+  recentsCache.forEach((r) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chat-room chat-recent";
+    btn.dataset.recentId = r.id;
+
+    const badge = r.type === "dm" ? "DM" : (r.type === "group" ? "G" : "#");
+    const avatarLetter = String(r.title || badge).trim().slice(0, 1).toUpperCase();
+
+    btn.innerHTML = `
+      <div class="chat-row">
+        <div class="chat-avatar role-room">${avatarLetter}</div>
+        <div class="chat-row-text">
+          <div class="chat-room-title">${r.title || "Chat"}</div>
+          <div class="chat-room-sub">${r.desc || ""}</div>
+        </div>
+      </div>
+    `;
+
+    btn.addEventListener("click", () => {
+      openChat({ type: r.type, roomId: r.roomId, title: r.title, desc: r.desc }, btn);
+    });
+
+    if (r.roomId) registerRoomButton(String(r.roomId), btn);
+    frag.appendChild(btn);
+  });
+
+  recentListEl.appendChild(frag);
+  applySearchFilter();
+}
+
+function subscribeRecentsCloud() {
+  unsubscribeRecentsCloud();
+  if (!currentUser?.id) return;
+
+  const qR = query(recentsColRef(currentUser.id), orderBy("lastTs", "desc"));
+
+  unsubscribeRecents = onSnapshot(
+    qR,
+    (snap) => {
+      const arr = [];
+      snap.forEach((d) => {
+        const data = d.data() || {};
+        arr.push({
+          id: d.id,
+          type: data.type || "room",
+          roomId: data.roomId || "",
+          title: data.title || "",
+          desc: data.desc || "",
+          lastTs: data.lastTs || 0,
+        });
+      });
+      recentsCache = arr;
+      renderRecentsList();
+    },
+    (err) => {
+      console.error("Recents snapshot error:", err);
+    }
+  );
+}
+
+async function bumpRecentAfterSendCloud() {
+  if (!currentUser?.id || !activeChat?.roomId) return;
+
+  const type = activeChat.type; // dm/room/group
+  const roomId = activeChat.roomId;
+
+  let recentId = "";
+  let title = activeChat.title || "Chat";
+  let desc = activeChat.desc || "";
+
+  if (type === "dm") {
+    const otherId = getOtherIdFromDmRoom(roomId, currentUser.id) || "";
+    if (!otherId) return;
+    recentId = `dm:${otherId}`;
+    title = title || `CCMS ${otherId}`;
+    desc = `Direct message • CCMS ${otherId}`;
+  } else if (type === "group") {
+    recentId = `group:${roomId}`;
+    desc = desc || "Group chat";
+  } else {
+    recentId = `room:${roomId}`;
+    desc = desc || "Room";
+  }
+
+  if (!recentId) return;
+
+  const ref = doc(db, RECENTS_ROOT, String(currentUser.id), "items", recentId);
+
+  try {
+    await setDoc(
+      ref,
+      {
+        type,
+        roomId,
+        title,
+        desc,
+        lastTs: Date.now(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (e) {
+    console.error("bumpRecentAfterSendCloud error:", e);
+  }
+}
+
+// ---------------- open chat ----------------
+
+function openChat(chat, clickedEl = null) {
+  setCurrentUser();
+  if (!currentUser) return;
+
+  if (!chat?.roomId) return;
+
+  activeChat = {
+    type: chat.type || "room",
+    roomId: chat.roomId,
+    title: chat.title || "Chat",
+    desc: chat.desc || "",
+  };
+
+  setActiveButton(clickedEl);
+  setHeader(activeChat.title, activeChat.desc);
+  setEmpty(false);
+  setInputEnabled(true);
+
+  markRoomRead(String(activeChat.roomId));
+  subscribeMainToRoom(activeChat.roomId);
+}
+
+// listen events from groups.js
+window.addEventListener("telesyriana:open-group", (e) => {
+  const d = e.detail || {};
+  openChat({ type: "group", roomId: d.roomId, title: d.title, desc: d.desc }, null);
+});
+window.addEventListener("telesyriana:open-room", (e) => {
+  const d = e.detail || {};
+  openChat({ type: d.type || "room", roomId: d.roomId, title: d.title, desc: d.desc }, null);
+});
+
+// ---------------- collapsible sidebar sections ----------------
+
+function makeCollapsible(headerText, listId) {
+  const headers = Array.from(document.querySelectorAll(".messages-sidebar-header"));
+  const h = headers.find((x) => x.textContent.trim().toLowerCase() === headerText.toLowerCase());
+  const list = document.getElementById(listId);
+  if (!h || !list) return;
+
+  if (!h.querySelector(".caret")) {
+    const caret = document.createElement("span");
+    caret.className = "caret";
+    caret.textContent = "▾";
+    caret.style.marginLeft = "8px";
+    caret.style.opacity = "0.7";
+    h.appendChild(caret);
+  }
+
+  h.style.cursor = "pointer";
+  h.style.userSelect = "none";
+  h.dataset.open = "1";
+
+  h.addEventListener("click", () => {
+    const open = h.dataset.open === "1";
+    h.dataset.open = open ? "0" : "1";
+    list.style.display = open ? "none" : "";
+
+    const caret = h.querySelector(".caret");
+    if (caret) caret.textContent = open ? "▸" : "▾";
+  });
+}
+
+// ---------------- ✅ Search (Rooms/Groups/Recent/DMs) ----------------
+
+let searchQuery = "";
+
+function normalizeText(s) {
+  return String(s || "").toLowerCase().trim();
+}
+
+function matchesSearch(btn, q) {
+  if (!btn) return false;
+  if (!q) return true;
+
+  const text = normalizeText(btn.textContent || "");
+
+  const dm = normalizeText(btn.dataset.dm || "");
+  const room = normalizeText(btn.dataset.room || "");
+  const gid = normalizeText(btn.dataset.groupId || "");
+  const rid = normalizeText(btn.dataset.recentId || "");
+
+  const all = `${text} ${dm} ${room} ${gid} ${rid}`;
+  return all.includes(q);
+}
+
+function filterList(listId, selector) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+
+  const items = Array.from(list.querySelectorAll(selector));
+  let any = false;
+
+  items.forEach((btn) => {
+    const ok = matchesSearch(btn, searchQuery);
+    btn.style.display = ok ? "" : "none";
+    if (ok) any = true;
+  });
+
+  const empty = list.querySelector(".ms-empty");
+  if (empty) empty.style.display = searchQuery ? (any ? "none" : "") : "";
+}
+
+function applySearchFilter() {
+  filterList("rooms-list", ".chat-room[data-room]");
+  filterList("groups-list", ".chat-group");
+  filterList("recent-list", ".chat-recent");
+  filterList("dm-list", ".chat-dm");
+}
+
+function hookSearch() {
+  const input =
+    document.querySelector(".ms-search input") ||
+    document.getElementById("messages-search") ||
+    document.getElementById("ms-search") ||
+    document.querySelector("#page-messages input[type='search']");
+
+  if (!input) return;
+
+  input.addEventListener("input", () => {
+    searchQuery = normalizeText(input.value || "");
+    applySearchFilter();
+  });
+
+  const xBtn = document.querySelector(".ms-search-x");
+  if (xBtn) {
+    xBtn.addEventListener("click", () => {
+      input.value = "";
+      searchQuery = "";
+      applySearchFilter();
+      input.focus();
+    });
+  }
+}
+
+// ---------------- init ----------------
+
+document.addEventListener("DOMContentLoaded", () => {
+  dmListEl = document.getElementById("dm-list");
+  recentListEl = document.getElementById("recent-list");
+  groupsListEl = document.getElementById("groups-list");
+
+  initBeep();
+
+  ensureNavBadge();
+  updateNavBadge();
+
+  const backBtn = document.getElementById("chat-back");
+  if (backBtn) backBtn.style.display = "none";
+
+  setCurrentUser();
+
+  makeCollapsible("Rooms", "rooms-list");
+  makeCollapsible("Groups", "groups-list");
+  makeCollapsible("Recent", "recent-list");
+  makeCollapsible("Direct messages", "dm-list");
+
+  setHeader("Messages", "Start chatting…");
+  setEmpty(true);
+  setInputEnabled(false);
+
+  hookSearch();
+
+  subscribeGroupsCloud();
+  subscribeRecentsCloud();
+
+  document.querySelectorAll(".chat-room[data-room]").forEach((btn) => {
+    const r = btn.dataset.room;
+    if (r && r !== "ai") registerRoomButton(String(r), btn);
+
+    btn.addEventListener("click", () => {
+      setCurrentUser();
+      if (!currentUser) return;
+
+      const room = btn.dataset.room;
+
+      if (room === "ai") {
+        activeChat = { type: "ai", roomId: "ai", title: "ChatGPT 5", desc: "Coming soon…" };
+        setActiveButton(btn);
+        unsubscribeAllMain();
+        setHeader("ChatGPT 5", "Coming soon…");
+        setEmpty(true);
+        setInputEnabled(false);
+        return;
+      }
+
+      if (room === "supervisors" && currentUser.role !== "supervisor") {
+        console.warn("Supervisor only room");
+        return;
+      }
+
+      const title = room === "general" ? "General chat" : "Supervisors";
+      const desc =
+        room === "general"
+          ? "All agents & supervisors • Be respectful • No customer data."
+          : "Supervisor-only space for internal notes and coordination.";
+
+      openChat({ type: "room", roomId: room, title, desc }, btn);
+    });
+  });
+
+  document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {
+    setCurrentUser();
+    const otherId = btn.dataset.dm;
+    if (otherId && currentUser?.id) {
+      const rid = dmRoomId(currentUser.id, otherId);
+      registerRoomButton(String(rid), btn);
+    }
+
+    btn.addEventListener("click", () => {
+      setCurrentUser();
+      if (!currentUser) return;
+
+      const otherId = btn.dataset.dm;
+      const roomId = dmRoomId(currentUser.id, otherId);
+
+      const nameEl = btn.querySelector(".chat-room-title");
+      const otherName = (nameEl?.textContent || `CCMS ${otherId}`).trim();
+
+      openChat(
+        { type: "dm", roomId, title: otherName, desc: `Direct message • CCMS ${otherId}` },
+        btn
+      );
+    });
+  });
+
+  const formEl = document.getElementById("chat-form");
+  const inputEl = document.getElementById("chat-input");
+
+  formEl?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const text = inputEl?.value?.trim();
+    if (!text) return;
+
+    setCurrentUser();
+    if (!currentUser) return;
+    if (!activeChat || activeChat.type === "ai") return;
+
+    try {
+      await addDoc(collection(db, MESSAGES_COL), {
+        room: activeChat.roomId,
+        text,
+        userId: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+        ts: serverTimestamp(),
+      });
+
+      await bumpRecentAfterSendCloud();
+
+      setLastSeen(String(activeChat.roomId), Date.now());
+      unreadByRoom.set(String(activeChat.roomId), 0);
+      updateBadgesForRoom(String(activeChat.roomId));
+      restartUnreadWatcher(String(activeChat.roomId));
+    } catch (err) {
+      console.error("Send error:", err);
+    }
+
+    inputEl.value = "";
+  });
+
+  subscribeStatusDots();
+});
+
+// user change (login/logout) ✅ ONLY ONE listener
+window.addEventListener("telesyriana:user-changed", () => {
+  setCurrentUser();
+
+  unsubscribeAllMain();
+  unsubscribeGroupsCloud();
+  unsubscribeRecentsCloud();
+
+  clearActiveButtons();
+  activeChat = null;
+
+  setHeader("Messages", "Start chatting…");
+  setEmpty(true);
+  setInputEnabled(false);
+
+  stopAllUnreadWatchers();
+  ensureNavBadge();
+  updateNavBadge();
+
+  subscribeGroupsCloud();
+  subscribeRecentsCloud();
+  subscribeStatusDots();
+
+  document.querySelectorAll(".chat-room[data-room]").forEach((btn) => {
+    const r = btn.dataset.room;
+    if (r && r !== "ai") registerRoomButton(String(r), btn);
+  });
+
+  document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {
+    setCurrentUser();
+    const otherId = btn.dataset.dm;
+    if (otherId && currentUser?.id) {
+      const rid = dmRoomId(currentUser.id, otherId);
+      registerRoomButton(String(rid), btn);
+    }
+  });
+
+  applySearchFilter();
+});
+
