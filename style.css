@@ -1299,3 +1299,29 @@ input:focus, textarea:focus, select:focus{
   color:#fff;
 }
 
+/* Create Group modal body */
+#create-group-modal .modal-body {
+  padding: 20px;
+  max-height: 65vh;        /* مهم */
+  overflow-y: auto;        /* scrolling */
+  box-sizing: border-box;
+}
+
+/* members list container */
+.group-members {
+  margin-top: 10px;
+  max-height: 300px;       /* scrolling list */
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.group-search {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
