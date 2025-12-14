@@ -1,29 +1,62 @@
-// meetings.js — TeleSyriana Meetings (Firestore like chat)
+// meetings.js — Firestore meetings (list + create for supervisors + join local preview)
 
 import { db, fs } from "./firebase.js";
 
 const {
-  doc,
-  setDoc,
-  getDoc,
-  updateDoc,
   collection,
+  doc,
+  getDoc,
+  setDoc,
+  addDoc,
   query,
   where,
   orderBy,
   limit,
   onSnapshot,
   serverTimestamp,
-  runTransaction,
+  Timestamp,
+  runTransaction
 } = fs;
 
-// -------------------- Config / Helpers --------------------
 const MEETINGS_COL = "meetings";
-const META_DOC = "meta";
-const COUNTER_DOC = "counters"; // meetings/meta/counters
+const META_DOC = "meta/counters"; // doc path: meta/counters (collection "meta", doc "counters")
 
+let unsubUpcoming = null;
+let localStream = null;
+let allUpcoming = []; // cached for search
+
+// -------------------- DOM --------------------
+const elSearch = document.getElementById("meeting-search");
+const elSearchClear = document.getElementById("meeting-search-clear");
+
+const elCreateBox = document.getElementById("create-meeting-box");
+const elCreateTitle = document.getElementById("create-title");
+const elCreateDate = document.getElementById("create-date");
+const elCreateTime = document.getElementById("create-time");
+const elCreateId = document.getElementById("create-id");
+const elCreatePass = document.getElementById("create-pass");
+const btnNewPass = document.getElementById("btn-new-pass");
+const btnCreate = document.getElementById("create-meeting-btn");
+
+const elList = document.getElementById("meetings-list");
+const elEmpty = document.getElementById("meetings-empty");
+
+const joinId = document.getElementById("join-meeting-id");
+const joinPass = document.getElementById("join-meeting-pass");
+const joinBtn = document.getElementById("join-meeting-btn");
+
+const stage = document.getElementById("meeting-stage");
+const videoEl = document.getElementById("local-video");
+const liveTitle = document.getElementById("meeting-live-title");
+const liveMeta = document.getElementById("meeting-live-meta");
+
+const micBtn = document.getElementById("btn-mic");
+const camBtn = document.getElementById("btn-cam");
+const handBtn = document.getElementById("btn-hand");
+const leaveBtn = document.getElementById("btn-leave");
+
+// -------------------- helpers --------------------
 function getCurrentUser() {
-  // نفس أسلوبك الحالي
   try {
     return JSON.parse(localStorage.getItem("telesyrianaUser") || "null");
   } catch {
@@ -31,275 +64,226 @@ function getCurrentUser() {
   }
 }
 
-function pad(n, len = 4) {
-  return String(n).padStart(len, "0");
+function pad4(n) {
+  return String(n).padStart(4, "0");
 }
 
-function randPassword(len = 6) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function randomPassword(len = 6) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no confusing 0/O/1/I
   let out = "";
   for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
   return out;
 }
 
-function todayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1, 2)}-${pad(d.getDate(), 2)}`;
+function toLocalDateInput(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
 }
 
-function parseDateTime(dateStr, timeStr) {
-  // date: YYYY-MM-DD, time: HH:MM
-  if (!dateStr) return null;
-  const t = timeStr || "09:00";
-  const dt = new Date(`${dateStr}T${t}:00`);
-  return isNaN(dt.getTime()) ? null : dt;
+function toLocalTimeInput(d) {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
-function fmtWhen(tsOrDate) {
-  const d = tsOrDate?.toDate ? tsOrDate.toDate() : tsOrDate;
-  if (!d) return "";
-  return d.toLocaleString(undefined, { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+function parseStartAt(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const [hh, mm] = timeStr.split(":").map(Number);
+  const local = new Date(y, m - 1, d, hh, mm, 0, 0);
+  return Timestamp.fromDate(local);
 }
 
+function formatStartAt(ts) {
+  try {
+    const d = ts.toDate();
+    return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return "";
+  }
+}
+
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[m]));
+}
+
+// -------------------- meeting ID transaction --------------------
 async function nextMeetingId() {
-  // ✅ تسلسلي: transaction على meetings/meta/counters
-  const ref = doc(db, MEETINGS_COL, META_DOC, "metaDocs", COUNTER_DOC);
-  const newId = await runTransaction(db, async (tx) => {
+  // meta/counters => { meetingNext: 1 }
+  const ref = doc(db, "meta", "counters");
+
+  const idNum = await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
-    const current = snap.exists() ? (snap.data().next || 1000) : 1000;
-    tx.set(ref, { next: current + 1, updatedAt: serverTimestamp() }, { merge: true });
-    return current;
-  });
-  return String(newId);
-}
-
-// -------------------- DOM --------------------
-const listEl = document.getElementById("meetings-list");
-const emptyEl = document.getElementById("meetings-empty");
-const searchEl = document.getElementById("meeting-search");
-const clearSearchBtn = document.getElementById("meeting-search-clear");
-
-const openCreateBtn = document.getElementById("open-create-meeting");
-const closeCreateBtn = document.getElementById("close-create-meeting");
-const createBox = document.getElementById("create-meeting-box");
-
-const createTitleEl = document.getElementById("create-title");
-const createDateEl = document.getElementById("create-date");
-const createTimeEl = document.getElementById("create-time");
-const createIdEl = document.getElementById("create-id");
-const createPassEl = document.getElementById("create-pass");
-const regenPassBtn = document.getElementById("regen-pass-btn");
-const createBtn = document.getElementById("create-meeting-btn");
-const createHintEl = document.getElementById("create-hint");
-
-const joinIdEl = document.getElementById("join-meeting-id");
-const joinPassEl = document.getElementById("join-meeting-pass");
-const joinBtn = document.getElementById("join-meeting-btn");
-
-const stage = document.getElementById("meeting-stage");
-const videoEl = document.getElementById("local-video");
-const micBtn = document.getElementById("btn-mic");
-const camBtn = document.getElementById("btn-cam");
-const handBtn = document.getElementById("btn-hand");
-const leaveBtn = document.getElementById("btn-leave");
-const liveTitleEl = document.getElementById("meeting-live-title");
-const liveMetaEl = document.getElementById("meeting-live-meta");
-
-let unsubMeetings = null;
-let meetingsCache = [];
-let localStream = null;
-let activeMeeting = null;
-
-// -------------------- Init / Role UI --------------------
-function applyRoleUI() {
-  const user = getCurrentUser();
-  const isSup = user?.role === "supervisor";
-
-  // زر create
-  if (openCreateBtn) openCreateBtn.classList.toggle("hidden", !isSup);
-
-  // صندوق create مخفي افتراضياً
-  if (!isSup && createBox) createBox.classList.add("hidden");
-}
-
-async function prepareCreateDefaults() {
-  const user = getCurrentUser();
-  if (!user || user.role !== "supervisor") return;
-
-  // default: today + now+10min
-  const now = new Date();
-  const dt = new Date(now.getTime() + 10 * 60000);
-  if (createDateEl) createDateEl.value = todayKey();
-  if (createTimeEl) createTimeEl.value = `${pad(dt.getHours(), 2)}:${pad(dt.getMinutes(), 2)}`;
-
-  // generate meeting id + pass
-  const id = await nextMeetingId();
-  if (createIdEl) createIdEl.value = id;
-  if (createPassEl) createPassEl.value = randPassword(6);
-
-  if (createHintEl) createHintEl.textContent = "";
-}
-
-// -------------------- Firestore subscribe --------------------
-function subscribeMeetings() {
-  if (!listEl) return;
-
-  // Upcoming: اليوم و لقدّام (بس demo)
-  const q = query(
-    collection(db, MEETINGS_COL),
-    orderBy("scheduledAt", "asc"),
-    limit(50)
-  );
-
-  if (unsubMeetings) unsubMeetings();
-  unsubMeetings = onSnapshot(q, (snap) => {
-    const rows = [];
-    snap.forEach((d) => rows.push({ id: d.id, ...d.data() }));
-    meetingsCache = rows;
-    renderMeetings();
-  });
-}
-
-function renderMeetings() {
-  if (!listEl || !emptyEl) return;
-
-  const term = (searchEl?.value || "").trim().toLowerCase();
-
-  const filtered = meetingsCache.filter((m) => {
-    const id = String(m.meetingId || m.id || "").toLowerCase();
-    const title = String(m.title || "").toLowerCase();
-    const host = String(m.hostName || m.hostId || "").toLowerCase();
-    return !term || id.includes(term) || title.includes(term) || host.includes(term);
+    let next = 1;
+    if (snap.exists()) {
+      const d = snap.data();
+      next = Number(d.meetingNext || 1);
+    }
+    tx.set(ref, { meetingNext: next + 1 }, { merge: true });
+    return next;
   });
 
-  listEl.innerHTML = "";
+  return pad4(idNum);
+}
 
-  if (!filtered.length) {
-    emptyEl.classList.remove("hidden");
+// -------------------- UI: render upcoming --------------------
+function renderList(list) {
+  if (!elList || !elEmpty) return;
+
+  elList.innerHTML = "";
+  if (!list.length) {
+    elEmpty.classList.remove("hidden");
     return;
   }
-  emptyEl.classList.add("hidden");
+  elEmpty.classList.add("hidden");
 
-  filtered.forEach((m) => {
+  list.forEach((m) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "meeting-item";
+
     btn.innerHTML = `
-      <div class="meeting-item-top">
-        <div class="meeting-item-title">${m.title || "Meeting"}</div>
-        <div class="meeting-item-id">#${m.meetingId || m.id}</div>
-      </div>
-      <div class="meeting-item-sub">
-        <span>Host: ${m.hostName || m.hostId || "—"}</span>
-        <span>•</span>
-        <span>${m.scheduledAt ? fmtWhen(m.scheduledAt) : "No time"}</span>
+      <div class="meeting-row">
+        <div class="meeting-badge">M</div>
+        <div class="meeting-text">
+          <div class="meeting-title">
+            ${escapeHtml(m.title || "Meeting")} <span class="meeting-id">#${escapeHtml(m.meetingId)}</span>
+          </div>
+          <div class="meeting-sub">
+            ${escapeHtml(formatStartAt(m.startAt))} • Host: ${escapeHtml(m.hostName || m.hostId || "-")}
+          </div>
+        </div>
       </div>
     `;
 
+    // quick fill join form on click (without password)
     btn.addEventListener("click", () => {
-      // auto-fill join
-      if (joinIdEl) joinIdEl.value = String(m.meetingId || m.id);
-      joinPassEl?.focus();
+      if (joinId) joinId.value = m.meetingId || "";
+      if (joinPass) joinPass.focus();
     });
 
-    listEl.appendChild(btn);
+    elList.appendChild(btn);
   });
 }
 
-// -------------------- Create meeting (Supervisor) --------------------
+function applySearch(q) {
+  const s = String(q || "").trim().toLowerCase();
+  if (!s) return renderList(allUpcoming);
+
+  const filtered = allUpcoming.filter((m) => {
+    const hay = `${m.meetingId || ""} ${m.title || ""} ${m.hostName || ""} ${m.hostId || ""}`.toLowerCase();
+    return hay.includes(s);
+  });
+
+  renderList(filtered);
+}
+
+// -------------------- Firestore: subscribe upcoming --------------------
+function subscribeUpcoming() {
+  if (unsubUpcoming) return;
+
+  const now = Timestamp.fromDate(new Date());
+
+  const q = query(
+    collection(db, MEETINGS_COL),
+    where("startAt", ">=", now),
+    orderBy("startAt", "asc"),
+    limit(50)
+  );
+
+  unsubUpcoming = onSnapshot(
+    q,
+    (snap) => {
+      allUpcoming = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      applySearch(elSearch?.value || "");
+    },
+    (err) => {
+      console.error("Meetings snapshot error:", err);
+      // لا تقتل الصفحة، بس خليها فاضية
+      allUpcoming = [];
+      renderList([]);
+    }
+  );
+}
+
+// -------------------- Create meeting (supervisor) --------------------
+async function prepareCreateDefaults() {
+  if (!elCreateId || !elCreatePass || !elCreateDate || !elCreateTime) return;
+
+  // default date/time = next 15 minutes
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + 15);
+
+  elCreateDate.value = toLocalDateInput(d);
+  elCreateTime.value = toLocalTimeInput(d);
+
+  // sequential ID + random pass
+  elCreateId.value = await nextMeetingId();
+  elCreatePass.value = randomPassword(6);
+}
+
 async function createMeeting() {
   const user = getCurrentUser();
   if (!user || user.role !== "supervisor") return alert("Supervisor only.");
 
-  const title = (createTitleEl?.value || "").trim() || "Team meeting";
-  const dateStr = createDateEl?.value || todayKey();
-  const timeStr = createTimeEl?.value || "09:00";
-  const scheduled = parseDateTime(dateStr, timeStr);
-  if (!scheduled) return alert("Invalid date/time.");
+  const title = (elCreateTitle?.value || "").trim() || "Meeting";
+  const startAt = parseStartAt(elCreateDate?.value, elCreateTime?.value);
+  if (!startAt) return alert("Choose date & time.");
 
-  const meetingId = (createIdEl?.value || "").trim();
-  const password = (createPassEl?.value || "").trim();
+  const meetingId = (elCreateId?.value || "").trim();
+  const password = (elCreatePass?.value || "").trim();
+  if (!meetingId || !password) return alert("Missing Meeting ID or password.");
 
-  if (!meetingId) return alert("Meeting ID missing.");
-  if (!password || password.length < 4) return alert("Password too short.");
-
-  // doc id = meetingId (أسهل)
-  const ref = doc(db, MEETINGS_COL, meetingId);
-
-  // prevent overwrite if exists
-  const exists = await getDoc(ref);
-  if (exists.exists()) {
-    alert("Meeting ID already exists. Generating a new one…");
-    const id = await nextMeetingId();
-    createIdEl.value = id;
-    return;
-  }
-
-  await setDoc(ref, {
+  const payload = {
     meetingId,
+    password,              // لاحقاً بنعملها hashed (بس حالياً demo)
     title,
-    password, // ✅ demo only
+    startAt,
     hostId: user.id,
     hostName: user.name,
-    scheduledAt: scheduled,
     createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    status: "scheduled", // scheduled | live | ended
-  });
+    status: "scheduled"
+  };
 
-  if (createHintEl) {
-    createHintEl.textContent = `✅ Created: ID ${meetingId} • PASS ${password}`;
-  }
+  // store doc id = meetingId for easy lookup
+  await setDoc(doc(db, MEETINGS_COL, meetingId), payload, { merge: true });
 
-  // refresh next defaults (for next meeting)
-  const nextId = await nextMeetingId();
-  createIdEl.value = nextId;
-  createPassEl.value = randPassword(6);
-  createTitleEl.value = "";
+  // prepare next defaults (new ID + new pass)
+  await prepareCreateDefaults();
+
+  alert(`Created ✅\nMeeting ID: ${meetingId}\nPassword: ${password}`);
 }
 
-// -------------------- Join meeting (validate + local preview) --------------------
+// -------------------- Join meeting (local preview only) --------------------
 async function joinMeeting() {
-  const user = getCurrentUser();
-  if (!user) return alert("Please login first.");
-
-  const id = (joinIdEl?.value || "").trim();
-  const pass = (joinPassEl?.value || "").trim();
+  const id = (joinId?.value || "").trim();
+  const pass = (joinPass?.value || "").trim();
   if (!id || !pass) return alert("Enter Meeting ID + password.");
 
-  const ref = doc(db, MEETINGS_COL, id);
-  const snap = await getDoc(ref);
+  // validate against Firestore
+  const snap = await getDoc(doc(db, MEETINGS_COL, id));
   if (!snap.exists()) return alert("Meeting not found.");
 
-  const m = snap.data();
-  if (String(m.password || "") !== pass) return alert("Wrong password.");
+  const data = snap.data();
+  if ((data.password || "") !== pass) return alert("Wrong password.");
 
-  // mark participation (optional)
-  try {
-    await setDoc(doc(db, MEETINGS_COL, id, "participants", user.id), {
-      userId: user.id,
-      name: user.name,
-      role: user.role,
-      joinedAt: serverTimestamp(),
-      lastSeenAt: serverTimestamp(),
-    }, { merge: true });
-  } catch {}
-
-  // local camera preview
+  // show local camera/mic preview
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    videoEl.srcObject = localStream;
+    if (videoEl) videoEl.srcObject = localStream;
 
-    activeMeeting = { id, ...m };
-    stage.classList.remove("hidden");
+    if (liveTitle) liveTitle.textContent = data.title || "In meeting";
+    if (liveMeta) liveMeta.textContent = `#${data.meetingId} • ${formatStartAt(data.startAt)}`;
 
-    if (liveTitleEl) liveTitleEl.textContent = m.title || "Meeting";
-    if (liveMetaEl) liveMetaEl.textContent = `#${id} • ${user.name}`;
-
-    // optional: update status
-    try {
-      await updateDoc(ref, { status: "live", updatedAt: serverTimestamp() });
-    } catch {}
+    stage?.classList.remove("hidden");
   } catch (e) {
     alert("Camera/Mic blocked. Please allow permissions.");
   }
@@ -312,96 +296,84 @@ function leaveMeeting() {
   }
   if (videoEl) videoEl.srcObject = null;
   stage?.classList.add("hidden");
-
-  activeMeeting = null;
 }
 
-// -------------------- Controls --------------------
 function toggleMic() {
   if (!localStream) return;
-  const track = localStream.getAudioTracks()[0];
-  if (!track) return;
-  track.enabled = !track.enabled;
-  micBtn.textContent = track.enabled ? "🎤 Mute" : "🔇 Unmute";
-  micBtn.classList.toggle("active", !track.enabled);
+  const t = localStream.getAudioTracks()[0];
+  if (!t) return;
+  t.enabled = !t.enabled;
+  micBtn.textContent = t.enabled ? "🎤 Mute" : "🔇 Unmute";
 }
 
 function toggleCam() {
   if (!localStream) return;
-  const track = localStream.getVideoTracks()[0];
-  if (!track) return;
-  track.enabled = !track.enabled;
-  camBtn.textContent = track.enabled ? "📷 Camera off" : "🚫 Camera on";
-  camBtn.classList.toggle("active", !track.enabled);
+  const t = localStream.getVideoTracks()[0];
+  if (!t) return;
+  t.enabled = !t.enabled;
+  camBtn.textContent = t.enabled ? "📷 Camera off" : "🚫 Camera on";
 }
 
-async function raiseHand() {
-  const user = getCurrentUser();
-  if (!user || !activeMeeting) return;
-
+function raiseHand() {
   handBtn.textContent = "✋ Raised";
-  handBtn.classList.add("active");
-
-  // ✅ اكتب event للـ supervisor (مثل messages)
-  try {
-    await setDoc(doc(db, MEETINGS_COL, activeMeeting.id, "events", `${user.id}_${Date.now()}`), {
-      type: "raise_hand",
-      userId: user.id,
-      name: user.name,
-      createdAt: serverTimestamp(),
-    });
-  } catch {}
-
-  setTimeout(() => {
-    handBtn.textContent = "✋ Raise hand";
-    handBtn.classList.remove("active");
-  }, 1200);
+  setTimeout(() => (handBtn.textContent = "✋ Raise hand"), 1200);
 }
 
-// -------------------- Hook UI --------------------
-function hookUI() {
-  clearSearchBtn?.addEventListener("click", () => {
-    if (searchEl) searchEl.value = "";
-    renderMeetings();
-    searchEl?.focus();
+// -------------------- init --------------------
+function initMeetings() {
+  const user = getCurrentUser();
+
+  // supervisor create UI
+  if (elCreateBox) {
+    const show = !!user && user.role === "supervisor";
+    elCreateBox.classList.toggle("hidden", !show);
+    if (show) {
+      // defaults once
+      prepareCreateDefaults().catch(console.error);
+    }
+  }
+
+  subscribeUpcoming();
+
+  // search
+  elSearch?.addEventListener("input", () => applySearch(elSearch.value));
+  elSearchClear?.addEventListener("click", () => {
+    if (elSearch) elSearch.value = "";
+    applySearch("");
   });
 
-  searchEl?.addEventListener("input", renderMeetings);
-
-  openCreateBtn?.addEventListener("click", async () => {
-    createBox?.classList.remove("hidden");
-    openCreateBtn.classList.add("hidden");
-    await prepareCreateDefaults();
+  // create
+  btnNewPass?.addEventListener("click", () => {
+    if (elCreatePass) elCreatePass.value = randomPassword(6);
+  });
+  btnCreate?.addEventListener("click", () => {
+    createMeeting().catch((e) => {
+      console.error(e);
+      alert("Create failed (check Firestore rules).");
+    });
   });
 
-  closeCreateBtn?.addEventListener("click", () => {
-    createBox?.classList.add("hidden");
-    openCreateBtn?.classList.remove("hidden");
+  // join
+  joinBtn?.addEventListener("click", () => {
+    joinMeeting().catch((e) => {
+      console.error(e);
+      alert("Join failed (check meeting id/password + rules).");
+    });
   });
-
-  regenPassBtn?.addEventListener("click", () => {
-    if (createPassEl) createPassEl.value = randPassword(6);
-  });
-
-  createBtn?.addEventListener("click", createMeeting);
-
-  joinBtn?.addEventListener("click", joinMeeting);
 
   micBtn?.addEventListener("click", toggleMic);
   camBtn?.addEventListener("click", toggleCam);
   handBtn?.addEventListener("click", raiseHand);
   leaveBtn?.addEventListener("click", leaveMeeting);
 
-  // لما يصير logout/login
+  // when user changes (login/logout) re-init create visibility
   window.addEventListener("telesyriana:user-changed", () => {
-    applyRoleUI();
+    const u = getCurrentUser();
+    const show = !!u && u.role === "supervisor";
+    elCreateBox?.classList.toggle("hidden", !show);
+    if (show) prepareCreateDefaults().catch(console.error);
   });
 }
 
-// -------------------- Boot --------------------
-document.addEventListener("DOMContentLoaded", () => {
-  applyRoleUI();
-  hookUI();
-  subscribeMeetings();
-});
+document.addEventListener("DOMContentLoaded", initMeetings);
 
