@@ -622,7 +622,7 @@ input:focus, textarea:focus, select:focus{
 .chat-row-text{ display:flex; flex-direction:column; min-width:0; }
 
 .chat-room-title{
-  font-weight:900;
+  font-weight:300;
   font-size:13px;
   color:#222;
   white-space:nowrap;
@@ -1541,3 +1541,4 @@ input:focus, textarea:focus, select:focus{
     max-width:none;
   }
 }
+
