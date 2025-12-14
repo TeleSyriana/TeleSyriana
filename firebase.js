@@ -1,18 +1,27 @@
-// // firebase.js – TeleSyriana
 // import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 // import {
 //   getFirestore,
+
+//   // docs
 //   doc,
 //   setDoc,
 //   getDoc,
 //   updateDoc,
+//   deleteDoc,
+
+//   // collections / queries
 //   collection,
+//   addDoc,
+//   getDocs,
 //   query,
 //   where,
 //   orderBy,
 //   onSnapshot,
 //   serverTimestamp,
-//   addDoc
+
+//   // optional helpers (nice to have)
+//   limit,
+//   startAfter
 // } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // const firebaseConfig = {
@@ -27,21 +36,32 @@
 // export const app = initializeApp(firebaseConfig);
 // export const db = getFirestore(app);
 
+// // keep same pattern used in your project
 // export const fs = {
+//   // docs
 //   doc,
 //   setDoc,
 //   getDoc,
 //   updateDoc,
+//   deleteDoc,
+
+//   // collections / queries
 //   collection,
+//   addDoc,
+//   getDocs,
 //   query,
 //   where,
 //   orderBy,
 //   onSnapshot,
 //   serverTimestamp,
-//   addDoc
+
+//   // optional
+//   limit,
+//   startAfter
 // };
 
-// firebase.js – TeleSyriana (fixed / complete)
+// firebase.js – TeleSyriana (FINAL / complete for messages + meetings + tasks)
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
   getFirestore,
@@ -53,19 +73,25 @@ import {
   updateDoc,
   deleteDoc,
 
-  // collections / queries
+  // collections / reads
   collection,
   addDoc,
   getDocs,
+
+  // queries
   query,
   where,
   orderBy,
-  onSnapshot,
-  serverTimestamp,
-
-  // optional helpers (nice to have)
   limit,
-  startAfter
+  startAfter,
+  onSnapshot,
+
+  // timestamps / server helpers
+  serverTimestamp,
+  Timestamp,
+
+  // ✅ IMPORTANT (for sequential meeting IDs)
+  runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -80,7 +106,7 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// keep same pattern used in your project
+// Keep same pattern used in your project
 export const fs = {
   // docs
   doc,
@@ -89,19 +115,25 @@ export const fs = {
   updateDoc,
   deleteDoc,
 
-  // collections / queries
+  // collections / reads
   collection,
   addDoc,
   getDocs,
+
+  // queries
   query,
   where,
   orderBy,
-  onSnapshot,
-  serverTimestamp,
-
-  // optional
   limit,
-  startAfter
+  startAfter,
+  onSnapshot,
+
+  // timestamps / server helpers
+  serverTimestamp,
+  Timestamp,
+
+  // ✅ transactions
+  runTransaction,
 };
 
 
