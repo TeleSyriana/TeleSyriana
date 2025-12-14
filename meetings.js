@@ -1,4 +1,4 @@
-// meetings.js — Firestore meetings (list + create for supervisors + join local preview)
+// meetings.js — Firestore meetings (list + create + delete + one-meeting-per-supervisor + easy share)
 // ✅ fixed: prevents double-init, reduces counters reads, handles 429/quota gracefully
 
 import { db, fs } from "./firebase.js";
@@ -8,6 +8,8 @@ const {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
+  getDocs,
   query,
   where,
   orderBy,
@@ -20,7 +22,7 @@ const {
 
 const MEETINGS_COL = "meetings";
 
-// ✅ guard against loading this module twice (very common on GitHub pages / hot reload)
+// ✅ guard against loading this module twice
 if (window.__TS_MEETINGS_INIT__) {
   // do nothing
 } else {
@@ -34,7 +36,7 @@ if (window.__TS_MEETINGS_INIT__) {
   let defaultsLoading = false;
   let defaultsLoadedOnce = false;
   let lastCounterFetchMs = 0;
-  const COUNTER_MIN_GAP_MS = 10_000; // 10 sec between counter reads (extra safety)
+  const COUNTER_MIN_GAP_MS = 10_000;
 
   // -------------------- DOM --------------------
   const elSearch = document.getElementById("meeting-search");
@@ -80,7 +82,6 @@ if (window.__TS_MEETINGS_INIT__) {
   }
 
   function fallbackMeetingId() {
-    // 4 digits derived from time (not perfect but prevents blank)
     return pad4((Date.now() % 10000) || 1);
   }
 
@@ -132,12 +133,67 @@ if (window.__TS_MEETINGS_INIT__) {
     }[m]));
   }
 
+  function isQuotaErr(e) {
+    const msg = String(e?.message || e || "");
+    return msg.includes("429") || msg.toLowerCase().includes("resource-exhausted") || msg.toLowerCase().includes("quota");
+  }
+
+  async function copyText(text) {
+    const t = String(text || "");
+    if (!t) return;
+    try {
+      await navigator.clipboard.writeText(t);
+      alert("Copied ✅");
+    } catch {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      alert("Copied ✅");
+    }
+  }
+
+  async function shareText(title, text) {
+    const payload = { title: title || "TeleSyriana", text: text || "" };
+    if (navigator.share) {
+      try {
+        await navigator.share(payload);
+      } catch {}
+    } else {
+      await copyText(payload.text);
+    }
+  }
+
+  // -------------------- supervisor: enforce ONE meeting --------------------
+  async function findMyUpcomingMeeting(userId) {
+    // only check meetings in the future
+    const now = Timestamp.fromDate(new Date());
+    const qy = query(
+      collection(db, MEETINGS_COL),
+      where("hostId", "==", String(userId)),
+      where("startAt", ">=", now),
+      orderBy("startAt", "asc"),
+      limit(1)
+    );
+
+    const snap = await getDocs(qy);
+    if (snap.empty) return null;
+    const d = snap.docs[0];
+    return { id: d.id, ...d.data() };
+  }
+
+  async function deleteMeetingById(meetingId) {
+    if (!meetingId) return;
+    await deleteDoc(doc(db, MEETINGS_COL, String(meetingId)));
+  }
+
   // -------------------- meeting ID transaction --------------------
   async function nextMeetingId() {
-    // prevent rapid repeated reads (429 protection)
     const now = Date.now();
     if (now - lastCounterFetchMs < COUNTER_MIN_GAP_MS) {
-      // if user clicks quickly, just reuse existing field if present
       const cur = (elCreateId?.value || "").trim();
       return cur || fallbackMeetingId();
     }
@@ -159,7 +215,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
       return pad4(idNum);
     } catch (e) {
-      console.warn("nextMeetingId fallback (quota/permissions?):", e);
+      console.warn("nextMeetingId fallback:", e);
       return fallbackMeetingId();
     }
   }
@@ -167,6 +223,8 @@ if (window.__TS_MEETINGS_INIT__) {
   // -------------------- UI: render upcoming --------------------
   function renderList(list) {
     if (!elList || !elEmpty) return;
+
+    const user = getCurrentUser();
 
     elList.innerHTML = "";
     if (!list.length) {
@@ -180,23 +238,59 @@ if (window.__TS_MEETINGS_INIT__) {
       btn.type = "button";
       btn.className = "meeting-item";
 
+      const canDelete = user && user.role === "supervisor" && String(m.hostId || "") === String(user.id || "");
+
       btn.innerHTML = `
         <div class="meeting-row">
           <div class="meeting-badge">M</div>
           <div class="meeting-text">
             <div class="meeting-title">
-              ${escapeHtml(m.title || "Meeting")} <span class="meeting-id">#${escapeHtml(m.meetingId)}</span>
+              ${escapeHtml(m.title || "Meeting")}
+              <span class="meeting-id">#${escapeHtml(m.meetingId)}</span>
             </div>
             <div class="meeting-sub">
               ${escapeHtml(formatStartAt(m.startAt))} • Host: ${escapeHtml(m.hostName || m.hostId || "-")}
+            </div>
+            <div class="meeting-sub" style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+              <span class="meeting-pill">ID: <b>${escapeHtml(m.meetingId)}</b></span>
+              <button type="button" class="btn-secondary" data-act="copy-id" style="padding:6px 10px;">📋 Copy ID</button>
+              <button type="button" class="btn-secondary" data-act="share" style="padding:6px 10px;">📤 Share</button>
+              ${canDelete ? `<button type="button" class="btn-secondary danger" data-act="delete" style="padding:6px 10px;">🗑 Delete</button>` : ``}
             </div>
           </div>
         </div>
       `;
 
-      btn.addEventListener("click", () => {
+      // click on main item fills join (without password)
+      btn.addEventListener("click", (e) => {
+        const act = e.target?.getAttribute?.("data-act");
+        if (act) return; // handled below
         if (joinId) joinId.value = m.meetingId || "";
         joinPass?.focus?.();
+      });
+
+      // button actions
+      btn.querySelector('[data-act="copy-id"]')?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await copyText(m.meetingId || "");
+      });
+
+      btn.querySelector('[data-act="share"]')?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const txt = `TeleSyriana Meeting\nID: ${m.meetingId}\nTime: ${formatStartAt(m.startAt)}\nHost: ${m.hostName || m.hostId || "-"}`;
+        await shareText("Meeting", txt);
+      });
+
+      btn.querySelector('[data-act="delete"]')?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete meeting #${m.meetingId}?`)) return;
+        try {
+          await deleteMeetingById(m.meetingId);
+          alert("Deleted ✅");
+        } catch (err) {
+          console.error(err);
+          alert(isQuotaErr(err) ? "Quota issue (wait a bit) ⚠️" : "Delete failed ⚠️");
+        }
       });
 
       elList.appendChild(btn);
@@ -247,7 +341,17 @@ if (window.__TS_MEETINGS_INIT__) {
     if (!elCreateId || !elCreatePass || !elCreateDate || !elCreateTime) return;
     if (defaultsLoading) return;
 
-    // ✅ don’t re-fetch counter unless needed
+    const user = getCurrentUser();
+    const isSup = !!user && user.role === "supervisor";
+
+    // ✅ nicer UX: show password as password field + ability to toggle
+    // (HTML currently uses type="text" readonly; we turn it into password + readonly)
+    try {
+      elCreatePass.setAttribute("readonly", "readonly");
+      elCreateId.setAttribute("readonly", "readonly");
+      elCreatePass.type = "password";
+    } catch {}
+
     const idFilled = (elCreateId.value || "").trim().length > 0;
     const passFilled = (elCreatePass.value || "").trim().length > 0;
 
@@ -255,6 +359,32 @@ if (window.__TS_MEETINGS_INIT__) {
 
     defaultsLoading = true;
     try {
+      // if supervisor already has an upcoming meeting → reuse it (ONE meeting rule)
+      if (isSup) {
+        try {
+          const existing = await findMyUpcomingMeeting(user.id);
+          if (existing?.meetingId) {
+            // fill from existing
+            elCreateId.value = existing.meetingId || "";
+            elCreatePass.value = existing.password || "";
+            elCreateTitle && (elCreateTitle.value = existing.title || "");
+
+            // set date/time inputs from startAt
+            const d = existing.startAt?.toDate?.() || null;
+            if (d) {
+              elCreateDate.value = toLocalDateInput(d);
+              elCreateTime.value = toLocalTimeInput(d);
+            }
+
+            defaultsLoadedOnce = true;
+            return;
+          }
+        } catch (e) {
+          console.warn("findMyUpcomingMeeting skipped:", e);
+        }
+      }
+
+      // else: normal defaults
       const d = new Date();
       d.setMinutes(d.getMinutes() + 15);
 
@@ -273,6 +403,21 @@ if (window.__TS_MEETINGS_INIT__) {
   async function createMeeting() {
     const user = getCurrentUser();
     if (!user || user.role !== "supervisor") return alert("Supervisor only.");
+
+    // ✅ ONE meeting only: if there is already upcoming meeting, block creation
+    try {
+      const existing = await findMyUpcomingMeeting(user.id);
+      if (existing?.meetingId) {
+        // fill UI + tell user
+        if (elCreateId) elCreateId.value = existing.meetingId || "";
+        if (elCreatePass) elCreatePass.value = existing.password || "";
+        alert(`You already have an upcoming meeting ✅\nMeeting ID: ${existing.meetingId}\n(You can delete it first if you want a new one)`);
+        return;
+      }
+    } catch (e) {
+      console.warn("existing meeting check failed:", e);
+      // continue (don’t block) if check fails
+    }
 
     const title = (elCreateTitle?.value || "").trim() || "Meeting";
     const startAt = parseStartAt(elCreateDate?.value, elCreateTime?.value);
@@ -295,10 +440,16 @@ if (window.__TS_MEETINGS_INIT__) {
 
     await setDoc(doc(db, MEETINGS_COL, meetingId), payload, { merge: true });
 
-    // next defaults for the next meeting (force new id/pass)
-    await prepareCreateDefaults(true);
+    // next defaults (force) — BUT since one-only, we actually keep showing same meeting
+    defaultsLoadedOnce = false;
+    await prepareCreateDefaults(false);
 
-    alert(`Created ✅\nMeeting ID: ${meetingId}\nPassword: ${password}`);
+    // ✅ quick share
+    const msg = `TeleSyriana Meeting\nID: ${meetingId}\nPassword: ${password}\nTime: ${formatStartAt(startAt)}\nHost: ${user.name}`;
+    await copyText(`ID: ${meetingId}\nPassword: ${password}`);
+    alert(`Created ✅\nMeeting ID: ${meetingId}\nPassword: ${password}\n\nCopied to clipboard ✅`);
+    // optional: share sheet
+    // await shareText("Meeting", msg);
   }
 
   // -------------------- Join meeting (local preview only) --------------------
@@ -357,6 +508,101 @@ if (window.__TS_MEETINGS_INIT__) {
     setTimeout(() => (handBtn.textContent = "✋ Raise hand"), 1200);
   }
 
+  // -------------------- Easy share buttons (auto-injected) --------------------
+  function injectShareButtons() {
+    if (!elCreateBox || elCreateBox.__shareInjected) return;
+    elCreateBox.__shareInjected = true;
+
+    // create a small tools row under create-actions
+    const tools = document.createElement("div");
+    tools.style.display = "flex";
+    tools.style.gap = "8px";
+    tools.style.flexWrap = "wrap";
+    tools.style.marginTop = "10px";
+
+    const btnShow = document.createElement("button");
+    btnShow.type = "button";
+    btnShow.className = "btn-secondary";
+    btnShow.textContent = "👁 Show password";
+
+    const btnCopyId = document.createElement("button");
+    btnCopyId.type = "button";
+    btnCopyId.className = "btn-secondary";
+    btnCopyId.textContent = "📋 Copy ID";
+
+    const btnCopyPass = document.createElement("button");
+    btnCopyPass.type = "button";
+    btnCopyPass.className = "btn-secondary";
+    btnCopyPass.textContent = "📋 Copy Password";
+
+    const btnShare = document.createElement("button");
+    btnShare.type = "button";
+    btnShare.className = "btn-secondary";
+    btnShare.textContent = "📤 Share";
+
+    const btnDeleteMine = document.createElement("button");
+    btnDeleteMine.type = "button";
+    btnDeleteMine.className = "btn-secondary danger";
+    btnDeleteMine.textContent = "🗑 Delete my meeting";
+
+    tools.appendChild(btnShow);
+    tools.appendChild(btnCopyId);
+    tools.appendChild(btnCopyPass);
+    tools.appendChild(btnShare);
+    tools.appendChild(btnDeleteMine);
+
+    elCreateBox.appendChild(tools);
+
+    btnShow.addEventListener("click", () => {
+      if (!elCreatePass) return;
+      const isPwd = elCreatePass.type === "password";
+      elCreatePass.type = isPwd ? "text" : "password";
+      btnShow.textContent = isPwd ? "🙈 Hide password" : "👁 Show password";
+    });
+
+    btnCopyId.addEventListener("click", async () => {
+      await copyText(elCreateId?.value || "");
+    });
+
+    btnCopyPass.addEventListener("click", async () => {
+      await copyText(elCreatePass?.value || "");
+    });
+
+    btnShare.addEventListener("click", async () => {
+      const id = (elCreateId?.value || "").trim();
+      const pw = (elCreatePass?.value || "").trim();
+      const t = (elCreateTitle?.value || "Meeting").trim();
+      const d = `${elCreateDate?.value || ""} ${elCreateTime?.value || ""}`.trim();
+      const msg = `TeleSyriana Meeting\nTitle: ${t}\nID: ${id}\nPassword: ${pw}\nTime: ${d}`;
+      await shareText("Meeting", msg);
+    });
+
+    btnDeleteMine.addEventListener("click", async () => {
+      const user = getCurrentUser();
+      if (!user || user.role !== "supervisor") return;
+
+      // try delete by current createId first
+      const id = (elCreateId?.value || "").trim();
+      if (!id) return alert("No meeting to delete.");
+
+      if (!confirm(`Delete your meeting #${id}?`)) return;
+
+      try {
+        await deleteMeetingById(id);
+        // clear fields after delete
+        if (elCreateTitle) elCreateTitle.value = "";
+        if (elCreateId) elCreateId.value = "";
+        if (elCreatePass) elCreatePass.value = "";
+        defaultsLoadedOnce = false;
+        await prepareCreateDefaults(false);
+        alert("Deleted ✅");
+      } catch (err) {
+        console.error(err);
+        alert(isQuotaErr(err) ? "Quota issue (wait a bit) ⚠️" : "Delete failed ⚠️");
+      }
+    });
+  }
+
   // -------------------- init --------------------
   function initMeetings() {
     const user = getCurrentUser();
@@ -366,37 +612,35 @@ if (window.__TS_MEETINGS_INIT__) {
       const show = !!user && user.role === "supervisor";
       elCreateBox.classList.toggle("hidden", !show);
       if (show) {
-        // ✅ defaults once (not repeated)
+        injectShareButtons();
         prepareCreateDefaults(false).catch(console.error);
       }
     }
 
     subscribeUpcoming();
 
-    // search
     elSearch?.addEventListener("input", () => applySearch(elSearch.value));
     elSearchClear?.addEventListener("click", () => {
       if (elSearch) elSearch.value = "";
       applySearch("");
     });
 
-    // create
     btnNewPass?.addEventListener("click", () => {
+      // password only changes (doesn’t create extra reads)
       if (elCreatePass) elCreatePass.value = randomPassword(6);
     });
 
     btnCreate?.addEventListener("click", () => {
       createMeeting().catch((e) => {
         console.error(e);
-        alert("Create failed (check Firestore rules / quota).");
+        alert(isQuotaErr(e) ? "Quota exceeded ⚠️ (wait 1-2 min)" : "Create failed (rules/quota) ⚠️");
       });
     });
 
-    // join
     joinBtn?.addEventListener("click", () => {
       joinMeeting().catch((e) => {
         console.error(e);
-        alert("Join failed (check meeting id/password + rules).");
+        alert(isQuotaErr(e) ? "Quota exceeded ⚠️ (wait 1-2 min)" : "Join failed ⚠️");
       });
     });
 
@@ -405,14 +649,14 @@ if (window.__TS_MEETINGS_INIT__) {
     handBtn?.addEventListener("click", raiseHand);
     leaveBtn?.addEventListener("click", leaveMeeting);
 
-    // user changed (login/logout)
     window.addEventListener("telesyriana:user-changed", () => {
       const u = getCurrentUser();
       const show = !!u && u.role === "supervisor";
       elCreateBox?.classList.toggle("hidden", !show);
-
-      // ✅ only load defaults when supervisor and inputs empty
-      if (show) prepareCreateDefaults(false).catch(console.error);
+      if (show) {
+        injectShareButtons();
+        prepareCreateDefaults(false).catch(console.error);
+      }
     });
   }
 
