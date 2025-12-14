@@ -504,6 +504,10 @@ input:focus, textarea:focus, select:focus{
   flex:0 0 auto;
   border-radius:18px;
   overflow:hidden;
+  min-height: 0;
+   overflow-y: auto;
+   -webkit-overflow-scrolling: touch;
+  
 
   background: rgba(255,255,255,.28);
   border: 1px solid rgba(255,255,255,.45);
@@ -1323,6 +1327,7 @@ input:focus, textarea:focus, select:focus{
   border-radius: 8px;
   border: 1px solid #ccc;
 }
+
 
 
 
