@@ -566,26 +566,52 @@
 </div>
 
       <!-- Meeting Page -->
-      <section id="page-meetings" class="page-section hidden">
+      <!-- MEETINGS PAGE -->
+<section id="page-meetings" class="page-section hidden">
   <section class="card meetings-card">
     <div class="meetings-layout">
-      <!-- LEFT: upcoming + search -->
+
+      <!-- LEFT SIDEBAR -->
       <aside class="meetings-sidebar glass">
         <div class="ms-top">
           <div class="ms-title">Meetings</div>
 
+          <!-- search -->
           <div class="ms-search">
-            <input id="meeting-search" type="text" placeholder="Search meeting ID / agent…" autocomplete="off" />
-            <button type="button" class="ms-search-x" title="Clear">×</button>
+            <input id="meeting-search" type="text" placeholder="Search meeting ID / host…" autocomplete="off" />
+            <button type="button" id="meeting-search-clear" class="ms-search-x" title="Clear">×</button>
           </div>
         </div>
 
+        <!-- Create (Supervisor only) -->
+        <div id="create-meeting-box" class="create-meeting hidden">
+          <div class="meetings-sidebar-header">Create</div>
+
+          <div class="create-row">
+            <input id="create-title" type="text" placeholder="Title (e.g. Daily briefing)" autocomplete="off" />
+          </div>
+
+          <div class="create-row two">
+            <input id="create-date" type="date" />
+            <input id="create-time" type="time" />
+          </div>
+
+          <div class="create-row two">
+            <input id="create-id" type="text" placeholder="Meeting ID" autocomplete="off" />
+            <input id="create-pass" type="text" placeholder="Password" autocomplete="off" />
+          </div>
+
+          <button id="create-meeting-btn" class="btn-primary" type="button">Create meeting</button>
+          <div class="create-hint">Tip: Share ID + password with agents.</div>
+        </div>
+
         <div class="meetings-sidebar-header">Upcoming</div>
-        <div id="meetings-list" class="ms-list"></div>
+
+        <div id="meetings-list" class="ms-list" data-list="meetings"></div>
         <div class="ms-empty" id="meetings-empty">No upcoming meetings</div>
       </aside>
 
-      <!-- RIGHT: join panel + video -->
+      <!-- RIGHT MAIN -->
       <div class="meetings-main">
         <header class="chat-header">
           <div>
@@ -596,22 +622,32 @@
 
         <div class="meeting-join">
           <div class="meeting-join-row">
-            <input id="join-meeting-id" type="text" placeholder="Meeting ID" />
-            <input id="join-meeting-pass" type="password" placeholder="Password" />
+            <input id="join-meeting-id" type="text" placeholder="Meeting ID" autocomplete="off" />
+            <input id="join-meeting-pass" type="password" placeholder="Password" autocomplete="off" />
             <button id="join-meeting-btn" class="btn-primary" type="button" style="width:auto;padding:10px 16px">Join</button>
           </div>
 
+          <!-- STAGE -->
           <div class="meeting-stage hidden" id="meeting-stage">
-            <div class="meeting-video-wrap">
+            <div class="meeting-video-area">
               <video id="local-video" autoplay playsinline muted></video>
+
+              <div class="meeting-label">
+                <span id="meeting-live-title">In meeting</span>
+                <span id="meeting-live-meta"></span>
+              </div>
             </div>
 
             <div class="meeting-controls">
               <button id="btn-mic" class="btn-secondary" type="button">🎤 Mute</button>
               <button id="btn-cam" class="btn-secondary" type="button">📷 Camera off</button>
               <button id="btn-hand" class="btn-secondary" type="button">✋ Raise hand</button>
-              <button id="btn-leave" class="btn-secondary" type="button">⛔ Leave</button>
+              <button id="btn-leave" class="btn-secondary danger" type="button">⛔ Leave</button>
             </div>
+          </div>
+
+          <div class="meeting-note">
+            *This is local preview (camera/mic). Real multi-user calls need realtime/WebRTC server later.
           </div>
         </div>
       </div>
@@ -619,6 +655,7 @@
     </div>
   </section>
 </section>
+
 
 
       <!-- SETTINGS PAGE -->
@@ -681,6 +718,7 @@
 
 </body>
 </html>
+
 
 
 
