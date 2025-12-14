@@ -1208,3 +1208,59 @@ input:focus, textarea:focus, select:focus{
 }
 
 .unread-badge.hidden{ display:none !important; }
+
+/* =========================
+   Unread badges (Messages counter)
+   (ADD ONLY - no rename)
+========================= */
+
+/* allow badge positioning inside nav buttons */
+.nav-link{ position:relative; }
+
+/* red circle on each chat item */
+.unread-badge{
+  position:absolute;
+  right:10px;
+  top:10px;
+
+  min-width:18px;
+  height:18px;
+  padding:0 6px;
+
+  border-radius:999px;
+  background:#ff3b30;
+  color:#fff;
+
+  font-size:11px;
+  font-weight:900;
+  line-height:18px;
+  text-align:center;
+
+  box-shadow:0 6px 16px rgba(0,0,0,.18);
+  border:2px solid rgba(255,255,255,.95);
+  pointer-events:none;
+}
+
+/* nav badge (Messages) */
+#nav-messages-badge{
+  position:absolute;
+  right:-6px;
+  top:-6px;
+
+  min-width:18px;
+  height:18px;
+  padding:0 6px;
+
+  border-radius:999px;
+  background:#ff3b30;
+  color:#fff;
+
+  font-size:11px;
+  font-weight:900;
+  line-height:18px;
+  text-align:center;
+
+  box-shadow:0 10px 22px rgba(0,0,0,.20);
+  border:2px solid rgba(255,255,255,.95);
+  pointer-events:none;
+}
