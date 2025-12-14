@@ -595,7 +595,12 @@
 
           <div class="create-row two">
             <input id="create-id" type="text" placeholder="Meeting ID" autocomplete="off" readonly />
-            <input id="create-pass" type="text" placeholder="Password" autocomplete="off" readonly />
+
+            <div class="pass-wrap" style="display:flex; gap:8px; align-items:center;">
+              <input id="create-pass" type="password" placeholder="Password" autocomplete="off" readonly style="flex:1;" />
+              <button id="btn-show-pass" class="btn-secondary" type="button">👁 Show</button>
+              <button id="btn-copy-pass" class="btn-secondary" type="button">📋 Copy</button>
+            </div>
           </div>
 
           <div class="create-actions">
@@ -630,7 +635,7 @@
           <!-- STAGE -->
           <div class="meeting-stage hidden" id="meeting-stage">
             <div class="meeting-video-area">
-              <video id="local-video" autoplay playsinline muted></video>
+              <div class="meeting-video-grid" id="meeting-grid"></div>
 
               <div class="meeting-label">
                 <span id="meeting-live-title">In meeting</span>
@@ -647,7 +652,7 @@
           </div>
 
           <div class="meeting-note">
-            *Local preview only. Real multi-user video needs WebRTC signaling/server later.
+            *WebRTC demo (Mesh). Some networks may need TURN server for full reliability.
           </div>
         </div>
       </div>
@@ -655,7 +660,6 @@
     </div>
   </section>
 </section>
-
       <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
         <div class="card">
@@ -716,6 +720,7 @@
 
 </body>
 </html>
+
 
 
 
