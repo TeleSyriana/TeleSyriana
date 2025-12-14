@@ -1599,6 +1599,9 @@ input:focus, textarea:focus, select:focus{
   font-size:11px;
   color:#777;
 }
+meetings-sidebar-header{
+   margin-left: 5px;
+}
 
 /* responsive */
 @media (max-width:900px){
@@ -1611,6 +1614,7 @@ input:focus, textarea:focus, select:focus{
   .meeting-join-row .btn-primary{ grid-column: 1 / -1; }
   .meeting-video-area{ height: 320px; }
 }
+
 
 
 
