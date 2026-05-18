@@ -346,6 +346,100 @@ function setCurrentUser() {
   currentUser = getUserFromStorage();
 }
 
+function msgLang() {
+  return (document.body?.dataset?.language || document.documentElement.lang || "ar") === "en" ? "en" : "ar";
+}
+const MSG_I18N = {
+  ar: {
+    title: "الرسائل",
+    start: "ابدأ المحادثة…",
+    empty: "اختر غرفة أو شخصاً لبدء المحادثة.",
+    search: "البحث باسم أو غرفة…",
+    createGroup: "+ إنشاء مجموعة",
+    rooms: "الغرف",
+    groups: "المجموعات",
+    recent: "الأخيرة",
+    direct: "الرسائل المباشرة",
+    general: "الدردشة العامة",
+    generalSub: "كل الموظفين والمشرفين",
+    supervisors: "المشرفون",
+    supervisorOnly: "للمشرفين فقط",
+    internalNotes: "ملاحظات داخلية",
+    aiSub: "غرفة المساعد الذكي",
+    soon: "قريباً",
+    noGroups: "لا توجد مجموعات بعد",
+    noRecent: "لا توجد محادثات حديثة",
+    directChat: "محادثة مباشرة",
+    back: "رجوع",
+    send: "إرسال",
+    type: "اكتب رسالة…",
+    live: "متصل الآن",
+    away: "بعيد",
+    offline: "غير متصل",
+    lastSeen: "آخر ظهور",
+    noCustomer: "لا تضع بيانات حساسة للعميل هنا."
+  },
+  en: {
+    title: "Messages",
+    start: "Start chatting…",
+    empty: "Select a room or person to start chatting.",
+    search: "Search name / room…",
+    createGroup: "+ Create Group",
+    rooms: "Rooms",
+    groups: "Groups",
+    recent: "Recent",
+    direct: "Direct messages",
+    general: "General chat",
+    generalSub: "All agents & supervisors",
+    supervisors: "Supervisors",
+    supervisorOnly: "Supervisor only",
+    internalNotes: "Internal notes",
+    aiSub: "AI assistant room",
+    soon: "Coming soon",
+    noGroups: "No groups yet",
+    noRecent: "No recent chats yet",
+    directChat: "Direct chat",
+    back: "Back",
+    send: "Send",
+    type: "Type a message…",
+    live: "Live now",
+    away: "Away",
+    offline: "Offline",
+    lastSeen: "Last seen",
+    noCustomer: "Do not post sensitive customer data here."
+  }
+};
+function msgT(key) {
+  const lang = msgLang();
+  return MSG_I18N[lang]?.[key] || MSG_I18N.en[key] || key;
+}
+function translateMessagesUI() {
+  const q = (sel) => document.querySelector(sel);
+  const qa = (sel) => Array.from(document.querySelectorAll(sel));
+  const title = q("#page-messages .ms-title"); if (title) title.textContent = msgT("title");
+  const search = q("#messages-search"); if (search) search.placeholder = msgT("search");
+  const groupBtn = q("#group-open-modal"); if (groupBtn) groupBtn.textContent = msgT("createGroup");
+  const headers = qa("#page-messages .messages-sidebar-header");
+  if (headers[0]) headers[0].textContent = msgT("rooms");
+  if (headers[1]) headers[1].textContent = msgT("groups");
+  if (headers[2]) headers[2].textContent = msgT("recent");
+  if (headers[3]) headers[3].textContent = msgT("direct");
+  const general = q('[data-room="general"] .chat-room-title'); if (general) general.textContent = msgT("general");
+  const genSub = q('[data-room="general"] .chat-room-sub'); if (genSub) genSub.textContent = msgT("generalSub");
+  const supTitle = q('[data-room="supervisors"] .chat-room-title'); if (supTitle) supTitle.innerHTML = `${msgT("supervisors")} <span class="room-badge">${msgT("supervisorOnly")}</span>`;
+  const supSub = q('[data-room="supervisors"] .chat-room-sub'); if (supSub) supSub.textContent = msgT("internalNotes");
+  const aiTitle = q('[data-room="ai"] .chat-room-title'); if (aiTitle) aiTitle.innerHTML = `ChatGPT 5 <span class="room-badge">${msgT("soon")}</span>`;
+  const aiSub = q('[data-room="ai"] .chat-room-sub'); if (aiSub) aiSub.textContent = msgT("aiSub");
+  const ge = q("#groups-empty"); if (ge) ge.textContent = msgT("noGroups");
+  const re = q("#recent-empty"); if (re) re.textContent = msgT("noRecent");
+  qa("#dm-list .chat-room-sub").forEach((el) => { if (!el.dataset.presenceLocked) el.textContent = msgT("directChat"); });
+  const back = q("#chat-back"); if (back) back.textContent = msgT("back");
+  const input = q("#chat-input"); if (input) input.placeholder = msgT("type");
+  const send = q("#chat-form button[type='submit']"); if (send) send.textContent = msgT("send");
+  const empty = q("#chat-empty"); if (empty) empty.textContent = msgT("empty");
+  if (!activeChat) setHeader(msgT("title"), msgT("start"));
+}
+
 function dmRoomId(a, b) {
   const x = String(a);
   const y = String(b);
@@ -475,8 +569,8 @@ function renderChunkToTop(listEl, items, showRole) {
 function setHeader(title, desc) {
   const roomNameEl = document.getElementById("chat-room-name");
   const roomDescEl = document.getElementById("chat-room-desc");
-  if (roomNameEl) roomNameEl.textContent = title || "الرسائل";
-  if (roomDescEl) roomDescEl.textContent = desc || "ابدأ المحادثة…";
+  if (roomNameEl) roomNameEl.textContent = title || msgT("title");
+  if (roomDescEl) roomDescEl.textContent = desc || msgT("start");
 }
 
 function setEmpty(on) {
@@ -996,14 +1090,14 @@ function presenceالحالة(row) {
 }
 function presenceText(row) {
   const status = presenceالحالة(row);
-  if (status === "online") return `Live now • ${row?.page || "home"}`;
-  if (status === "away") return `بعيد • ${row?.page || "home"}`;
+  if (status === "online") return `${msgT("live")} • ${row?.page || "home"}`;
+  if (status === "away") return `${msgT("away")} • ${row?.page || "home"}`;
   const ms = Number(row?.lastSeenMs || 0);
-  if (!ms) return "غير متصل";
+  if (!ms) return msgT("offline");
   const mins = Math.floor((Date.now() - ms) / 60000);
-  if (mins < 60) return `آخر ظهور ${mins} min ago`;
+  if (mins < 60) return `${msgT("lastSeen")} ${mins} min ago`;
   const hrs = Math.floor(mins / 60);
-  return `آخر ظهور ${hrs} hr${hrs === 1 ? "" : "s"} ago`;
+  return `${msgT("lastSeen")} ${hrs} hr${hrs === 1 ? "" : "s"} ago`;
 }
 function subscribePresenceSidebar() {
   if (unsubPresence) return;
@@ -1019,7 +1113,7 @@ function subscribePresenceSidebar() {
         dot.title = presenceText(row);
       }
       const sub = document.querySelector(`[data-sub="${id}"]`);
-      if (sub) sub.textContent = presenceText(row);
+      if (sub) { sub.textContent = presenceText(row); sub.dataset.presenceLocked = "1"; }
     });
   }, (err) => console.warn("message presence listener failed", err));
 }
@@ -1050,7 +1144,8 @@ document.addEventListener("DOMContentLoaded", () => {
   makeCollapsible("Recent", "recent-list");
   makeCollapsible("Direct messages", "dm-list");
 
-  setHeader("الرسائل", "ابدأ المحادثة…");
+  translateMessagesUI();
+  setHeader(msgT("title"), msgT("start"));
   setEmpty(true);
   setInputEnabled(false);
 
@@ -1079,7 +1174,7 @@ document.addEventListener("DOMContentLoaded", () => {
         activeChat = { type: "ai", roomId: "ai", title: "ChatGPT 5", desc: "Coming soon…" };
         setActiveButton(btn);
         unsubscribeAllMain();
-        setHeader("ChatGPT 5", "Coming soon…");
+        setHeader("ChatGPT 5", msgT("soon"));
         setEmpty(true);
         setInputEnabled(false);
         return;
@@ -1090,10 +1185,10 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      const title = room === "general" ? "General chat" : "Supervisors";
+      const title = room === "general" ? msgT("general") : msgT("supervisors");
       const desc =
         room === "general"
-          ? "All agents & supervisors • Be respectful • No customer data."
+          ? `${msgT("generalSub")} • ${msgT("noCustomer")}`
           : "Supervisor / Manager space for internal notes and coordination.";
 
       openChat({ type: "room", roomId: room, title, desc }, btn);
@@ -1119,7 +1214,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const otherName = (nameEl?.textContent || `CCMS ${otherId}`).trim();
 
       openChat(
-        { type: "dm", roomId, title: otherName, desc: `Direct message • CCMS ${otherId}` },
+        { type: "dm", roomId, title: otherName, desc: `${msgT("directChat")} • CCMS ${otherId}` },
         btn
       );
     });
@@ -1175,7 +1270,8 @@ window.addEventListener("telesyriana:user-changed", () => {
   clearActiveButtons();
   activeChat = null;
 
-  setHeader("الرسائل", "ابدأ المحادثة…");
+  translateMessagesUI();
+  setHeader(msgT("title"), msgT("start"));
   setEmpty(true);
   setInputEnabled(false);
 
@@ -1210,3 +1306,5 @@ window.addEventListener("telesyriana:user-changed", () => {
   applySearchFilter();
 });
 
+
+try { window.addEventListener("telesyriana:language-changed", translateMessagesUI); } catch {}

@@ -286,9 +286,14 @@ function setTicketFormمفتوحة(open) {
   const form = el("ticket-form");
   if (!form) return;
   form.classList.toggle("hidden", !open);
-  document.body.classList.toggle("ticket-modal-open", Boolean(open));
+  document.body.classList.remove("ticket-modal-open");
   if (open) {
-    setTimeout(() => el("ticket-order")?.focus(), 50);
+    renderالطلبPreview(null);
+    const ticketTop = document.querySelector(".tickets-card");
+    setTimeout(() => {
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+      el("ticket-order")?.focus();
+    }, 40);
   }
 }
 
@@ -358,6 +363,21 @@ function renderStats(rows) {
   if (el("ticket-stat-resolved")) el("ticket-stat-resolved").textContent = String(resolvedToday);
 }
 
+function shopifyStatusMeta(t) {
+  const raw = String(t?.shopifyStatus || t?.shopifySyncStatus || "").toLowerCase();
+  const hasOrder = t?.source === "order_cache" || (t?.orderData && Object.keys(t.orderData || {}).length > 0);
+  if (raw === "synced" || hasOrder) return { cls: "synced", ar: "متزامن مع Shopify", en: "Synced with Shopify" };
+  if (raw === "failed" || raw === "not_found" || raw === "missing") return { cls: "failed", ar: "لم يتم العثور في Shopify", en: "Failed to load from Shopify" };
+  return { cls: "manual", ar: "إدخال يدوي", en: "Manual entry" };
+}
+function currentLang() {
+  return (document.body?.dataset?.language || document.documentElement.lang || "ar") === "en" ? "en" : "ar";
+}
+function shopifyStatusPill(t) {
+  const m = shopifyStatusMeta(t);
+  return `<span class="shopify-sync-pill ${m.cls}">${escapeHtml(m[currentLang()] || m.en)}</span>`;
+}
+
 function renderTicketList() {
   const list = el("tickets-list");
   const empty = el("tickets-empty");
@@ -379,6 +399,7 @@ function renderTicketList() {
       <div class="ticket-row-top">
         <strong>#${escapeHtml(t.orderNumber || "—")}</strong>
         <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(PRIORITY_LABELS[t.priority] || "عادي")}</span>
+        ${shopifyStatusPill(t)}
       </div>
       <div class="ticket-row-title">${escapeHtml(TYPE_LABELS[t.type] || t.type || "Ticket")}</div>
       <div class="ticket-row-meta">
@@ -424,6 +445,12 @@ function renderTicketDetail() {
     pill.textContent = PRIORITY_LABELS[t.priority] || "عادي";
     pill.className = `ticket-priority-pill ${t.priority || "normal"}`;
   }
+  const syncPill = el("ticket-detail-shopify");
+  if (syncPill) {
+    const meta = shopifyStatusMeta(t);
+    syncPill.textContent = meta[currentLang()] || meta.en;
+    syncPill.className = `shopify-sync-pill ${meta.cls}`;
+  }
 
   fillAssigneeSelect(el("ticket-detail-assigned"), true);
   el("ticket-detail-status").value = t.status || "open";
@@ -445,6 +472,7 @@ function renderTicketDetail() {
       <div><strong>Delivery:</strong> ${escapeHtml(orderالحالةLabel(orderData.deliveryالحالة))}</div>
       <div><strong>تم الإنشاء by:</strong> ${escapeHtml(staffName(t.createdBy))} (${escapeHtml(t.createdBy || "—")})</div>
       <div><strong>Updated:</strong> ${escapeHtml(fmtDate(t.updatedAt))}</div>
+      <div><strong>Shopify:</strong> ${shopifyStatusPill(t)}</div>
       <div><strong>Risk:</strong> ${escapeHtml(t.risk || "normal")}</div>
     `;
   }
@@ -557,7 +585,11 @@ async function createTicket() {
   const oldCreateText = createBtn?.textContent || "إنشاء التذكرة";
   if (createBtn) { createBtn.disabled = true; createBtn.textContent = "جاري الإنشاء..."; }
   const orderNumber = normaliseالطلبNumber(el("ticket-order")?.value);
-  if (!orderNumber) return showTicketAlert("الطلب number is required.", true);
+  if (!orderNumber) {
+    showTicketAlert("رقم الطلب مطلوب.", true);
+    if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; }
+    return;
+  }
 
   const type = el("ticket-type")?.value || "general_question";
   const priority = el("ticket-priority")?.value || inferالأولوية(type);
@@ -581,6 +613,8 @@ async function createTicket() {
     customerMood: inferMood(type, priority),
     risk: riskFromTypeAndالطلب(type, cachedالطلب),
     source: cachedالطلب ? "order_cache" : "manual",
+    shopifyStatus: cachedالطلب ? "synced" : "failed",
+    shopifyStatusLabel: cachedالطلب ? "Synced with Shopify" : "Failed to load from Shopify",
     orderData: cachedالطلب ? {
       customerName: cachedالطلب.customerName || "",
       email: cachedالطلب.email || "",
@@ -606,7 +640,7 @@ async function createTicket() {
     renderالطلبPreview(null);
     fillAssigneeSelect(el("ticket-assigned"), true);
     setTicketFormمفتوحة(false);
-    showTicketAlert("تم إنشاء التذكرة بنجاح.");
+    showTicketAlert(cachedالطلب ? "تم إنشاء التذكرة وربطها ببيانات Shopify." : "تم إنشاء التذكرة، لكن لم يتم العثور على بيانات Shopify لهذا الطلب.", !cachedالطلب);
   } catch (err) {
     console.error("createTicket failed", err);
     showTicketAlert(`Ticket could not be created: ${err?.code || err?.message || "check Firestore permissions/internet"}`, true);
@@ -735,3 +769,5 @@ function initTickets() {
 
 document.addEventListener("DOMContentLoaded", initTickets);
 window.addEventListener("telesyriana:user-changed", initTickets);
+
+try { window.addEventListener("telesyriana:language-changed", () => { renderTicketList(); renderTicketDetail(); }); } catch {}

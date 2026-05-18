@@ -1356,6 +1356,9 @@ function applyLanguage(language = "ar") {
   setText('#settings-form button[type="submit"]', dict.save);
   const menuTitle = document.querySelector(".mobile-drawer-title");
   if (menuTitle) menuTitle.textContent = dict.menu;
+
+  // Let feature modules translate their own static UI.
+  try { window.dispatchEvent(new CustomEvent("telesyriana:language-changed", { detail: { language: lang } })); } catch {}
 }
 
 async function loadUserProfile() {
