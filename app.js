@@ -15,10 +15,10 @@ const {
 
 // Demo users
 const USERS = {
-  "1001": { password: "Welcome 2026!", role: "agent", name: "Agent Raghad Mousa" },
-  "1002": { password: "Welcome 2026!", role: "agent", name: "Agent Qamar Mousa" },
-  "2001": { password: "2411", role: "supervisor", name: "Supervisor Dema" },
-  "2002": { password: "0951", role: "supervisor", name: "Supervisor Mohammad" },
+  "0001": { password: "Welcome 2026!", role: "agent", name: "Agent Raghad Mousa" },
+  "0002": { password: "Welcome 2026!", role: "agent", name: "Agent Qamar Mousa" },
+  "1001": { password: "2411", role: "supervisor", name: "Supervisor Dema" },
+  "1002": { password: "0951", role: "supervisor", name: "Supervisor Mohammad" },
 };
 
 const USER_KEY = "telesyrianaUser";
