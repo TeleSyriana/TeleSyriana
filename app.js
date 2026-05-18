@@ -17,6 +17,7 @@ const {
 const USERS = {
   "0001": { password: "Welcome 2026!", role: "agent", name: "Agent Raghad Mousa" },
   "0002": { password: "Welcome 2026!", role: "agent", name: "Agent Qamar Mousa" },
+  "0003": { password: "Welcome 2026!", role: "agent", name: "Agent" },
   "1001": { password: "2411", role: "supervisor", name: "Supervisor Dema" },
   "1002": { password: "0951", role: "supervisor", name: "Supervisor Mohammad" },
 };
