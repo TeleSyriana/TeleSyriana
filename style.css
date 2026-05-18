@@ -3113,3 +3113,31 @@ html[dir="rtl"] .hint {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Phase 15 — language direction helpers */
+body[data-language="en"] { direction: ltr; text-align: left; }
+body[data-language="ar"] { direction: rtl; text-align: right; }
+body[data-language="en"] .app-header,
+body[data-language="en"] .main-nav,
+body[data-language="en"] .login-layout { direction: ltr; }
+body[data-language="ar"] .app-header,
+body[data-language="ar"] .main-nav,
+body[data-language="ar"] .login-layout { direction: rtl; }
+body[data-language="en"] input,
+body[data-language="en"] textarea,
+body[data-language="en"] select { text-align: left; }
+body[data-language="ar"] input,
+body[data-language="ar"] textarea,
+body[data-language="ar"] select { text-align: right; }
+body[data-language="en"] input[type="email"],
+body[data-language="en"] input[type="url"],
+body[data-language="en"] input[type="password"],
+body[data-language="en"] input[id*="ccms" i],
+body[data-language="en"] input[id*="order" i],
+body[data-language="en"] input[id*="tracking" i] { direction: ltr; text-align: left; }
+body[data-language="ar"] input[type="email"],
+body[data-language="ar"] input[type="url"],
+body[data-language="ar"] input[type="password"],
+body[data-language="ar"] input[id*="ccms" i],
+body[data-language="ar"] input[id*="order" i],
+body[data-language="ar"] input[id*="tracking" i] { direction: ltr; text-align: left; }

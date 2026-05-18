@@ -708,6 +708,7 @@ function subscribeIssueCalendar() {
 /* --------------------------- UI init ------------------------------------ */
 
 document.addEventListener("DOMContentLoaded", async () => {
+  applyLanguage(localStorage.getItem(LANGUAGE_KEY) || "ar");
   // ✅ menu navigation
   document.querySelectorAll(".nav-link").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -1213,6 +1214,150 @@ function applyBackground(background, imageData = "") {
   }
 }
 
+const LANGUAGE_KEY = "telesyrianaLanguage";
+const UI_TEXT = {
+  ar: {
+    nav: {
+      home: "الرئيسية", tasks: "الملاحظات", tickets: "التذاكر", reports: "التقارير",
+      payroll: "الرواتب", messages: "الرسائل", meetings: "الاجتماعات", settings: "الإعدادات",
+    },
+    logout: "تسجيل الخروج",
+    tagline: "بوابة إدارة فريق الدعم",
+    loginTitle: "تسجيل الدخول",
+    loginSubtitle: "يرجى تسجيل الدخول باستخدام رقم الموظف وكلمة المرور.",
+    ccms: "رقم الموظف CCMS",
+    password: "كلمة المرور",
+    loginBtn: "دخول",
+    trialUsers: "حسابات التجربة:",
+    settingsTitle: "الإعدادات",
+    settingsSubtitle: "تحديث المعلومات الشخصية",
+    fullName: "الاسم الكامل",
+    language: "لغة النظام",
+    languageHint: "تغيير اللغة يغيّر اتجاه الواجهة ويحفظ اختيارك لهذا الحساب.",
+    theme: "لون الواجهة",
+    background: "الخلفية",
+    uploadBg: "رفع صورة خلفية (اختياري)",
+    birthday: "تاريخ الميلاد",
+    notes: "الملاحظات",
+    save: "حفظ",
+    menu: "القائمة",
+  },
+  en: {
+    nav: {
+      home: "Home", tasks: "Notes", tickets: "Tickets", reports: "Reports",
+      payroll: "Payroll", messages: "Messages", meetings: "Meetings", settings: "Settings",
+    },
+    logout: "Logout",
+    tagline: "Agent Access Portal",
+    loginTitle: "Login",
+    loginSubtitle: "Please sign in with your CCMS ID and password.",
+    ccms: "CCMS ID",
+    password: "Password",
+    loginBtn: "Login",
+    trialUsers: "Example users:",
+    settingsTitle: "Settings",
+    settingsSubtitle: "Update personal info",
+    fullName: "Full Name",
+    language: "System language",
+    languageHint: "Changing language updates layout direction and saves your preference for this account.",
+    theme: "Interface colour",
+    background: "Background",
+    uploadBg: "Upload background image (optional)",
+    birthday: "Birthday",
+    notes: "Notes",
+    save: "Save",
+    menu: "Menu",
+  }
+};
+
+function getLanguage() {
+  try {
+    if (currentUser) {
+      const cached = JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}");
+      if (["ar", "en"].includes(cached.language)) return cached.language;
+    }
+  } catch {}
+  const stored = localStorage.getItem(LANGUAGE_KEY);
+  return stored === "en" ? "en" : "ar";
+}
+
+function setText(selector, value) {
+  const el = document.querySelector(selector);
+  if (el && value != null) el.textContent = value;
+}
+
+function setLabelFor(inputId, labelText, hintText) {
+  const input = document.getElementById(inputId);
+  const label = input?.closest("label");
+  if (!label) return;
+  const textNode = Array.from(label.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+  if (textNode) textNode.textContent = `\n              ${labelText}\n              `;
+  const hint = label.querySelector(".hint");
+  if (hint && hintText) hint.textContent = hintText;
+}
+
+function applyLanguage(language = "ar") {
+  const lang = language === "en" ? "en" : "ar";
+  const dict = UI_TEXT[lang];
+  localStorage.setItem(LANGUAGE_KEY, lang);
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  document.body.dataset.language = lang;
+
+  const langSelect = document.getElementById("set-language");
+  if (langSelect) langSelect.value = lang;
+
+  Object.entries(dict.nav).forEach(([page, label]) => {
+    const btn = document.querySelector(`.nav-link[data-page="${page}"]`);
+    if (!btn) return;
+    const badge = btn.querySelector("#nav-messages-badge");
+    Array.from(btn.childNodes).forEach((n) => { if (n.nodeType === Node.TEXT_NODE) n.remove(); });
+    btn.prepend(document.createTextNode(label));
+    if (badge && !btn.contains(badge)) btn.appendChild(badge);
+  });
+
+  const langOptions = document.querySelectorAll('#set-language option');
+  langOptions.forEach((opt) => {
+    if (opt.value === 'ar') opt.textContent = lang === 'ar' ? 'العربية' : 'Arabic';
+    if (opt.value === 'en') opt.textContent = lang === 'ar' ? 'English' : 'English';
+  });
+  const themeOptions = document.querySelectorAll('#set-gender option');
+  const themeText = lang === 'ar'
+    ? { '': 'وردي افتراضي', female: 'وردي', male: 'أزرق', orange: 'برتقالي', green: 'أخضر', navy: 'كحلي', red: 'أحمر' }
+    : { '': 'Default pink', female: 'Pink', male: 'Blue', orange: 'Orange', green: 'Green', navy: 'Navy blue', red: 'Red' };
+  themeOptions.forEach((opt) => { if (themeText[opt.value] != null) opt.textContent = themeText[opt.value]; });
+  const bgOptions = document.querySelectorAll('#set-background option');
+  const bgText = lang === 'ar'
+    ? { default: 'تدرج افتراضي', soft: 'زجاج ناعم', night: 'تركيز ليلي', grid: 'شبكة فاتحة', custom: 'صورة مرفوعة' }
+    : { default: 'Default gradient', soft: 'Soft glass', night: 'Night focus', grid: 'Light grid', custom: 'Uploaded image' };
+  bgOptions.forEach((opt) => { if (bgText[opt.value] != null) opt.textContent = bgText[opt.value]; });
+  setText("#logout-btn", dict.logout);
+  setText(".tagline", dict.tagline);
+  setText(".login-card h1", dict.loginTitle);
+  setText(".login-card .subtitle", dict.loginSubtitle);
+  setLabelFor("ccmsId", dict.ccms);
+  setLabelFor("password", dict.password);
+  setText("#login-form .btn-primary", dict.loginBtn);
+  const hint = document.querySelector(".login-card .hint");
+  if (hint) {
+    const html = hint.innerHTML;
+    hint.innerHTML = html.replace(/حسابات التجربة:|Example users:/, dict.trialUsers);
+  }
+
+  setText("#page-settings h2", dict.settingsTitle);
+  setText("#page-settings .subtitle", dict.settingsSubtitle);
+  setLabelFor("set-name", dict.fullName);
+  setLabelFor("set-language", dict.language, dict.languageHint);
+  setLabelFor("set-gender", dict.theme);
+  setLabelFor("set-background", dict.background);
+  setLabelFor("set-bg-upload", dict.uploadBg);
+  setLabelFor("set-birthday", dict.birthday);
+  setLabelFor("set-notes", dict.notes);
+  setText('#settings-form button[type="submit"]', dict.save);
+  const menuTitle = document.querySelector(".mobile-drawer-title");
+  if (menuTitle) menuTitle.textContent = dict.menu;
+}
+
 async function loadUserProfile() {
   if (!currentUser) return;
 
@@ -1221,6 +1366,7 @@ async function loadUserProfile() {
   const notesEl = document.getElementById("set-notes");
   const genderEl = document.getElementById("set-gender");
   const bgEl = document.getElementById("set-background");
+  const langEl = document.getElementById("set-language");
 
   if (nameEl) nameEl.value = currentUser.name || currentUser.id;
   const codeEl = document.getElementById("set-staff-code");
@@ -1242,6 +1388,9 @@ async function loadUserProfile() {
   if (notesEl) notesEl.value = cached.notes || "";
   if (genderEl) genderEl.value = cached.gender || "";
   if (bgEl) bgEl.value = cached.background || "default";
+  const cachedLanguage = cached.language || localStorage.getItem(LANGUAGE_KEY) || "ar";
+  if (langEl) langEl.value = cachedLanguage;
+  applyLanguage(cachedLanguage);
   applyTheme(cached.gender || "");
   applyBackground(cached.background || "default", cached.backgroundImage || "");
 
@@ -1258,6 +1407,9 @@ async function loadUserProfile() {
       if (notesEl) notesEl.value = d.notes || "";
       if (genderEl) genderEl.value = d.gender || "";
       if (bgEl) bgEl.value = d.background || "default";
+      const savedLanguage = d.language || cachedLanguage || "ar";
+      if (langEl) langEl.value = savedLanguage;
+      applyLanguage(savedLanguage);
       applyTheme(d.gender || "");
       applyBackground(d.background || "default", d.backgroundImage || cached.backgroundImage || "");
       localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({
@@ -1265,6 +1417,7 @@ async function loadUserProfile() {
         birthday: d.birthday || "",
         notes: d.notes || "",
         gender: d.gender || "",
+        language: d.language || savedLanguage || "ar",
         background: d.background || "default",
         backgroundImage: d.backgroundImage || cached.backgroundImage || "",
       }));
@@ -1285,16 +1438,18 @@ async function handleSettingsSave(e) {
   const birthday = document.getElementById("set-birthday")?.value || "";
   const notes = document.getElementById("set-notes")?.value || "";
   const gender = document.getElementById("set-gender")?.value || "";
+  const language = document.getElementById("set-language")?.value || getLanguage() || "ar";
   const background = document.getElementById("set-background")?.value || "default";
   let cachedProfileForBg = {};
   try { cachedProfileForBg = JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}"); } catch {}
   const backgroundImage = background === "custom" ? (cachedProfileForBg.backgroundImage || "") : "";
 
+  applyLanguage(language);
   applyTheme(gender);
   applyBackground(background, backgroundImage);
   currentUser = { ...currentUser, name };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
-  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ name, birthday, notes, gender, background, backgroundImage }));
+  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ name, birthday, notes, gender, language, background, backgroundImage }));
   updateDashboardUI();
   updatePresence(true).catch(() => {});
 
@@ -1309,6 +1464,7 @@ async function handleSettingsSave(e) {
         birthday,
         notes,
         gender,
+        language,
         background,
         backgroundImage,
         updatedAt: serverTimestamp(),
@@ -1326,6 +1482,7 @@ async function handleSettingsSave(e) {
 
 // Apply colour immediately when the user changes theme, even before saving.
 document.addEventListener("change", (e) => {
+  if (e.target?.id === "set-language") applyLanguage(e.target.value || "ar");
   if (e.target?.id === "set-gender") applyTheme(e.target.value || "");
   if (e.target?.id === "set-background") {
     const cached = currentUser ? JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}") : {};
