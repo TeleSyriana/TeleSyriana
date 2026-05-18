@@ -346,7 +346,7 @@ function dmRoomId(a, b) {
   return x < y ? `dm_${x}_${y}` : `dm_${y}_${x}`;
 }
 function getOtherIdFromDmRoom(roomId, myId) {
-  const parts = String(roomId || "").split("_"); // dm_1001_2002
+  const parts = String(roomId || "").split("_"); // dm_0001_1002
   if (parts.length !== 3) return null;
   const a = parts[1], b = parts[2];
   return String(myId) === a ? b : a;
