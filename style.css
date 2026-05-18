@@ -3662,6 +3662,7 @@ body[data-bg-tone="dark"] .notes-app{
   body[data-language="en"].menu-open #main-nav.main-nav,
   html[dir="ltr"] body.menu-open #main-nav.main-nav{
     transform:translateX(0) !important;
+    margin: -11px !important;
   }
   body[data-language="ar"] #main-nav.main-nav,
   html[dir="rtl"] #main-nav.main-nav{
@@ -3675,6 +3676,7 @@ body[data-bg-tone="dark"] .notes-app{
   body[data-language="ar"].menu-open #main-nav.main-nav,
   html[dir="rtl"] body.menu-open #main-nav.main-nav{
     transform:translateX(0) !important;
+     margin: -11px !important;
   }
   #main-nav.main-nav.hidden{ display:flex !important; }
   #main-nav.main-nav::before{
