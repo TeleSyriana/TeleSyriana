@@ -17,6 +17,7 @@
         <button class="nav-link" data-page="tasks">Tasks</button>
         <button class="nav-link" data-page="tickets">Tickets</button>
         <button class="nav-link" data-page="reports">Reports</button>
+        <button class="nav-link" data-page="payroll">Payroll</button>
 
         <!-- ✅ UPDATED: Messages nav badge holder -->
         <button class="nav-link" data-page="messages" id="nav-messages">
@@ -356,6 +357,56 @@
 
           <div id="ticket-alert" class="alert hidden"></div>
 
+          <div id="order-admin-panel" class="order-admin-panel hidden">
+            <div class="order-admin-head">
+              <div>
+                <h3>Order Lookup / Shopify Cache</h3>
+                <p>Manual order cache for autofill now. Shopify API connection can be added later.</p>
+              </div>
+              <button id="order-admin-toggle" type="button" class="btn-secondary">Add / Update Order</button>
+            </div>
+
+            <form id="order-cache-form" class="order-cache-form hidden">
+              <div class="order-cache-grid">
+                <label>Order #<input id="order-cache-number" type="text" placeholder="2515" required /></label>
+                <label>Customer name<input id="order-cache-customer" type="text" placeholder="Customer name" /></label>
+                <label>Email<input id="order-cache-email" type="email" placeholder="customer@email.com" /></label>
+                <label>Phone<input id="order-cache-phone" type="text" placeholder="Optional" /></label>
+                <label>Total paid<input id="order-cache-total" type="text" placeholder="£34.99" /></label>
+                <label>Order date<input id="order-cache-date" type="date" /></label>
+                <label>Courier<input id="order-cache-courier" type="text" placeholder="Royal Mail / EVRI / YunExpress" /></label>
+                <label>Tracking number<input id="order-cache-tracking" type="text" placeholder="Tracking" /></label>
+                <label>Order status
+                  <select id="order-cache-status">
+                    <option value="unknown">Unknown</option>
+                    <option value="unfulfilled">Unfulfilled</option>
+                    <option value="processing">Processing</option>
+                    <option value="fulfilled">Fulfilled</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="refunded">Refunded</option>
+                  </select>
+                </label>
+                <label>Delivery status
+                  <select id="order-cache-delivery">
+                    <option value="unknown">Unknown</option>
+                    <option value="label_created">Label created</option>
+                    <option value="in_transit">In transit</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="delayed">Delayed</option>
+                    <option value="lost">Lost / investigation</option>
+                  </select>
+                </label>
+              </div>
+              <label>Items<textarea id="order-cache-items" rows="2" placeholder="iPhone 14 Silicone Case - Olive + Screen Protector 2D"></textarea></label>
+              <label>Shipping address<textarea id="order-cache-address" rows="2" placeholder="Optional"></textarea></label>
+              <label>Internal order notes<textarea id="order-cache-notes" rows="2" placeholder="Any useful note for support"></textarea></label>
+              <div class="ticket-form-footer">
+                <button type="button" id="order-cache-load" class="btn-secondary">Load Order</button>
+                <button type="submit" class="btn-primary" style="width:auto">Save Order Cache</button>
+              </div>
+            </form>
+          </div>
+
           <div class="ticket-stats-grid">
             <div class="ticket-stat"><span>Open</span><strong id="ticket-stat-open">0</strong></div>
             <div class="ticket-stat emergency"><span>Emergency</span><strong id="ticket-stat-emergency">0</strong></div>
@@ -374,6 +425,11 @@
                 Order number #
                 <input id="ticket-order" type="text" placeholder="e.g. 2515" required />
               </label>
+
+              <div id="ticket-order-preview" class="ticket-order-preview hidden">
+                <div class="lookup-title">Order data preview</div>
+                <div id="ticket-order-preview-body">No order loaded yet.</div>
+              </div>
 
               <label>
                 Category
@@ -515,6 +571,8 @@
                 </div>
 
                 <div class="ticket-info-box" id="ticket-info-box"></div>
+
+                <div class="ticket-history-box" id="ticket-history-box"></div>
 
                 <label>
                   Internal notes / handling log
@@ -982,6 +1040,94 @@
   </section>
 </section>
 
+      <!-- PAYROLL PAGE -->
+      <section id="page-payroll" class="page-section hidden">
+        <section class="card payroll-card">
+          <div class="payroll-top">
+            <div>
+              <h2 style="margin:0">Hours & Payroll</h2>
+              <p class="subtitle" style="margin:6px 0 0">Track worked time, 45-minute breaks, late breaks, and estimated pay.</p>
+            </div>
+          </div>
+
+          <div id="payroll-alert" class="alert hidden"></div>
+
+          <div class="payroll-filters">
+            <label>
+              From
+              <input id="payroll-from" type="date" />
+            </label>
+            <label>
+              To
+              <input id="payroll-to" type="date" />
+            </label>
+            <label>
+              Staff
+              <select id="payroll-staff-filter">
+                <option value="all">All visible staff</option>
+              </select>
+            </label>
+            <button id="payroll-this-week" type="button" class="btn-secondary">This Week</button>
+            <button id="payroll-refresh" type="button" class="btn-primary" style="width:auto">Refresh</button>
+          </div>
+
+          <div class="payroll-summary-grid">
+            <div class="payroll-snap"><span>Total worked</span><strong id="payroll-sum-worked">0 min</strong></div>
+            <div class="payroll-snap"><span>Operation</span><strong id="payroll-sum-operation">0 min</strong></div>
+            <div class="payroll-snap"><span>Break used</span><strong id="payroll-sum-break">0 min</strong></div>
+            <div class="payroll-snap warning"><span>Late breaks</span><strong id="payroll-sum-late">0</strong></div>
+            <div class="payroll-snap"><span>Estimated pay</span><strong id="payroll-sum-pay">—</strong></div>
+          </div>
+
+          <div id="payroll-rate-panel" class="payroll-rate-panel hidden">
+            <h3>Manager Rate Settings</h3>
+            <p class="subtitle">Manager/Admin can set hourly rate and currency. New calculations use these values.</p>
+            <div class="payroll-rate-grid">
+              <label>
+                Staff member
+                <select id="payroll-rate-staff"></select>
+              </label>
+              <label>
+                Hourly rate
+                <input id="payroll-rate-value" type="number" min="0" step="0.01" placeholder="1.25" />
+              </label>
+              <label>
+                Currency
+                <select id="payroll-rate-currency">
+                  <option value="USD">USD</option>
+                  <option value="GBP">GBP</option>
+                </select>
+              </label>
+              <button id="payroll-save-rate" type="button" class="btn-primary" style="width:auto">Save Rate</button>
+            </div>
+          </div>
+
+          <div class="payroll-table-wrapper">
+            <table class="payroll-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Staff</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Operation</th>
+                  <th>Meeting</th>
+                  <th>Handling</th>
+                  <th>Break</th>
+                  <th>Unavailable</th>
+                  <th>Worked</th>
+                  <th>Rate</th>
+                  <th>Est. pay</th>
+                  <th>Break note</th>
+                </tr>
+              </thead>
+              <tbody id="payroll-table-body"></tbody>
+            </table>
+            <div id="payroll-empty" class="ms-empty hidden">No payroll records found for this period.</div>
+          </div>
+        </section>
+      </section>
+
       <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
         <div class="card">
@@ -1038,6 +1184,7 @@
   <script type="module" src="tasks.js"></script>
   <script type="module" src="tickets.js"></script>
   <script type="module" src="reports.js"></script>
+  <script type="module" src="payroll.js"></script>
   <script type="module" src="messages.js"></script>
   <script type="module" src="groups.js"></script>
   <script type="module" src="meetings.js"></script>

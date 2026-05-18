@@ -224,13 +224,19 @@ function hookUI() {
   if (isHooked) return;
   isHooked = true;
 
-  el("report-day")?.setAttribute("value", todayKey());
-  el("report-filter-day")?.setAttribute("value", todayKey());
+  if (el("report-day") && !el("report-day").value) el("report-day").value = todayKey();
+  if (el("report-filter-day") && !el("report-filter-day").value) el("report-filter-day").value = todayKey();
   setTemplateForType(el("report-type")?.value || "morning");
 
   el("report-type")?.addEventListener("change", (e) => setTemplateForType(e.target.value));
   el("report-form")?.addEventListener("submit", submitReport);
-  el("report-clear-form")?.addEventListener("click", () => el("report-form")?.reset());
+  el("report-clear-form")?.addEventListener("click", () => {
+    const type = el("report-type")?.value || "morning";
+    el("report-form")?.reset();
+    if (el("report-type")) el("report-type").value = type;
+    if (el("report-day")) el("report-day").value = todayKey();
+    setTemplateForType(type);
+  });
   el("report-template-btn")?.addEventListener("click", fillTemplate);
 
   ["report-filter-type", "report-filter-owner", "report-filter-day", "report-search"].forEach((id) => {
@@ -282,7 +288,8 @@ async function submitReport(e) {
 
   await addDoc(collection(db, REPORTS_COL), payload);
   el("report-form")?.reset();
-  el("report-day")?.setAttribute("value", todayKey());
+  if (el("report-type")) el("report-type").value = type;
+  if (el("report-day")) el("report-day").value = todayKey();
   setTemplateForType(type);
   showReportAlert("Report saved successfully.");
 }

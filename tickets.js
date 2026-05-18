@@ -13,10 +13,13 @@ const {
   serverTimestamp,
   doc,
   updateDoc,
+  setDoc,
+  getDoc,
 } = fs;
 
 const USER_KEY = "telesyrianaUser";
 const TICKETS_COL = "tickets";
+const ORDER_RECORDS_COL = "orderRecords";
 
 const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
 const STAFF = {
@@ -135,6 +138,109 @@ function normaliseOrderNumber(v) {
   return String(v || "").trim().replace(/^#/, "");
 }
 
+function orderDocRef(orderNumber) {
+  const order = normaliseOrderNumber(orderNumber);
+  if (!order) return null;
+  return doc(db, ORDER_RECORDS_COL, order);
+}
+
+async function getCachedOrder(orderNumber) {
+  const ref = orderDocRef(orderNumber);
+  if (!ref) return null;
+  const snap = await getDoc(ref);
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+function cleanText(v) {
+  return String(v || "").trim();
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+
+function orderStatusLabel(v) {
+  const labels = {
+    unknown: "Unknown", unfulfilled: "Unfulfilled", processing: "Processing", fulfilled: "Fulfilled",
+    cancelled: "Cancelled", refunded: "Refunded", label_created: "Label created", in_transit: "In transit",
+    delivered: "Delivered", delayed: "Delayed", lost: "Lost / investigation"
+  };
+  return labels[v] || v || "Unknown";
+}
+
+function renderOrderPreview(order) {
+  const card = el("ticket-order-preview");
+  const body = el("ticket-order-preview-body");
+  if (!card || !body) return;
+  if (!order) {
+    card.classList.add("hidden");
+    body.textContent = "No order loaded yet.";
+    return;
+  }
+  card.classList.remove("hidden");
+  body.innerHTML = `
+    <div><strong>Customer:</strong> ${escapeHtml(order.customerName || "—")}</div>
+    <div><strong>Email:</strong> ${escapeHtml(order.email || "—")}</div>
+    <div><strong>Items:</strong> ${escapeHtml(order.items || "—")}</div>
+    <div><strong>Tracking:</strong> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</div>
+    <div><strong>Status:</strong> ${escapeHtml(orderStatusLabel(order.orderStatus))} • ${escapeHtml(orderStatusLabel(order.deliveryStatus))}</div>
+  `;
+}
+
+function orderNoteBlock(order) {
+  if (!order) return "";
+  return [
+    `Shopify order cache loaded:`,
+    `Customer: ${order.customerName || "—"}`,
+    `Email: ${order.email || "—"}`,
+    `Phone: ${order.phone || "—"}`,
+    `Items: ${order.items || "—"}`,
+    `Total: ${order.totalPaid || "—"}`,
+    `Tracking: ${order.trackingNumber || "—"} ${order.courier ? `(${order.courier})` : ""}`,
+    `Order status: ${orderStatusLabel(order.orderStatus)}`,
+    `Delivery status: ${orderStatusLabel(order.deliveryStatus)}`,
+    order.notes ? `Order notes: ${order.notes}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function riskFromTypeAndOrder(type, order) {
+  if (type === "chargeback_risk" || type === "item_not_genuine") return "chargeback";
+  if (order?.deliveryStatus === "lost" || order?.deliveryStatus === "delayed") return "high";
+  if (EMERGENCY_TYPES.has(type)) return "medium";
+  return "normal";
+}
+
+function canManageOrderCache(u) {
+  return roleLevel(u) >= ROLE_LEVELS.supervisor;
+}
+
+function customerHistoryHtml(ticket) {
+  if (!ticket) return "";
+  const email = cleanText(ticket.email).toLowerCase();
+  const customer = cleanText(ticket.customerName).toLowerCase();
+  const matches = allTickets
+    .filter((x) => x.id !== ticket.id)
+    .filter((x) => {
+      const xe = cleanText(x.email).toLowerCase();
+      const xc = cleanText(x.customerName).toLowerCase();
+      return (email && xe === email) || (customer && xc === customer);
+    })
+    .slice(0, 5);
+  if (!matches.length) return `<div class="lookup-title">Customer history</div><div>No previous tickets found for this customer.</div>`;
+  return `
+    <div class="lookup-title">Customer history</div>
+    ${matches.map((x) => `
+      <div class="history-line">#${escapeHtml(x.orderNumber || "—")} • ${escapeHtml(TYPE_LABELS[x.type] || x.type || "Ticket")} • ${escapeHtml(STATUS_LABELS[x.status] || x.status || "Open")}</div>
+    `).join("")}
+  `;
+}
+
 function inferPriority(type) {
   return EMERGENCY_TYPES.has(type) ? "emergency" : "normal";
 }
@@ -238,16 +344,17 @@ function renderTicketList() {
     btn.classList.toggle("active", t.id === selectedTicketId);
     btn.innerHTML = `
       <div class="ticket-row-top">
-        <strong>#${t.orderNumber || "—"}</strong>
-        <span class="ticket-priority-pill ${t.priority || "normal"}">${PRIORITY_LABELS[t.priority] || "Normal"}</span>
+        <strong>#${escapeHtml(t.orderNumber || "—")}</strong>
+        <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(PRIORITY_LABELS[t.priority] || "Normal")}</span>
       </div>
-      <div class="ticket-row-title">${TYPE_LABELS[t.type] || t.type || "Ticket"}</div>
+      <div class="ticket-row-title">${escapeHtml(TYPE_LABELS[t.type] || t.type || "Ticket")}</div>
       <div class="ticket-row-meta">
-        <span>${STATUS_LABELS[t.status] || t.status || "Open"}</span>
+        <span class="ticket-status-dot status-${t.status || "open"}"></span>
+        <span>${escapeHtml(STATUS_LABELS[t.status] || t.status || "Open")}</span>
         <span>•</span>
-        <span>${staffName(t.assignedTo)}</span>
+        <span>${escapeHtml(staffName(t.assignedTo))}</span>
       </div>
-      <div class="ticket-row-sub">${t.customerName || t.email || "No customer details yet"}</div>
+      <div class="ticket-row-sub">${escapeHtml(t.customerName || t.email || "No customer details yet")}</div>
     `;
     btn.addEventListener("click", () => selectTicket(t.id));
     list.appendChild(btn);
@@ -294,14 +401,22 @@ function renderTicketDetail() {
 
   const info = el("ticket-info-box");
   if (info) {
+    const orderData = t.orderData || {};
     info.innerHTML = `
-      <div><strong>Customer:</strong> ${t.customerName || "—"}</div>
-      <div><strong>Email:</strong> ${t.email || "—"}</div>
-      <div><strong>Created by:</strong> ${staffName(t.createdBy)} (${t.createdBy || "—"})</div>
-      <div><strong>Updated:</strong> ${fmtDate(t.updatedAt)}</div>
-      <div><strong>Risk:</strong> ${t.risk || "normal"}</div>
+      <div><strong>Customer:</strong> ${escapeHtml(t.customerName || orderData.customerName || "—")}</div>
+      <div><strong>Email:</strong> ${escapeHtml(t.email || orderData.email || "—")}</div>
+      <div><strong>Items:</strong> ${escapeHtml(orderData.items || "—")}</div>
+      <div><strong>Tracking:</strong> ${escapeHtml(orderData.trackingNumber || "—")} ${orderData.courier ? `(${escapeHtml(orderData.courier)})` : ""}</div>
+      <div><strong>Order status:</strong> ${escapeHtml(orderStatusLabel(orderData.orderStatus))}</div>
+      <div><strong>Delivery:</strong> ${escapeHtml(orderStatusLabel(orderData.deliveryStatus))}</div>
+      <div><strong>Created by:</strong> ${escapeHtml(staffName(t.createdBy))} (${escapeHtml(t.createdBy || "—")})</div>
+      <div><strong>Updated:</strong> ${escapeHtml(fmtDate(t.updatedAt))}</div>
+      <div><strong>Risk:</strong> ${escapeHtml(t.risk || "normal")}</div>
     `;
   }
+
+  const history = el("ticket-history-box");
+  if (history) history.innerHTML = customerHistoryHtml(t);
 
   const editable = canEditAll(currentUser) || t.assignedTo === currentUser?.id || t.createdBy === currentUser?.id;
   ["ticket-detail-status", "ticket-detail-assigned", "ticket-detail-priority-select", "ticket-detail-mood", "ticket-detail-notes", "ticket-detail-resolution"].forEach((id) => {
@@ -333,13 +448,43 @@ function hookUI() {
     if (priority && EMERGENCY_TYPES.has(type)) priority.value = "emergency";
   });
 
-  el("ticket-autofill-btn")?.addEventListener("click", () => {
+  el("ticket-autofill-btn")?.addEventListener("click", async () => {
     const order = normaliseOrderNumber(el("ticket-order")?.value);
     if (!order) return showTicketAlert("Enter an order number first.", true);
+    const cached = await getCachedOrder(order);
+    if (cached) {
+      if (el("ticket-customer")) el("ticket-customer").value = cached.customerName || "";
+      if (el("ticket-email")) el("ticket-email").value = cached.email || "";
+      renderOrderPreview(cached);
+      const existing = el("ticket-notes")?.value || "";
+      if (el("ticket-notes") && !existing.includes("Shopify order cache loaded:")) {
+        el("ticket-notes").value = `${existing ? existing + "\n\n" : ""}${orderNoteBlock(cached)}`;
+      }
+      showTicketAlert("Order cache found and ticket fields were filled.");
+      return;
+    }
+    renderOrderPreview(null);
     if (!el("ticket-notes")?.value) {
       el("ticket-notes").value = `Order #${order}. Please check Shopify for customer details, tracking status, delivery status, and latest customer message.`;
     }
-    showTicketAlert("Basic order template filled. Shopify API autofill can be added later.");
+    showTicketAlert("No cached order found. Manual ticket template filled.", true);
+  });
+
+  el("ticket-order")?.addEventListener("blur", async () => {
+    const order = normaliseOrderNumber(el("ticket-order")?.value);
+    if (!order) return renderOrderPreview(null);
+    renderOrderPreview(await getCachedOrder(order));
+  });
+
+  el("order-admin-toggle")?.addEventListener("click", () => {
+    el("order-cache-form")?.classList.toggle("hidden");
+  });
+
+  el("order-cache-load")?.addEventListener("click", loadOrderCacheForm);
+
+  el("order-cache-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await saveOrderCacheForm();
   });
 
   el("ticket-form")?.addEventListener("submit", async (e) => {
@@ -378,6 +523,7 @@ async function createTicket() {
   const assignedTo = canEditAll(currentUser)
     ? (el("ticket-assigned")?.value || "")
     : currentUser.id;
+  const cachedOrder = await getCachedOrder(orderNumber);
 
   const payload = {
     orderNumber,
@@ -387,13 +533,26 @@ async function createTicket() {
     assignedTo,
     createdBy: currentUser.id,
     createdByName: currentUser.name,
-    customerName: el("ticket-customer")?.value?.trim() || "",
-    email: el("ticket-email")?.value?.trim() || "",
-    notes: el("ticket-notes")?.value?.trim() || "",
+    customerName: el("ticket-customer")?.value?.trim() || cachedOrder?.customerName || "",
+    email: el("ticket-email")?.value?.trim() || cachedOrder?.email || "",
+    notes: el("ticket-notes")?.value?.trim() || (cachedOrder ? orderNoteBlock(cachedOrder) : ""),
     resolution: "",
     customerMood: inferMood(type, priority),
-    risk: priority === "emergency" ? "chargeback" : "normal",
-    source: "manual",
+    risk: riskFromTypeAndOrder(type, cachedOrder),
+    source: cachedOrder ? "order_cache" : "manual",
+    orderData: cachedOrder ? {
+      customerName: cachedOrder.customerName || "",
+      email: cachedOrder.email || "",
+      phone: cachedOrder.phone || "",
+      items: cachedOrder.items || "",
+      totalPaid: cachedOrder.totalPaid || "",
+      orderDate: cachedOrder.orderDate || "",
+      courier: cachedOrder.courier || "",
+      trackingNumber: cachedOrder.trackingNumber || "",
+      orderStatus: cachedOrder.orderStatus || "unknown",
+      deliveryStatus: cachedOrder.deliveryStatus || "unknown",
+      shippingAddress: cachedOrder.shippingAddress || "",
+    } : {},
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -402,6 +561,54 @@ async function createTicket() {
   el("ticket-form")?.reset();
   fillAssigneeSelect(el("ticket-assigned"), true);
   showTicketAlert("Ticket created successfully.");
+}
+
+async function loadOrderCacheForm() {
+  const order = normaliseOrderNumber(el("order-cache-number")?.value);
+  if (!order) return showTicketAlert("Enter order number to load.", true);
+  const data = await getCachedOrder(order);
+  if (!data) return showTicketAlert("No order cache found for this number.", true);
+  el("order-cache-customer").value = data.customerName || "";
+  el("order-cache-email").value = data.email || "";
+  el("order-cache-phone").value = data.phone || "";
+  el("order-cache-total").value = data.totalPaid || "";
+  el("order-cache-date").value = data.orderDate || "";
+  el("order-cache-courier").value = data.courier || "";
+  el("order-cache-tracking").value = data.trackingNumber || "";
+  el("order-cache-status").value = data.orderStatus || "unknown";
+  el("order-cache-delivery").value = data.deliveryStatus || "unknown";
+  el("order-cache-items").value = data.items || "";
+  el("order-cache-address").value = data.shippingAddress || "";
+  el("order-cache-notes").value = data.notes || "";
+  showTicketAlert("Order cache loaded.");
+}
+
+async function saveOrderCacheForm() {
+  if (!canManageOrderCache(currentUser)) return showTicketAlert("Only supervisor, manager, or admin can save order cache.", true);
+  const orderNumber = normaliseOrderNumber(el("order-cache-number")?.value);
+  if (!orderNumber) return showTicketAlert("Order number is required.", true);
+  const payload = {
+    orderNumber,
+    customerName: cleanText(el("order-cache-customer")?.value),
+    email: cleanText(el("order-cache-email")?.value),
+    phone: cleanText(el("order-cache-phone")?.value),
+    totalPaid: cleanText(el("order-cache-total")?.value),
+    orderDate: cleanText(el("order-cache-date")?.value),
+    courier: cleanText(el("order-cache-courier")?.value),
+    trackingNumber: cleanText(el("order-cache-tracking")?.value),
+    orderStatus: el("order-cache-status")?.value || "unknown",
+    deliveryStatus: el("order-cache-delivery")?.value || "unknown",
+    items: cleanText(el("order-cache-items")?.value),
+    shippingAddress: cleanText(el("order-cache-address")?.value),
+    notes: cleanText(el("order-cache-notes")?.value),
+    updatedAt: serverTimestamp(),
+    updatedBy: currentUser?.id || "",
+    updatedByName: currentUser?.name || "",
+  };
+  const existing = await getCachedOrder(orderNumber);
+  if (!existing) payload.createdAt = serverTimestamp();
+  await setDoc(orderDocRef(orderNumber), payload, { merge: true });
+  showTicketAlert("Order cache saved. Agents can now autofill this order.");
 }
 
 async function saveSelectedTicket() {
@@ -448,6 +655,7 @@ function initTickets() {
   hookUI();
   fillAssigneeSelect(el("ticket-assigned"), true);
   fillAssigneeSelect(el("ticket-detail-assigned"), true);
+  el("order-admin-panel")?.classList.toggle("hidden", !canManageOrderCache(currentUser));
 
   if (!currentUser) {
     allTickets = [];
