@@ -2762,7 +2762,7 @@ body.menu-open{ overflow:hidden; }
 /* Extra theme colours */
 body[data-theme="orange"]{ --brand:#f97316; --brand2:#fb923c; --bg1:#f97316; --bg2:#fed7aa; }
 body[data-theme="green"]{ --brand:#16a34a; --brand2:#4ade80; --bg1:#15803d; --bg2:#bbf7d0; }
-body[data-theme="navy"]{ --brand:#172554; --brand2:#2563eb; --bg1:#0f172a; --bg2:#1d4ed8; }
+body[data-theme="navy"]{ --brand:#a5baff; --brand2:#2563eb; --bg1:#0f172a; --bg2:#1d4ed8; }
 body[data-theme="red"]{ --brand:#dc2626; --brand2:#fb7185; --bg1:#b91c1c; --bg2:#fecdd3; }
 
 body[data-bg="soft"]{
