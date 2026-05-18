@@ -704,8 +704,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!page) return;
       e.preventDefault();
       switchPage(page);
+      closeMobileMenu();
     });
   });
+
+  document.getElementById("mobile-menu-toggle")?.addEventListener("click", () => {
+    document.body.classList.toggle("menu-open");
+    document.getElementById("mobile-menu-backdrop")?.classList.toggle("hidden", !document.body.classList.contains("menu-open"));
+  });
+  document.getElementById("mobile-menu-backdrop")?.addEventListener("click", closeMobileMenu);
 
   document.getElementById("login-form")?.addEventListener("submit", handleLogin);
   document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
@@ -756,6 +763,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   showLogin();
 });
+
+function closeMobileMenu() {
+  document.body.classList.remove("menu-open");
+  document.getElementById("mobile-menu-backdrop")?.classList.add("hidden");
+}
 
 /* -------------------------- Pages switching ----------------------------- */
 
@@ -1164,8 +1176,18 @@ function showSettingsAlert(message, danger = false) {
 function applyTheme(gender) {
   const g = String(gender || "").toLowerCase().trim();
   document.body.removeAttribute("data-theme");
-  if (g === "male" || g === "female") {
+  if (["male", "female", "orange", "green", "navy", "red"].includes(g)) {
     document.body.setAttribute("data-theme", g);
+  }
+}
+
+function applyBackground(background, imageData = "") {
+  const bg = String(background || "default").toLowerCase().trim();
+  document.body.dataset.bg = bg || "default";
+  if (bg === "custom" && imageData) {
+    document.body.style.backgroundImage = `linear-gradient(rgba(0,0,0,.12), rgba(0,0,0,.12)), url(${imageData})`;
+  } else {
+    document.body.style.backgroundImage = "";
   }
 }
 
@@ -1176,6 +1198,7 @@ async function loadUserProfile() {
   const bdayEl = document.getElementById("set-birthday");
   const notesEl = document.getElementById("set-notes");
   const genderEl = document.getElementById("set-gender");
+  const bgEl = document.getElementById("set-background");
 
   if (nameEl) nameEl.value = currentUser.name || currentUser.id;
   const codeEl = document.getElementById("set-staff-code");
@@ -1196,7 +1219,9 @@ async function loadUserProfile() {
   if (bdayEl) bdayEl.value = cached.birthday || "";
   if (notesEl) notesEl.value = cached.notes || "";
   if (genderEl) genderEl.value = cached.gender || "";
+  if (bgEl) bgEl.value = cached.background || "default";
   applyTheme(cached.gender || "");
+  applyBackground(cached.background || "default", cached.backgroundImage || "");
 
   try {
     const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
@@ -1210,12 +1235,16 @@ async function loadUserProfile() {
       if (bdayEl) bdayEl.value = d.birthday || "";
       if (notesEl) notesEl.value = d.notes || "";
       if (genderEl) genderEl.value = d.gender || "";
+      if (bgEl) bgEl.value = d.background || "default";
       applyTheme(d.gender || "");
+      applyBackground(d.background || "default", d.backgroundImage || cached.backgroundImage || "");
       localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({
         name: d.name || currentUser.name || "",
         birthday: d.birthday || "",
         notes: d.notes || "",
         gender: d.gender || "",
+        background: d.background || "default",
+        backgroundImage: d.backgroundImage || cached.backgroundImage || "",
       }));
     }
   } catch (err) {
@@ -1234,11 +1263,16 @@ async function handleSettingsSave(e) {
   const birthday = document.getElementById("set-birthday")?.value || "";
   const notes = document.getElementById("set-notes")?.value || "";
   const gender = document.getElementById("set-gender")?.value || "";
+  const background = document.getElementById("set-background")?.value || "default";
+  let cachedProfileForBg = {};
+  try { cachedProfileForBg = JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}"); } catch {}
+  const backgroundImage = background === "custom" ? (cachedProfileForBg.backgroundImage || "") : "";
 
   applyTheme(gender);
+  applyBackground(background, backgroundImage);
   currentUser = { ...currentUser, name };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
-  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ name, birthday, notes, gender }));
+  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ name, birthday, notes, gender, background, backgroundImage }));
   updateDashboardUI();
   updatePresence(true).catch(() => {});
 
@@ -1253,6 +1287,8 @@ async function handleSettingsSave(e) {
         birthday,
         notes,
         gender,
+        background,
+        backgroundImage,
         updatedAt: serverTimestamp(),
       },
       { merge: true }
@@ -1269,6 +1305,28 @@ async function handleSettingsSave(e) {
 // Apply colour immediately when the user changes theme, even before saving.
 document.addEventListener("change", (e) => {
   if (e.target?.id === "set-gender") applyTheme(e.target.value || "");
+  if (e.target?.id === "set-background") {
+    const cached = currentUser ? JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}") : {};
+    applyBackground(e.target.value || "default", cached.backgroundImage || "");
+  }
+  if (e.target?.id === "set-bg-upload") {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = String(reader.result || "");
+      let cached = {};
+      try { cached = JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}"); } catch {}
+      cached.background = "custom";
+      cached.backgroundImage = img;
+      localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify(cached));
+      const bgEl = document.getElementById("set-background");
+      if (bgEl) bgEl.value = "custom";
+      applyBackground("custom", img);
+      showSettingsAlert("Background image loaded locally. Press Save to sync it when Firestore is ready.");
+    };
+    reader.readAsDataURL(file);
+  }
 });
 
 /* --------------------------- View switching ----------------------------- */
@@ -1277,6 +1335,8 @@ function showLogin() {
   document.getElementById("dashboard-screen")?.classList.add("hidden");
   document.getElementById("login-screen")?.classList.remove("hidden");
   document.getElementById("main-nav")?.classList.add("hidden");
+  document.getElementById("mobile-menu-toggle")?.classList.add("hidden");
+  closeMobileMenu();
 
   const floatToggle = document.getElementById("float-chat-toggle");
   if (floatToggle) floatToggle.classList.add("hidden");
@@ -1291,6 +1351,7 @@ function showDashboard() {
   document.getElementById("login-screen")?.classList.add("hidden");
   document.getElementById("dashboard-screen")?.classList.remove("hidden");
   document.getElementById("main-nav")?.classList.remove("hidden");
+  document.getElementById("mobile-menu-toggle")?.classList.remove("hidden");
 
   switchPage("home");
   updateDashboardUI();

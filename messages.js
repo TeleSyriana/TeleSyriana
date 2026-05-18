@@ -862,6 +862,7 @@ function openChat(chat, clickedEl = null) {
   };
 
   setActiveButton(clickedEl);
+  document.body.classList.add("chat-open");
   setHeader(activeChat.title, activeChat.desc);
   setEmpty(false);
   setInputEnabled(true);
@@ -1036,7 +1037,10 @@ document.addEventListener("DOMContentLoaded", () => {
   updateNavBadge();
 
   const backBtn = document.getElementById("chat-back");
-  if (backBtn) backBtn.style.display = "none";
+  if (backBtn) {
+    backBtn.style.display = "";
+    backBtn.addEventListener("click", () => document.body.classList.remove("chat-open"));
+  }
 
   setCurrentUser();
   subscribePresenceSidebar();
@@ -1054,6 +1058,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   subscribeGroupsCloud();
   subscribeRecentsCloud();
+
+  document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.page !== "messages") document.body.classList.remove("chat-open");
+    });
+  });
 
   document.querySelectorAll(".chat-room[data-room]").forEach((btn) => {
     const r = btn.dataset.room;
@@ -1176,6 +1186,12 @@ window.addEventListener("telesyriana:user-changed", () => {
   subscribeGroupsCloud();
   subscribeRecentsCloud();
   subscribeStatusDots();
+
+  document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.page !== "messages") document.body.classList.remove("chat-open");
+    });
+  });
 
   document.querySelectorAll(".chat-room[data-room]").forEach((btn) => {
     const r = btn.dataset.room;
