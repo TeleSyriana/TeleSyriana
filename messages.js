@@ -28,6 +28,7 @@ const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 const AGENT_DAYS_COL = "agentDays";
 const GROUPS_COL = "groups";
+const PRESENCE_COL = "userPresence";
 
 // Cloud recents:
 // userRecents/{userId}/items/{recentId}
@@ -57,6 +58,7 @@ let groupsListEl = null;
 // caches
 let groupsCache = [];  // [{id, name, rules, members, createdAt}]
 let recentsCache = []; // [{id, type, roomId, title, desc, lastTs, otherId?}]
+let unsubPresence = null;
 
 // ---------------- ✅ Beep (Sounds/Beep.mp3) ----------------
 
@@ -981,6 +983,46 @@ function hookSearch() {
   }
 }
 
+
+// ---------------- presence / last seen ----------------
+function presenceStatus(row) {
+  const ms = Number(row?.lastSeenMs || 0);
+  if (!ms) return "offline";
+  const age = Date.now() - ms;
+  if (age < 90_000) return "online";
+  if (age < 10 * 60_000) return "away";
+  return "offline";
+}
+function presenceText(row) {
+  const status = presenceStatus(row);
+  if (status === "online") return `Live now • ${row?.page || "home"}`;
+  if (status === "away") return `Away • ${row?.page || "home"}`;
+  const ms = Number(row?.lastSeenMs || 0);
+  if (!ms) return "Offline";
+  const mins = Math.floor((Date.now() - ms) / 60000);
+  if (mins < 60) return `Last seen ${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  return `Last seen ${hrs} hr${hrs === 1 ? "" : "s"} ago`;
+}
+function subscribePresenceSidebar() {
+  if (unsubPresence) return;
+  unsubPresence = onSnapshot(collection(db, PRESENCE_COL), (snap) => {
+    snap.forEach((d) => {
+      const row = { id: d.id, ...d.data() };
+      const id = row.userId || d.id;
+      const st = presenceStatus(row);
+      const dot = document.querySelector(`[data-status-dot="${id}"]`);
+      if (dot) {
+        dot.classList.remove("dot-offline", "dot-online", "dot-away");
+        dot.classList.add(st === "online" ? "dot-online" : st === "away" ? "dot-away" : "dot-offline");
+        dot.title = presenceText(row);
+      }
+      const sub = document.querySelector(`[data-sub="${id}"]`);
+      if (sub) sub.textContent = presenceText(row);
+    });
+  }, (err) => console.warn("message presence listener failed", err));
+}
+
 // ---------------- init ----------------
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -997,6 +1039,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (backBtn) backBtn.style.display = "none";
 
   setCurrentUser();
+  subscribePresenceSidebar();
 
   makeCollapsible("Rooms", "rooms-list");
   makeCollapsible("Groups", "groups-list");

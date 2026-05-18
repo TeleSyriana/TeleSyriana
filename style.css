@@ -2529,3 +2529,94 @@ body[data-theme="male"] button.btn-primary{
   .ticket-detail-panel{ max-height:none; overflow:visible; }
   .reports-history{ max-height:none; min-height:0; }
 }
+
+/* ========================= PHASE 8: Real usability polish ========================= */
+/* Global feedback */
+.alert.danger, .payroll-rate-status.danger, #note-save-status.danger { color:#b91c1c; background:#fee2e2; border-color:#fecaca; }
+button:disabled { opacity:.58; cursor:not-allowed; }
+
+/* Online now */
+.online-now-card{ margin:14px 0 16px; padding:14px; border-radius:18px; background:rgba(255,255,255,.72); border:1px solid rgba(15,23,42,.08); }
+.online-count{ min-width:24px; height:24px; border-radius:999px; background:rgba(37,99,235,.12); color:var(--brand); display:inline-flex; align-items:center; justify-content:center; font-weight:900; font-size:12px; }
+.online-now-list{ display:grid; gap:8px; margin-top:10px; max-height:135px; overflow:auto; }
+.online-person{ display:flex; gap:9px; align-items:center; padding:8px 10px; border-radius:14px; background:rgba(255,255,255,.75); }
+.online-person strong{ display:block; font-size:13px; color:var(--ts-navy); }
+.online-person small{ display:block; font-size:11px; color:var(--ts-muted); margin-top:1px; }
+.online-dot{ width:10px; height:10px; border-radius:999px; background:#9ca3af; flex:0 0 auto; box-shadow:0 0 0 3px rgba(156,163,175,.15); }
+.online-dot.online{ background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.18); }
+.online-dot.away{ background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.18); }
+.online-empty{ color:var(--ts-muted); font-size:13px; }
+
+/* Apple-style notes */
+.notes-app-card{ min-height:calc(100vh - 145px); padding:0 !important; overflow:hidden; }
+.notes-app{ display:grid; grid-template-columns:340px 1fr; min-height:calc(100vh - 145px); background:rgba(255,255,255,.96); }
+.notes-sidebar{ border-right:1px solid rgba(15,23,42,.08); padding:18px; background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(248,250,252,.86)); min-height:0; overflow:hidden; display:flex; flex-direction:column; }
+.notes-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.notes-head h2{ margin:0; color:var(--ts-navy); }
+.notes-search{ width:100%; margin-bottom:12px; border-radius:16px; }
+.notes-list{ overflow:auto; display:grid; gap:8px; padding-right:4px; }
+.note-row{ text-align:left; border:1px solid rgba(15,23,42,.08); border-radius:16px; background:rgba(255,255,255,.78); padding:12px; cursor:pointer; }
+.note-row.active{ border-color:color-mix(in srgb,var(--brand) 48%,white); box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 12%,transparent); }
+.note-row strong{ display:block; color:var(--ts-navy); font-size:14px; }
+.note-row span{ display:block; margin-top:4px; color:var(--ts-muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.notes-empty{ color:var(--ts-muted); padding:12px; }
+.notes-editor{ padding:26px; min-height:0; display:flex; flex-direction:column; gap:14px; }
+.note-title-input{ border:0 !important; box-shadow:none !important; font-size:28px !important; font-weight:900; padding:4px 0 !important; color:var(--ts-navy); background:transparent !important; }
+.note-body-input{ flex:1; min-height:420px; border:0 !important; box-shadow:none !important; padding:0 !important; resize:none; font-size:16px; line-height:1.65; background:transparent !important; }
+.notes-editor-footer{ display:flex; align-items:center; justify-content:space-between; color:var(--ts-muted); border-top:1px solid rgba(15,23,42,.08); padding-top:12px; }
+
+/* Ticket modal & queues */
+#ticket-form.ticket-form{ width:min(860px,calc(100vw - 44px)); max-height:calc(100vh - 130px); padding:0; display:flex; flex-direction:column; overflow:hidden; }
+#ticket-form .ticket-form-head{ padding:18px 20px 12px; margin:0; }
+#ticket-form .ticket-form-grid, #ticket-form > label, #ticket-form .ticket-order-preview, #ticket-form .ticket-form-footer{ margin-left:20px; margin-right:20px; }
+#ticket-form .ticket-form-grid{ padding-top:16px; }
+#ticket-form > label textarea{ max-height:120px; }
+#ticket-form .ticket-form-footer{ position:sticky; bottom:0; background:rgba(255,255,255,.97); padding:12px 0 18px; }
+.ticket-order-preview{ border:1px solid rgba(37,99,235,.18); background:rgba(37,99,235,.06); border-radius:16px; padding:12px; margin-top:12px; font-size:13px; color:var(--ts-navy); }
+.ticket-order-preview strong{ display:block; margin-bottom:6px; }
+.tickets-layout{ height:clamp(620px,calc(100vh - 360px),900px) !important; }
+.tickets-list, .ticket-detail-scroll, .reports-list{ scrollbar-width:thin; }
+.ticket-detail-panel{ display:flex; flex-direction:column; }
+#ticket-detail{ min-height:0; overflow:auto; padding-right:6px; }
+.modal-x{ min-width:40px; min-height:40px; border-radius:999px; font-size:22px; display:inline-flex; align-items:center; justify-content:center; background:rgba(15,23,42,.06); }
+.modal-x:hover{ background:rgba(239,68,68,.12); color:#b91c1c; }
+
+/* Reports modal and clearer cards */
+.report-row{ cursor:pointer; transition:.15s ease; }
+.report-row:hover{ transform:translateY(-1px); box-shadow:0 18px 40px rgba(15,23,42,.08); }
+.report-modal-card{ width:min(880px,calc(100vw - 36px)); max-height:calc(100vh - 80px); overflow:hidden; display:flex; flex-direction:column; }
+.report-modal-body{ overflow:auto; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.report-modal-body label{ display:flex; flex-direction:column; gap:6px; font-weight:800; color:var(--ts-muted); }
+.report-modal-body textarea{ min-height:100px; }
+.report-modal-body .modal-actions{ grid-column:1/-1; }
+.modal-subtitle{ color:var(--ts-muted); font-size:12px; margin-top:3px; }
+
+/* Settings */
+#settings-form small.hint{ display:block; color:var(--ts-muted); margin-top:6px; font-weight:700; }
+
+/* Calendar issue-rate hint */
+.issue-calendar-summary{ margin-top:12px; padding:10px 12px; border-radius:14px; background:rgba(37,99,235,.08); color:var(--ts-navy); font-size:12px; font-weight:800; }
+.mini-day.issue-low::after,.mini-day.issue-mid::after,.mini-day.issue-high::after{ content:""; display:block; width:6px; height:6px; border-radius:999px; margin:4px auto 0; }
+.mini-day.issue-low::after{ background:#22c55e; }
+.mini-day.issue-mid::after{ background:#f59e0b; }
+.mini-day.issue-high::after{ background:#ef4444; }
+
+/* Meetings as link scheduler */
+#create-link{ width:100%; }
+.meeting-note{ background:rgba(255,255,255,.62); border:1px solid rgba(15,23,42,.08); border-radius:16px; padding:12px; }
+.meeting-stage{ display:none !important; }
+
+/* Floating chat should be useful during work */
+.floating-chat-toggle{ box-shadow:0 20px 45px rgba(37,99,235,.35); }
+.floating-chat-panel{ max-height:min(680px,calc(100vh - 110px)); }
+
+@media (max-width:900px){
+  .notes-app{ grid-template-columns:1fr; }
+  .notes-sidebar{ max-height:320px; border-right:0; border-bottom:1px solid rgba(15,23,42,.08); }
+  .note-body-input{ min-height:360px; }
+  .report-modal-body{ grid-template-columns:1fr; }
+}
+.status-dot.dot-online{ background:#22c55e !important; box-shadow:0 0 0 3px rgba(34,197,94,.18); }
+.status-dot.dot-away{ background:#f59e0b !important; box-shadow:0 0 0 3px rgba(245,158,11,.18); }
+.status-dot.dot-offline{ background:#9ca3af !important; }
+.chat-room-sub[data-sub]{ font-size:12px; }

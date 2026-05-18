@@ -6,6 +6,8 @@ import { db, fs } from "./firebase.js";
 const {
   collection,
   addDoc,
+  doc,
+  updateDoc,
   query,
   orderBy,
   onSnapshot,
@@ -44,6 +46,7 @@ let allTickets = [];
 let unsubReports = null;
 let unsubTickets = null;
 let isHooked = false;
+let selectedReportId = null;
 
 function el(id) { return document.getElementById(id); }
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
@@ -207,6 +210,7 @@ function renderReports() {
         ${r.notes ? `<div><b>Notes:</b> ${escapeHtml(r.notes)}</div>` : ""}
       </div>
     `;
+    card.addEventListener("click", () => openReportModal(r.id));
     list.appendChild(card);
   });
 }
@@ -218,6 +222,57 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+
+function closeReportModal() {
+  document.getElementById("report-modal")?.classList.add("hidden");
+  selectedReportId = null;
+}
+
+function openReportModal(id) {
+  const r = allReports.find((x) => x.id === id);
+  if (!r || !canViewReport(r)) return;
+  selectedReportId = id;
+  const modal = el("report-modal");
+  if (!modal) return;
+  if (el("report-modal-title")) el("report-modal-title").textContent = r.title || REPORT_LABELS[r.reportType] || "Report";
+  if (el("report-modal-sub")) el("report-modal-sub").textContent = `${r.day || "—"} • ${staffName(r.createdBy)} • ${fmtDate(r.createdAt)}`;
+  const map = {
+    "report-edit-emergencies": r.emergencies || "",
+    "report-edit-delayed": r.delayedShipments || "",
+    "report-edit-solved": r.solvedTickets || "",
+    "report-edit-pending": r.pendingTomorrow || "",
+    "report-edit-returns": r.returnsExchanges || "",
+    "report-edit-angry": r.angryCustomers || "",
+    "report-edit-actions": r.actions || "",
+    "report-edit-notes": r.notes || "",
+  };
+  Object.entries(map).forEach(([id, value]) => { if (el(id)) el(id).value = value; });
+  modal.classList.remove("hidden");
+}
+
+async function saveReportEdit() {
+  if (!selectedReportId) return;
+  try {
+    await updateDoc(doc(db, REPORTS_COL, selectedReportId), {
+      emergencies: el("report-edit-emergencies")?.value?.trim() || "",
+      delayedShipments: el("report-edit-delayed")?.value?.trim() || "",
+      solvedTickets: el("report-edit-solved")?.value?.trim() || "",
+      pendingTomorrow: el("report-edit-pending")?.value?.trim() || "",
+      returnsExchanges: el("report-edit-returns")?.value?.trim() || "",
+      angryCustomers: el("report-edit-angry")?.value?.trim() || "",
+      actions: el("report-edit-actions")?.value?.trim() || "",
+      notes: el("report-edit-notes")?.value?.trim() || "",
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUser?.id || "",
+    });
+    showReportAlert("Report updated.");
+    closeReportModal();
+  } catch (err) {
+    console.error("save report edit failed", err);
+    showReportAlert("Report changes were not saved. Check Firestore permissions/internet.", true);
+  }
 }
 
 function hookUI() {
@@ -238,6 +293,9 @@ function hookUI() {
     setTemplateForType(type);
   });
   el("report-template-btn")?.addEventListener("click", fillTemplate);
+  el("report-save-edit")?.addEventListener("click", saveReportEdit);
+  document.querySelectorAll("[data-report-close]").forEach((btn) => btn.addEventListener("click", closeReportModal));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeReportModal(); });
 
   ["report-filter-type", "report-filter-owner", "report-filter-day", "report-search"].forEach((id) => {
     el(id)?.addEventListener("input", renderReports);
@@ -286,12 +344,17 @@ async function submitReport(e) {
     updatedAt: serverTimestamp(),
   };
 
-  await addDoc(collection(db, REPORTS_COL), payload);
-  el("report-form")?.reset();
-  if (el("report-type")) el("report-type").value = type;
-  if (el("report-day")) el("report-day").value = todayKey();
-  setTemplateForType(type);
-  showReportAlert("Report saved successfully.");
+  try {
+    await addDoc(collection(db, REPORTS_COL), payload);
+    el("report-form")?.reset();
+    if (el("report-type")) el("report-type").value = type;
+    if (el("report-day")) el("report-day").value = todayKey();
+    setTemplateForType(type);
+    showReportAlert("Report saved successfully.");
+  } catch (err) {
+    console.error("report save failed", err);
+    showReportAlert("Report was not saved. Check Firestore permissions/internet.", true);
+  }
 }
 
 function subscribeReports() {

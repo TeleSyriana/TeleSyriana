@@ -529,8 +529,11 @@ function hookUI() {
 
 async function createTicket() {
   if (!currentUser) return;
+  const createBtn = document.querySelector('#ticket-form button[type="submit"]');
+  const oldCreateText = createBtn?.textContent || "Create Ticket";
+  if (createBtn) { createBtn.disabled = true; createBtn.textContent = "Creating..."; }
   const orderNumber = normaliseOrderNumber(el("ticket-order")?.value);
-  if (!orderNumber) return showTicketAlert("Order number is required.", true);
+  if (!orderNumber) { if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; } return showTicketAlert("Order number is required.", true); }
 
   const type = el("ticket-type")?.value || "general_question";
   const priority = el("ticket-priority")?.value || inferPriority(type);
@@ -581,7 +584,9 @@ async function createTicket() {
     showTicketAlert("Ticket created successfully.");
   } catch (err) {
     console.error("createTicket failed", err);
-    showTicketAlert("Ticket could not be created. Check Firestore permissions or internet.", true);
+    showTicketAlert(`Ticket could not be created: ${err?.code || err?.message || "check Firestore permissions/internet"}`, true);
+  } finally {
+    if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; }
   }
 }
 
@@ -608,7 +613,7 @@ async function loadOrderCacheForm() {
 async function saveOrderCacheForm() {
   if (!canManageOrderCache(currentUser)) return showTicketAlert("Only supervisor, manager, or admin can save order cache.", true);
   const orderNumber = normaliseOrderNumber(el("order-cache-number")?.value);
-  if (!orderNumber) return showTicketAlert("Order number is required.", true);
+  if (!orderNumber) { if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; } return showTicketAlert("Order number is required.", true); }
   const payload = {
     orderNumber,
     customerName: cleanText(el("order-cache-customer")?.value),
@@ -635,7 +640,10 @@ async function saveOrderCacheForm() {
 
 async function saveSelectedTicket() {
   const t = allTickets.find((x) => x.id === selectedTicketId);
-  if (!t) return;
+  if (!t) return showTicketAlert("Select a ticket first.", true);
+  const saveBtn = el("ticket-save-btn");
+  const oldText = saveBtn?.textContent || "Save Changes";
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Saving..."; }
 
   const status = el("ticket-detail-status")?.value || "open";
   const update = {
@@ -658,7 +666,9 @@ async function saveSelectedTicket() {
     showTicketAlert("Ticket updated and saved.");
   } catch (err) {
     console.error("saveSelectedTicket failed", err);
-    showTicketAlert("Save failed. Check Firestore permissions or internet.", true);
+    showTicketAlert(`Save failed: ${err?.code || err?.message || "check Firestore permissions/internet"}`, true);
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = oldText; }
   }
 }
 

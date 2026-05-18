@@ -161,6 +161,14 @@
               <li>✔ Be kind with callers.</li>
             </ul>
 
+            <div class="online-now-card">
+              <div class="widget-head">
+                <div class="widget-title">Online now</div>
+                <span id="online-now-count" class="online-count">0</span>
+              </div>
+              <div id="online-now-list" class="online-now-list">No one online yet.</div>
+            </div>
+
             <div class="widgets-grid">
               <div class="widget-card">
                 <div class="widget-head">
@@ -195,6 +203,7 @@
                   </div>
                   <div id="cal-grid" class="mini-cal-grid"></div>
                 </div>
+                <div id="issue-calendar-summary" class="issue-calendar-summary">Issue rate calendar will appear after tickets are used.</div>
               </div>
 
               <div class="widget-card">
@@ -255,90 +264,32 @@
         </div>
       </section>
 
-      <!-- TASKS PAGE -->
+      <!-- NOTES PAGE -->
       <section id="page-tasks" class="page-section hidden">
-        <section class="card">
-          <div class="tasks-top">
-            <div>
-              <h2 style="margin:0">Personal Notepad</h2>
-              <p class="subtitle" style="margin:6px 0 0">Private notes and small follow-up reminders. Main customer work stays inside Tickets.</p>
-            </div>
-
-            <form id="task-add-form" class="task-add">
-              <input id="task-title" type="text" placeholder="New note title…" required />
-              <select id="task-col">
-                <option value="todo">To do</option>
-                <option value="doing">Doing</option>
-                <option value="done">Done</option>
-              </select>
-              <button class="btn-primary" type="submit" style="width:auto;padding:10px 16px">Add</button>
-            </form>
-          </div>
-
-          <div class="kanban" id="kanban">
-            <div class="kanban-col" data-col="todo">
-              <div class="kanban-head">To do <span class="count" data-count="todo">0</span></div>
-              <div class="kanban-list" data-list="todo"></div>
-            </div>
-
-            <div class="kanban-col" data-col="doing">
-              <div class="kanban-head">Doing <span class="count" data-count="doing">0</span></div>
-              <div class="kanban-list" data-list="doing"></div>
-            </div>
-
-            <div class="kanban-col" data-col="done">
-              <div class="kanban-head">Done <span class="count" data-count="done">0</span></div>
-              <div class="kanban-list" data-list="done"></div>
-            </div>
+        <section class="card notes-app-card">
+          <div class="notes-app">
+            <aside class="notes-sidebar">
+              <div class="notes-head">
+                <div>
+                  <h2>Notes</h2>
+                  <p class="subtitle">Private Apple-style notes for follow-ups and ideas.</p>
+                </div>
+                <button id="note-new-btn" class="btn-primary" type="button">+ New</button>
+              </div>
+              <input id="notes-search" class="notes-search" type="text" placeholder="Search notes..." />
+              <div id="notes-list" class="notes-list"></div>
+            </aside>
+            <main class="notes-editor">
+              <input id="note-title" class="note-title-input" type="text" placeholder="Note title" />
+              <textarea id="note-body" class="note-body-input" placeholder="Start writing..."></textarea>
+              <div class="notes-editor-footer">
+                <span id="note-save-status">Ready</span>
+                <button id="note-delete-btn" class="btn-secondary danger" type="button">Delete</button>
+              </div>
+            </main>
           </div>
         </section>
-
-        <!-- TASK MODAL -->
-        <div id="task-modal" class="modal hidden">
-          <div class="modal-backdrop" data-modal-close></div>
-
-          <div class="modal-card">
-            <div class="modal-head">
-              <div class="modal-title">Add new note</div>
-              <button class="modal-x" type="button" data-modal-close>×</button>
-            </div>
-
-            <form id="task-modal-form" class="modal-body">
-              <label>
-                Title
-                <input id="task-modal-title" type="text" placeholder="Note title…" required />
-              </label>
-
-              <label>
-                Description
-                <textarea id="task-modal-desc" rows="4" placeholder="Write details…"></textarea>
-              </label>
-
-              <label>
-                Image (optional)
-                <input id="task-modal-img" type="url" placeholder="Paste image URL (Copy link address)..." />
-                <small class="hint">Or upload from device:</small>
-                <input id="task-modal-file" type="file" accept="image/*" />
-              </label>
-
-              <label>
-                Column
-                <select id="task-modal-col">
-                  <option value="todo">To do</option>
-                  <option value="doing">Doing</option>
-                  <option value="done">Done</option>
-                </select>
-              </label>
-
-              <div class="modal-actions">
-                <button type="button" class="btn-secondary" data-modal-close>Cancel</button>
-                <button type="submit" class="btn-primary" style="width:auto">Save</button>
-              </div>
-            </form>
-          </div>
-        </div>
       </section>
-
 
 
       <!-- TICKETS PAGE -->
@@ -722,6 +673,35 @@
         </section>
       </section>
 
+
+      <!-- REPORT VIEW / EDIT MODAL -->
+      <div id="report-modal" class="modal hidden">
+        <div class="modal-backdrop" data-report-close></div>
+        <div class="modal-card report-modal-card">
+          <div class="modal-head">
+            <div>
+              <div id="report-modal-title" class="modal-title">Report</div>
+              <div id="report-modal-sub" class="modal-subtitle">—</div>
+            </div>
+            <button id="report-modal-close" class="modal-x" type="button" data-report-close>×</button>
+          </div>
+          <div class="modal-body report-modal-body">
+            <label>Emergency / urgent issues<textarea id="report-edit-emergencies" rows="3"></textarea></label>
+            <label>Delayed shipments<textarea id="report-edit-delayed" rows="3"></textarea></label>
+            <label>Solved tickets<textarea id="report-edit-solved" rows="3"></textarea></label>
+            <label>Pending tomorrow / next shift<textarea id="report-edit-pending" rows="3"></textarea></label>
+            <label>Returns / exchanges<textarea id="report-edit-returns" rows="3"></textarea></label>
+            <label>Angry or sensitive customers<textarea id="report-edit-angry" rows="3"></textarea></label>
+            <label>Action items<textarea id="report-edit-actions" rows="3"></textarea></label>
+            <label>General notes<textarea id="report-edit-notes" rows="3"></textarea></label>
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" data-report-close>Close</button>
+              <button type="button" id="report-save-edit" class="btn-primary" style="width:auto">Save Report Changes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- MESSAGES PAGE -->
       <section id="page-messages" class="page-section hidden">
         <section class="card messages-card">
@@ -974,6 +954,9 @@
           <div class="create-row">
             <input id="create-title" type="text" placeholder="Title (e.g. Daily briefing)" autocomplete="off" />
           </div>
+          <div class="create-row">
+            <input id="create-link" type="url" placeholder="Paste Google Meet / Zoom / Teams link" autocomplete="off" />
+          </div>
 
           <div class="create-row two">
             <input id="create-date" type="date" />
@@ -982,7 +965,7 @@
 
           <div class="create-row two">
             <input id="create-id" type="text" placeholder="Meeting ID" autocomplete="off" readonly />
-            <input id="create-pass" type="text" placeholder="Password" autocomplete="off" readonly />
+            <input id="create-pass" type="text" placeholder="Access code" autocomplete="off" readonly />
           </div>
 
           <div class="create-actions">
@@ -990,7 +973,7 @@
             <button id="create-meeting-btn" class="btn-primary" type="button">Create</button>
           </div>
 
-          <div class="create-hint">ID is sequential. Password is random. Share them with agents.</div>
+          <div class="create-hint">Paste the meeting link. The meeting expires 1 hour after start. Missing staff can be reviewed.</div>
         </div>
 
         <div class="meetings-sidebar-header small">Upcoming</div>
@@ -1002,16 +985,16 @@
       <div class="meetings-main">
         <header class="chat-header">
           <div>
-            <div class="chat-room-name">Join meeting</div>
-            <div class="chat-room-desc">Enter Meeting ID + password</div>
+            <div class="chat-room-name">Meeting link</div>
+            <div class="chat-room-desc">Enter Meeting ID and click Join. The system records attendance.</div>
           </div>
         </header>
 
         <div class="meeting-join">
           <div class="meeting-join-row">
             <input id="join-meeting-id" type="text" placeholder="Meeting ID" autocomplete="off" />
-            <input id="join-meeting-pass" type="password" placeholder="Password" autocomplete="off" />
-            <button id="join-meeting-btn" class="btn-primary" type="button">Join</button>
+            <input id="join-meeting-pass" type="password" placeholder="Access code" autocomplete="off" />
+            <button id="join-meeting-btn" class="btn-primary" type="button">Open Link</button>
           </div>
 
           <!-- STAGE -->
@@ -1034,7 +1017,7 @@
           </div>
 
           <div class="meeting-note">
-            *Local preview only. Real multi-user video needs WebRTC signaling/server later.
+            Manager/Supervisor can paste a Google Meet or Zoom link. Clicking Open Link records attendance. After 1 hour, non-clicked staff can be treated as missing.
           </div>
         </div>
       </div>
@@ -1142,7 +1125,8 @@
           <form id="settings-form">
             <label>
               Full Name
-              <input type="text" id="set-name" disabled />
+              <input type="text" id="set-name" placeholder="Your display name" />
+              <small class="hint">Code: <span id="set-staff-code">—</span> • Role: <span id="set-role">—</span></small>
             </label>
 
             <label>

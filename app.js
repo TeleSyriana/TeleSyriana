@@ -73,11 +73,16 @@ const WORK_TARGET_MIN = 8 * 60;
 
 const AGENT_DAYS_COL = "agentDays";
 const USER_PROFILE_COL = "userProfiles";
+const USER_PRESENCE_COL = "userPresence";
 
 let currentUser = null;
 let state = null;
 let timerId = null;
 let supUnsub = null;
+let presenceUnsub = null;
+let presenceTimerId = null;
+let issueCalendarUnsub = null;
+let issueStatsByDay = {};
 
 // widgets timers
 let clockIntervalId = null;
@@ -227,6 +232,13 @@ function monthTitle(d) {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
+function dateKeyFromValue(v) {
+  try {
+    const d = v?.toDate ? v.toDate() : new Date(v || Date.now());
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  } catch { return getTodayKey(); }
+}
+
 function buildMiniCalendar() {
   const titleEl = document.getElementById("cal-title");
   const gridEl = document.getElementById("cal-grid");
@@ -261,6 +273,14 @@ function buildMiniCalendar() {
       cell.classList.add("muted");
     } else {
       cell.textContent = String(dayNum);
+      const key = `${year}-${String(month+1).padStart(2,"0")}-${String(dayNum).padStart(2,"0")}`;
+      const stats = issueStatsByDay[key];
+      if (stats) {
+        if (stats.risk >= 3) cell.classList.add("issue-high");
+        else if (stats.risk >= 1) cell.classList.add("issue-mid");
+        else if (stats.total >= 1) cell.classList.add("issue-low");
+        cell.title = `${stats.total} tickets • ${stats.risk} risk issues`;
+      }
       if (isThisMonth && dayNum === today.getDate()) cell.classList.add("today");
     }
 
@@ -498,6 +518,140 @@ function hookFloatingChatUI() {
   window.addEventListener("telesyriana:user-changed", () => closeFloatingChat());
 }
 
+
+/* --------------------------- Presence / Online now ----------------------- */
+
+function pageVisibleName() {
+  const active = document.querySelector(".nav-link[data-page].active");
+  return active?.dataset?.page || "home";
+}
+
+function onlineStatusFromRow(row) {
+  const ms = Number(row?.lastSeenMs || 0);
+  if (!ms) return "offline";
+  const age = Date.now() - ms;
+  if (age < 90_000) return "online";
+  if (age < 10 * 60_000) return "away";
+  return "offline";
+}
+
+function formatLastSeen(ms) {
+  const n = Number(ms || 0);
+  if (!n) return "Never";
+  const diff = Math.max(0, Date.now() - n);
+  if (diff < 90_000) return "Live now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `Last seen ${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Last seen ${hrs} hr${hrs === 1 ? "" : "s"} ago`;
+  return new Date(n).toLocaleString();
+}
+
+async function updatePresence(force = false) {
+  if (!currentUser) return;
+  const now = Date.now();
+  const payload = {
+    userId: currentUser.id,
+    name: currentUser.name,
+    role: currentUser.role,
+    status: document.hidden ? "away" : "online",
+    page: pageVisibleName(),
+    lastSeenMs: now,
+    updatedAt: serverTimestamp(),
+  };
+  try {
+    await setDoc(doc(collection(db, USER_PRESENCE_COL), currentUser.id), payload, { merge: true });
+  } catch (err) {
+    if (force) console.warn("Presence save failed", err);
+  }
+}
+
+function subscribePresence() {
+  if (presenceUnsub) return;
+  presenceUnsub = onSnapshot(collection(db, USER_PRESENCE_COL), (snapshot) => {
+    const rows = [];
+    snapshot.forEach((d) => rows.push({ id: d.id, ...d.data() }));
+    renderOnlineNow(rows);
+  }, (err) => console.warn("presence listener failed", err));
+}
+
+function renderOnlineNow(rows) {
+  const list = document.getElementById("online-now-list");
+  const count = document.getElementById("online-now-count");
+  if (!list || !count) return;
+  const visible = rows
+    .filter((r) => onlineStatusFromRow(r) !== "offline")
+    .sort((a, b) => Number(b.lastSeenMs || 0) - Number(a.lastSeenMs || 0));
+  count.textContent = String(visible.length);
+  if (!visible.length) {
+    list.innerHTML = `<div class="online-empty">No one online now.</div>`;
+    return;
+  }
+  list.innerHTML = visible.map((r) => {
+    const st = onlineStatusFromRow(r);
+    return `<div class="online-person">
+      <span class="online-dot ${st}"></span>
+      <div><strong>${escapeSmall(r.name || r.userId || "User")}</strong><small>${escapeSmall(r.role || "")} • ${escapeSmall(r.page || "home")} • ${escapeSmall(formatLastSeen(r.lastSeenMs))}</small></div>
+    </div>`;
+  }).join("");
+}
+
+function escapeSmall(v) {
+  return String(v || "").replace(/[&<>"']/g, (m) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));
+}
+
+function startPresence() {
+  if (!currentUser) return;
+  subscribePresence();
+  updatePresence(true);
+  if (presenceTimerId) clearInterval(presenceTimerId);
+  presenceTimerId = setInterval(() => updatePresence(false), 30_000);
+}
+
+async function stopPresence() {
+  if (presenceTimerId) clearInterval(presenceTimerId);
+  presenceTimerId = null;
+  if (currentUser) {
+    try {
+      await setDoc(doc(collection(db, USER_PRESENCE_COL), currentUser.id), {
+        status: "offline",
+        lastSeenMs: Date.now(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch {}
+  }
+}
+
+
+/* --------------------------- Issue rate calendar ------------------------- */
+function subscribeIssueCalendar() {
+  if (issueCalendarUnsub) return;
+  try {
+    issueCalendarUnsub = onSnapshot(collection(db, "tickets"), (snapshot) => {
+      const stats = {};
+      snapshot.forEach((d) => {
+        const t = d.data();
+        const key = dateKeyFromValue(t.createdAt || t.updatedAt);
+        if (!stats[key]) stats[key] = { total: 0, risk: 0 };
+        stats[key].total += 1;
+        if (["emergency", "high"].includes(t.priority) || ["chargeback", "high"].includes(t.risk) || t.type === "item_not_genuine") {
+          stats[key].risk += 1;
+        }
+      });
+      issueStatsByDay = stats;
+      buildMiniCalendar();
+      const summary = document.getElementById("issue-calendar-summary");
+      if (summary) {
+        const today = getTodayKey();
+        const s = stats[today] || { total: 0, risk: 0 };
+        summary.textContent = `Today: ${s.total} tickets • ${s.risk} risk issues. Add daily sales later for real issue-rate %.`;
+      }
+    }, (err) => console.warn("issue calendar listener failed", err));
+  } catch (err) {
+    console.warn("issue calendar init failed", err);
+  }
+}
+
 /* --------------------------- UI init ------------------------------------ */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -527,6 +681,7 @@ document.addEventListener("DOMContentLoaded", () => {
         await syncStateToFirestore(live, true);
       } catch {}
     }
+    updatePresence(false).catch(() => {});
   });
 
   const savedUser = localStorage.getItem(USER_KEY);
@@ -560,6 +715,8 @@ function switchPage(pageId) {
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.page === pageId);
   });
+
+  updatePresence(false).catch(() => {});
 
   // floating chat toggle visibility rules
   const floatToggle = document.getElementById("float-chat-toggle");
@@ -614,6 +771,8 @@ async function handleLogout() {
     } catch {}
   }
 
+  await stopPresence();
+
   localStorage.removeItem(USER_KEY);
 
   window.dispatchEvent(new Event("telesyriana:user-changed"));
@@ -626,6 +785,10 @@ async function handleLogout() {
 
   if (supUnsub) supUnsub();
   supUnsub = null;
+  if (presenceUnsub) presenceUnsub();
+  presenceUnsub = null;
+  if (issueCalendarUnsub) issueCalendarUnsub();
+  issueCalendarUnsub = null;
 
   currentUser = null;
   state = null;
@@ -931,6 +1094,10 @@ async function loadUserProfile() {
   const genderEl = document.getElementById("set-gender");
 
   if (nameEl) nameEl.value = currentUser.name || currentUser.id;
+  const codeEl = document.getElementById("set-staff-code");
+  const roleEl = document.getElementById("set-role");
+  if (codeEl) codeEl.textContent = currentUser.id || "—";
+  if (roleEl) roleEl.textContent = String(currentUser.role || "").toUpperCase();
 
   let cached = {};
   try {
@@ -947,11 +1114,13 @@ async function loadUserProfile() {
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const d = snap.data();
+      if (nameEl) nameEl.value = d.name || currentUser.name || currentUser.id;
       if (bdayEl) bdayEl.value = d.birthday || "";
       if (notesEl) notesEl.value = d.notes || "";
       if (genderEl) genderEl.value = d.gender || "";
       applyTheme(d.gender || "");
       localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({
+        name: d.name || currentUser.name || "",
         birthday: d.birthday || "",
         notes: d.notes || "",
         gender: d.gender || "",
@@ -966,12 +1135,17 @@ async function handleSettingsSave(e) {
   e.preventDefault();
   if (!currentUser) return;
 
+  const name = document.getElementById("set-name")?.value?.trim() || currentUser.name || currentUser.id;
   const birthday = document.getElementById("set-birthday")?.value || "";
   const notes = document.getElementById("set-notes")?.value || "";
   const gender = document.getElementById("set-gender")?.value || "";
 
   applyTheme(gender);
-  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ birthday, notes, gender }));
+  currentUser = { ...currentUser, name };
+  localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ name, birthday, notes, gender }));
+  updateDashboardUI();
+  updatePresence(true).catch(() => {});
 
   const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
 
@@ -980,7 +1154,7 @@ async function handleSettingsSave(e) {
       ref,
       {
         userId: currentUser.id,
-        name: currentUser.name,
+        name,
         birthday,
         notes,
         gender,
@@ -1031,4 +1205,6 @@ function showDashboard() {
   if (!clockIntervalId) {
     clockIntervalId = setInterval(renderClockWidget, 1000);
   }
+  startPresence();
+  subscribeIssueCalendar();
 }

@@ -44,6 +44,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
   const elCreateBox = document.getElementById("create-meeting-box");
   const elCreateTitle = document.getElementById("create-title");
+  const elCreateLink = document.getElementById("create-link");
   const elCreateDate = document.getElementById("create-date");
   const elCreateTime = document.getElementById("create-time");
   const elCreateId = document.getElementById("create-id");
@@ -254,7 +255,7 @@ if (window.__TS_MEETINGS_INIT__) {
               <span class="meeting-id">#${escapeHtml(m.meetingId)}</span>
             </div>
             <div class="meeting-sub">
-              ${escapeHtml(formatStartAt(m.startAt))} • Host: ${escapeHtml(m.hostName || m.hostId || "-")}
+              ${escapeHtml(formatStartAt(m.startAt))} • Host: ${escapeHtml(m.hostName || m.hostId || "-")} • ${m.meetingLink ? "Link ready" : "No link"}
             </div>
             <div class="meeting-sub" style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
               <span class="meeting-pill">ID: <b>${escapeHtml(m.meetingId)}</b></span>
@@ -425,8 +426,10 @@ if (window.__TS_MEETINGS_INIT__) {
     }
 
     const title = (elCreateTitle?.value || "").trim() || "Meeting";
+    const meetingLink = (elCreateLink?.value || "").trim();
     const startAt = parseStartAt(elCreateDate?.value, elCreateTime?.value);
     if (!startAt) return alert("Choose date & time.");
+    if (!meetingLink) return alert("Paste the Google Meet / Zoom link first.");
 
     const meetingId = (elCreateId?.value || "").trim();
     const password = (elCreatePass?.value || "").trim();
@@ -436,6 +439,8 @@ if (window.__TS_MEETINGS_INIT__) {
       meetingId,
       password,
       title,
+      meetingLink,
+      expiresAt: Timestamp.fromDate(new Date(startAt.toDate().getTime() + 60 * 60 * 1000)),
       startAt,
       hostId: user.id,
       hostName: user.name,
@@ -461,25 +466,33 @@ if (window.__TS_MEETINGS_INIT__) {
   async function joinMeeting() {
     const id = (joinId?.value || "").trim();
     const pass = (joinPass?.value || "").trim();
-    if (!id || !pass) return alert("Enter Meeting ID + password.");
+    if (!id) return alert("Enter Meeting ID.");
 
     const snap = await getDoc(doc(db, MEETINGS_COL, id));
     if (!snap.exists()) return alert("Meeting not found.");
 
     const data = snap.data();
-    if ((data.password || "") !== pass) return alert("Wrong password.");
+    if ((data.password || "") && (data.password || "") !== pass) return alert("Wrong access code.");
 
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (videoEl) videoEl.srcObject = localStream;
+    const link = String(data.meetingLink || "").trim();
+    if (!link) return alert("No meeting link was added by the manager.");
 
-      if (liveTitle) liveTitle.textContent = data.title || "In meeting";
-      if (liveMeta) liveMeta.textContent = `#${data.meetingId} • ${formatStartAt(data.startAt)}`;
-
-      stage?.classList.remove("hidden");
-    } catch {
-      alert("Camera/Mic blocked. Please allow permissions.");
+    const user = getCurrentUser();
+    if (user?.id) {
+      try {
+        await setDoc(doc(db, MEETINGS_COL, id, "attendance", user.id), {
+          userId: user.id,
+          name: user.name,
+          role: user.role,
+          joinedAt: serverTimestamp(),
+          clickedLink: true,
+        }, { merge: true });
+      } catch (err) {
+        console.warn("attendance save failed", err);
+      }
     }
+
+    window.open(link, "_blank", "noopener,noreferrer");
   }
 
   function leaveMeeting() {
