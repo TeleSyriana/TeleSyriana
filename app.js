@@ -98,6 +98,48 @@ let lastSyncPayloadHash = "";
 
 /* ------------------------------ helpers --------------------------------- */
 
+
+function showToast(message, type = "info", timeout = 3500) {
+  const text = String(message || "");
+  let wrap = document.getElementById("toast-container");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "toast-container";
+    wrap.style.position = "fixed";
+    wrap.style.right = "18px";
+    wrap.style.bottom = "18px";
+    wrap.style.zIndex = "99999";
+    wrap.style.display = "grid";
+    wrap.style.gap = "10px";
+    document.body.appendChild(wrap);
+  }
+
+  const el = document.createElement("div");
+  el.className = `toast toast-${type}`;
+  el.textContent = text;
+  el.style.maxWidth = "420px";
+  el.style.padding = "12px 14px";
+  el.style.borderRadius = "14px";
+  el.style.boxShadow = "0 10px 30px rgba(0,0,0,.18)";
+  el.style.fontWeight = "700";
+  el.style.background = type === "error" ? "#fee2e2" : type === "warning" ? "#fef3c7" : type === "success" ? "#dcfce7" : "#e0f2fe";
+  el.style.color = type === "error" ? "#991b1b" : type === "warning" ? "#92400e" : type === "success" ? "#166534" : "#075985";
+  el.style.border = "1px solid rgba(0,0,0,.08)";
+
+  wrap.appendChild(el);
+  window.setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateY(6px)";
+    el.style.transition = "opacity .2s ease, transform .2s ease";
+    window.setTimeout(() => el.remove(), 220);
+  }, timeout);
+}
+
+function isFirestoreDatabaseMissingError(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return msg.includes("database (default) does not exist") || msg.includes("cloud firestore database") || msg.includes("code=not-found");
+}
+
 function getTodayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -922,7 +964,7 @@ async function initStateForUser() {
   } catch (err) {
     console.error("Login state init failed. Starting local session instead:", err);
     state = buildDefaultDayState(now);
-    showToast?.("Logged in locally. Firebase read failed; check rules/network.", "warning");
+    showToast(isFirestoreDatabaseMissingError(err) ? "Logged in locally. Firestore database is not created yet." : "Logged in locally. Firebase read failed; check rules/network.", "warning", 6000);
   }
 
   saveState();
