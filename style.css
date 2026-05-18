@@ -3814,8 +3814,8 @@ body[data-bg-tone="dark"] .notes-app{
     isolation:isolate !important;
     padding-top:86px !important;
   }
-  body[data-bg-tone="light"] #main-nav.main-nav{ background:rgba(255,255,255,.30) !important; }
-  body[data-bg-tone="dark"] #main-nav.main-nav{ background:rgba(20,28,45,.42) !important; }
+  body[data-bg-tone="light"] #main-nav.main-nav{ background:rgb(255 255 255 / 83%) !important; }
+  body[data-bg-tone="dark"] #main-nav.main-nav{ background:rgb(255 255 255 / 83%) !important; }
   #main-nav.main-nav::before{ top:26px !important; font-size:20px !important; line-height:1 !important; }
   body[data-language="en"] #main-nav.main-nav::before,
   html[dir="ltr"] #main-nav.main-nav::before{ left:72px !important; }
