@@ -106,6 +106,7 @@ body{
   gap:10px;
   font-size:13px;
   align-items:center;
+   padding:auto;  
 }
 
 .nav-link{
