@@ -18,7 +18,9 @@ const USER_KEY = "telesyrianaUser";
 const GROUPS_COL = "groups";
 
 const norm = (x) => String(x ?? "").trim();
-const isSup = (u) => String(u?.role || "").toLowerCase() === "supervisor";
+const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
+const roleLevel = (u) => ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0;
+const canCreateGroups = (u) => roleLevel(u) >= ROLE_LEVELS.supervisor;
 
 function getCurrentUser() {
   try {
@@ -78,7 +80,7 @@ let groupsCache = []; // latest visible groups
 function applySupervisorVisibility() {
   const me = getCurrentUser();
   const openBtn = $("group-open-modal");
-  if (openBtn) openBtn.style.display = isSup(me) ? "" : "none";
+  if (openBtn) openBtn.style.display = canCreateGroups(me) ? "" : "none";
 }
 
 function resetFormToCreate() {
@@ -263,7 +265,7 @@ async function createOrEditFromForm() {
   const editId = norm(form?.dataset?.editId);
 
   // create: supervisor only
-  if (!editId && !isSup(me)) throw new Error("Only supervisors can create groups");
+  if (!editId && !canCreateGroups(me)) throw new Error("Supervisor, Manager or Admin only.");
 
   const name = ($("group-name")?.value || "").trim();
   const rules = ($("group-rules")?.value || "").trim();

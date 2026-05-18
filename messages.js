@@ -1,3 +1,7 @@
+
+const TS_ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
+function tsRoleLevel(u) { return TS_ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
+function tsCanUseSupervisorRoom(u) { return tsRoleLevel(u) >= TS_ROLE_LEVELS.supervisor; }
 // messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots
 // ✅ Recents (CLOUD, AFTER SEND ONLY) + Search by name/room/CCMS + Glass sidebar support
 // ✅ Groups (CLOUD) + Groups open via events (telesyriana:open-group / telesyriana:open-room)
@@ -1028,7 +1032,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      if (room === "supervisors" && currentUser.role !== "supervisor") {
+      if (room === "supervisors" && !tsCanUseSupervisorRoom(currentUser)) {
         console.warn("Supervisor only room");
         return;
       }
@@ -1037,7 +1041,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const desc =
         room === "general"
           ? "All agents & supervisors • Be respectful • No customer data."
-          : "Supervisor-only space for internal notes and coordination.";
+          : "Supervisor / Manager space for internal notes and coordination.";
 
       openChat({ type: "room", roomId: room, title, desc }, btn);
     });

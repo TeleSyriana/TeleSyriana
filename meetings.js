@@ -69,6 +69,11 @@ if (window.__TS_MEETINGS_INIT__) {
   const leaveBtn = document.getElementById("btn-leave");
 
   // -------------------- helpers --------------------
+
+  const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
+  function roleLevel(user) { return ROLE_LEVELS[String(user?.role || "").toLowerCase()] || 0; }
+  function canManageMeetings(user) { return roleLevel(user) >= ROLE_LEVELS.supervisor; }
+
   function getCurrentUser() {
     try {
       return JSON.parse(localStorage.getItem("telesyrianaUser") || "null");
@@ -238,7 +243,7 @@ if (window.__TS_MEETINGS_INIT__) {
       btn.type = "button";
       btn.className = "meeting-item";
 
-      const canDelete = user && user.role === "supervisor" && String(m.hostId || "") === String(user.id || "");
+      const canDelete = user && canManageMeetings(user) && (String(m.hostId || "") === String(user.id || "") || roleLevel(user) >= ROLE_LEVELS.manager);
 
       btn.innerHTML = `
         <div class="meeting-row">
@@ -342,7 +347,7 @@ if (window.__TS_MEETINGS_INIT__) {
     if (defaultsLoading) return;
 
     const user = getCurrentUser();
-    const isSup = !!user && user.role === "supervisor";
+    const isSup = !!user && canManageMeetings(user);
 
     // ✅ nicer UX: show password as password field + ability to toggle
     // (HTML currently uses type="text" readonly; we turn it into password + readonly)
@@ -402,7 +407,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
   async function createMeeting() {
     const user = getCurrentUser();
-    if (!user || user.role !== "supervisor") return alert("Supervisor only.");
+    if (!user || !canManageMeetings(user)) return alert("Supervisor, Manager or Admin only.");
 
     // ✅ ONE meeting only: if there is already upcoming meeting, block creation
     try {
@@ -579,7 +584,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
     btnDeleteMine.addEventListener("click", async () => {
       const user = getCurrentUser();
-      if (!user || user.role !== "supervisor") return;
+      if (!user || !canManageMeetings(user)) return;
 
       // try delete by current createId first
       const id = (elCreateId?.value || "").trim();
@@ -609,7 +614,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
     // supervisor create UI
     if (elCreateBox) {
-      const show = !!user && user.role === "supervisor";
+      const show = !!user && canManageMeetings(user);
       elCreateBox.classList.toggle("hidden", !show);
       if (show) {
         injectShareButtons();
@@ -651,7 +656,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
     window.addEventListener("telesyriana:user-changed", () => {
       const u = getCurrentUser();
-      const show = !!u && u.role === "supervisor";
+      const show = !!u && canManageMeetings(u);
       elCreateBox?.classList.toggle("hidden", !show);
       if (show) {
         injectShareButtons();

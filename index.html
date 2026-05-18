@@ -66,7 +66,10 @@
 
           <p class="hint">
             example users:<br />
-            <code>1001 / 1234</code> (Agent)<br />
+            <code>0001 / Welcome 2026!</code> (Agent)<br />
+            <code>1001 / 2411</code> (Supervisor)<br />
+            <code>2001 / 2411</code> (Manager)<br />
+            <code>9001 / 2411</code> (Admin)<br />
           </p>
         </section>
       </div>
@@ -113,7 +116,7 @@
 
             <section id="supervisor-panel" class="sup-panel hidden">
               <h2>Team Overview</h2>
-              <p class="sup-note">Live status for all agents today.</p>
+              <p class="sup-note">Supervisor sees assigned agents. Manager/Admin sees the full team.</p>
 
               <div class="sup-summary">
                 <span>Operation: <strong id="sum-op">0</strong></span>
@@ -135,6 +138,7 @@
                       <th>Meeting</th>
                       <th>Unavailable</th>
                       <th>Last login</th>
+                      <th>Est. pay</th>
                     </tr>
                   </thead>
                   <tbody id="sup-table-body"></tbody>
@@ -412,7 +416,7 @@
               <div class="messages-sidebar-header small">Direct messages</div>
               <div id="dm-list" class="ms-list" data-list="dm">
 
-                <button class="chat-dm" type="button" data-dm="1001">
+                <button class="chat-dm" type="button" data-dm="0001">
                   <div class="chat-row">
                     <div class="dm-avatar-wrap">
                       <div class="chat-avatar role-agent" data-avatar="0001">A1</div>
@@ -425,7 +429,7 @@
                   </div>
                 </button>
 
-                <button class="chat-dm" type="button" data-dm="1002">
+                <button class="chat-dm" type="button" data-dm="0002">
                   <div class="chat-row">
                     <div class="dm-avatar-wrap">
                       <div class="chat-avatar role-agent" data-avatar="0002">A2</div>
@@ -464,15 +468,15 @@
                   </div>
                 </button>
 
-                <button class="chat-dm" type="button" data-dm="1002">
+                <button class="chat-dm" type="button" data-dm="2001">
                   <div class="chat-row">
                     <div class="dm-avatar-wrap">
-                      <div class="chat-avatar role-supervisor" data-avatar="1002">SM</div>
-                      <span class="status-dot dot-offline" data-status-dot="1002"></span>
+                      <div class="chat-avatar role-supervisor" data-avatar="2001">MM</div>
+                      <span class="status-dot dot-offline" data-status-dot="2001"></span>
                     </div>
                     <div class="chat-row-text">
-                      <div class="chat-room-title" data-name="1002">Supervisor Mohammad</div>
-                      <div class="chat-room-sub" data-sub="1002">Direct chat</div>
+                      <div class="chat-room-title" data-name="2001">Manager Mohammad</div>
+                      <div class="chat-room-sub" data-sub="2001">Direct chat</div>
                     </div>
                   </div>
                 </button>
@@ -549,7 +553,8 @@
           <label class="group-member-item"><input type="checkbox" name="group-members" value="0002"> Qamar Mousa (CCMS 0002)</label>
           <label class="group-member-item"><input type="checkbox" name="group-members" value="0003"> Agent 03 (CCMS 0003)</label>
           <label class="group-member-item"><input type="checkbox" name="group-members" value="1001"> Supervisor Dema (CCMS 1001)</label>
-          <label class="group-member-item"><input type="checkbox" name="group-members" value="1002"> Supervisor Moustafa (CCMS 1002)</label>
+          <label class="group-member-item"><input type="checkbox" name="group-members" value="2001"> Manager Mohammad (CCMS 2001)</label>
+          <label class="group-member-item"><input type="checkbox" name="group-members" value="9001"> Owner Admin (CCMS 9001)</label>
         </div>
 
         <div class="modal-actions">

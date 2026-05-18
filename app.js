@@ -14,13 +14,54 @@ const {
 } = fs;
 
 // Demo users
+// Phase 1 role model:
+// - Agent codes start with 000x
+// - Supervisor codes start with 100x
+// - Manager codes start with 200x
+// - Admin/Owner codes start with 900x
 const USERS = {
-  "0001": { password: "Welcome 2026!", role: "agent", name: "Agent Raghad Mousa" },
-  "0002": { password: "Welcome 2026!", role: "agent", name: "Agent Qamar Mousa" },
-  "0003": { password: "Welcome 2026!", role: "agent", name: "Agent" },
-  "1001": { password: "2411", role: "supervisor", name: "Supervisor Dema" },
-  "1002": { password: "0951", role: "supervisor", name: "Supervisor Mohammad" },
+  "0001": { password: "Welcome 2026!", role: "agent", name: "Agent Raghad", supervisorId: "1001", hourlyRate: 1.25, currency: "USD" },
+  "0002": { password: "Welcome 2026!", role: "agent", name: "Agent Qamar", supervisorId: "1001", hourlyRate: 1.25, currency: "USD" },
+  "0003": { password: "Welcome 2026!", role: "agent", name: "Agent", supervisorId: "1001", hourlyRate: 1.25, currency: "USD" },
+  "1001": { password: "2411", role: "supervisor", name: "Supervisor Dema", hourlyRate: 1.75, currency: "USD" },
+  "2001": { password: "2411", role: "manager", name: "Manager Mohammad", hourlyRate: 0, currency: "GBP" },
+  "9001": { password: "2411", role: "admin", name: "Owner Admin", hourlyRate: 0, currency: "GBP" },
 };
+
+const ROLE_LEVELS = {
+  agent: 1,
+  supervisor: 2,
+  manager: 3,
+  admin: 4,
+};
+
+function normaliseRole(role) {
+  return String(role || "agent").toLowerCase();
+}
+
+function roleLevel(userOrRole) {
+  const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
+  return ROLE_LEVELS[normaliseRole(role)] || 0;
+}
+
+function hasRoleAtLeast(user, role) {
+  return roleLevel(user) >= roleLevel(role);
+}
+
+function canViewTeamDashboard(user) {
+  return hasRoleAtLeast(user, "supervisor");
+}
+
+function canViewAllStaff(user) {
+  return hasRoleAtLeast(user, "manager");
+}
+
+function safeUserPayload(id) {
+  const u = USERS[id];
+  if (!u) return null;
+  const { password, ...safe } = u;
+  return { id, ...safe };
+}
 
 const USER_KEY = "telesyrianaUser";
 const STATE_KEY = "telesyrianaState";
@@ -344,6 +385,9 @@ async function syncStateToFirestore(live, force = false) {
     userId: currentUser.id,
     name: currentUser.name,
     role: currentUser.role,
+    supervisorId: currentUser.supervisorId || "",
+    hourlyRate: Number(currentUser.hourlyRate) || 0,
+    currency: currentUser.currency || "USD",
     day: today,
     status: state.status,
     loginTime: state.loginTime,
@@ -364,7 +408,7 @@ async function syncStateToFirestore(live, force = false) {
 }
 
 function subscribeSupervisorDashboard() {
-  if (!currentUser || currentUser.role !== "supervisor") return;
+  if (!currentUser || !canViewTeamDashboard(currentUser)) return;
   if (supUnsub) return;
 
   const q = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
@@ -488,7 +532,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (savedUser) {
     const u = JSON.parse(savedUser);
     if (USERS[u.id]) {
-      currentUser = u;
+      // Refresh saved sessions from the current role map, so role changes apply after updates.
+      currentUser = safeUserPayload(u.id);
+      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
       initStateForUser();
       showDashboard();
       return;
@@ -537,7 +583,7 @@ function handleLogin(e) {
   if (!USERS[id]) return showError("User not found.");
   if (USERS[id].password !== pw) return showError("Incorrect password.");
 
-  currentUser = { id, name: USERS[id].name, role: USERS[id].role };
+  currentUser = safeUserPayload(id);
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
   // reset throttling for new session
@@ -678,7 +724,7 @@ async function initStateForUser() {
 }
 
 function finishInit(now) {
-  if (currentUser.role === "supervisor") subscribeSupervisorDashboard();
+  if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();
 
   loadUserProfile();
   startTimer();
@@ -766,7 +812,7 @@ function updateDashboardUI() {
   updateWorkUI(computeWorkedMinutes(live));
 
   const supPanel = document.getElementById("supervisor-panel");
-  if (supPanel) supPanel.classList.toggle("hidden", currentUser.role !== "supervisor");
+  if (supPanel) supPanel.classList.toggle("hidden", !canViewTeamDashboard(currentUser));
 }
 
 function updateBreakUI(used) {
@@ -803,11 +849,24 @@ function buildSupervisorTableFromFirestore(rows) {
 
   const totals = { in_operation: 0, break: 0, meeting: 0, handling: 0, unavailable: 0 };
 
-  rows
-    .filter((r) => r.role === "agent")
+  const visibleRows = rows.filter((r) => {
+    if (!currentUser) return false;
+    if (canViewAllStaff(currentUser)) return true;
+    // Supervisors only see agents assigned to them.
+    return r.role === "agent" && String(r.supervisorId || "") === String(currentUser.id);
+  });
+
+  visibleRows
     .forEach((r) => {
       const status = r.status || "unavailable";
-      totals[status]++;
+      if (Object.prototype.hasOwnProperty.call(totals, status)) totals[status]++;
+
+      const workedMinutes =
+        (Number(r.operationMinutes) || 0) +
+        (Number(r.meetingMinutes) || 0) +
+        (Number(r.handlingMinutes) || 0) +
+        (Number(r.breakUsedMinutes) || 0);
+      const pay = ((workedMinutes / 60) * (Number(r.hourlyRate) || 0)).toFixed(2);
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -820,6 +879,7 @@ function buildSupervisorTableFromFirestore(rows) {
         <td>${formatDuration(r.meetingMinutes || 0)}</td>
         <td>${formatDuration(r.unavailableMinutes || 0)}</td>
         <td>${r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"}</td>
+        <td>${r.currency || "USD"} ${pay}</td>
       `;
       body.appendChild(tr);
     });
