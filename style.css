@@ -3707,14 +3707,11 @@ body[data-bg-tone="dark"] .notes-app{
   html[dir="rtl"] #main-nav.main-nav .nav-link{ justify-content:flex-end !important; }
 
   #mobile-menu-backdrop.mobile-menu-backdrop{
-    position:fixed !important;
+    position:absolute !important;
     inset:0 !important;
     height:100dvh !important;
     width:100vw !important;
     z-index:1290 !important;
-    background:rgba(2,6,23,.38) !important;
-    backdrop-filter:blur(8px) !important;
-    -webkit-backdrop-filter:blur(8px) !important;
   }
 }
 
@@ -3823,9 +3820,6 @@ body[data-bg-tone="dark"] .notes-app{
   body[data-language="ar"] #main-nav.main-nav::before,
   html[dir="rtl"] #main-nav.main-nav::before{ right:72px !important; }
   #mobile-menu-backdrop.mobile-menu-backdrop{
-    backdrop-filter:blur(12px) !important;
-    -webkit-backdrop-filter:blur(12px) !important;
-    background:rgba(5,10,20,.28) !important;
   }
 }
 
@@ -3915,9 +3909,6 @@ body[data-bg-tone="dark"] .notes-app{
   }
 
   #mobile-menu-backdrop.mobile-menu-backdrop{
-    background:rgba(3,7,18,.30) !important;
-    backdrop-filter:blur(14px) saturate(135%) !important;
-    -webkit-backdrop-filter:blur(14px) saturate(135%) !important;
   }
 }
 
