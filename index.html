@@ -103,7 +103,14 @@
                 <option value="meeting">In Meeting</option>
                 <option value="handling">Handling</option>
               </select>
-              <small class="status-note">Break limit: <strong>45 minutes</strong>.</small>
+              <div class="quick-status-row">
+                <button type="button" data-quick-status="in_operation">Clock in</button>
+                <button type="button" data-quick-status="break">Start break</button>
+                <button type="button" data-quick-status="handling">Handling</button>
+                <button type="button" data-quick-status="meeting">Meeting</button>
+                <button type="button" data-quick-status="unavailable">Clock out</button>
+              </div>
+              <small class="status-note">Break limit: <strong>45 minutes</strong>. Time updates every few seconds; payroll saves to Firestore.</small>
             </div>
 
             <div class="break-box">

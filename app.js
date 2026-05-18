@@ -654,7 +654,7 @@ function subscribeIssueCalendar() {
 
 /* --------------------------- UI init ------------------------------------ */
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   // ✅ menu navigation
   document.querySelectorAll(".nav-link").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -669,6 +669,16 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
   document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
   document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
+
+  document.querySelectorAll("[data-quick-status]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const status = btn.dataset.quickStatus;
+      const sel = document.getElementById("status-select");
+      if (!sel || !status) return;
+      sel.value = status;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
 
   hookFloatingChatUI();
 
@@ -691,7 +701,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // Refresh saved sessions from the current role map, so role changes apply after updates.
       currentUser = safeUserPayload(u.id);
       localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
-      initStateForUser();
+      await initStateForUser();
       showDashboard();
       return;
     }
@@ -732,7 +742,7 @@ function switchPage(pageId) {
 
 /* -------------------------- Login / Logout ------------------------------ */
 
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
 
   const id = document.getElementById("ccmsId")?.value?.trim() || "";
@@ -752,7 +762,7 @@ function handleLogin(e) {
   window.dispatchEvent(new Event("telesyriana:user-changed"));
   document.getElementById("login-error")?.classList.add("hidden");
 
-  initStateForUser();
+  await initStateForUser();
   showDashboard();
 }
 
@@ -890,7 +900,7 @@ async function initStateForUser() {
 function finishInit(now) {
   if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();
 
-  loadUserProfile();
+  loadUserProfile().then(() => { updateDashboardUI(); updatePresence(true).catch(() => {}); });
   startTimer();
 
   const live = recomputeLiveUsage(now);
@@ -911,7 +921,7 @@ function finishInit(now) {
 
 function startTimer() {
   if (timerId) clearInterval(timerId);
-  timerId = setInterval(tick, 60000); // ✅ every 1 minute (prevents 429)
+  timerId = setInterval(tick, 5000); // UI updates every 5 sec; Firestore sync is still throttled
   tick();
 }
 
@@ -1104,6 +1114,11 @@ async function loadUserProfile() {
     cached = JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}");
   } catch {}
 
+  if (cached.name) {
+    currentUser = { ...currentUser, name: cached.name };
+    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+    if (nameEl) nameEl.value = cached.name;
+  }
   if (bdayEl) bdayEl.value = cached.birthday || "";
   if (notesEl) notesEl.value = cached.notes || "";
   if (genderEl) genderEl.value = cached.gender || "";
@@ -1114,7 +1129,10 @@ async function loadUserProfile() {
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const d = snap.data();
-      if (nameEl) nameEl.value = d.name || currentUser.name || currentUser.id;
+      const savedName = d.name || currentUser.name || currentUser.id;
+      currentUser = { ...currentUser, name: savedName };
+      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+      if (nameEl) nameEl.value = savedName;
       if (bdayEl) bdayEl.value = d.birthday || "";
       if (notesEl) notesEl.value = d.notes || "";
       if (genderEl) genderEl.value = d.gender || "";
@@ -1134,6 +1152,9 @@ async function loadUserProfile() {
 async function handleSettingsSave(e) {
   e.preventDefault();
   if (!currentUser) return;
+  const btn = e.submitter || document.querySelector('#settings-form button[type="submit"]');
+  const oldText = btn?.textContent || "Save";
+  if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
 
   const name = document.getElementById("set-name")?.value?.trim() || currentUser.name || currentUser.id;
   const birthday = document.getElementById("set-birthday")?.value || "";
@@ -1165,7 +1186,9 @@ async function handleSettingsSave(e) {
     showSettingsAlert("Settings saved successfully.");
   } catch (err) {
     console.error("settings save failed", err);
-    showSettingsAlert("Saved locally, but Firestore save failed. Check permissions/internet.", true);
+    showSettingsAlert(`Saved locally, but Firestore save failed: ${err?.code || err?.message || "Check permissions/internet"}`, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
   }
 }
 

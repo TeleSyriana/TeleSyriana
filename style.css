@@ -2620,3 +2620,119 @@ button:disabled { opacity:.58; cursor:not-allowed; }
 .status-dot.dot-away{ background:#f59e0b !important; box-shadow:0 0 0 3px rgba(245,158,11,.18); }
 .status-dot.dot-offline{ background:#9ca3af !important; }
 .chat-room-sub[data-sub]{ font-size:12px; }
+
+/* =========================
+   PHASE 9 — Real Staff UX hardening
+   Focus: clear saves, real work layout, Apple notes, compact tickets, reports, live team status
+========================= */
+:root{
+  --ts-navy:#0f1b3d;
+  --ts-muted:#65708a;
+  --ts-border:#e6eaf2;
+  --ts-bg:#f7faff;
+  --ts-success:#16a34a;
+  --ts-danger:#ef4444;
+  --ts-warning:#f59e0b;
+}
+.alert.danger{ background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+button:disabled{ opacity:.58; cursor:not-allowed; }
+
+/* Home time tracker */
+.quick-status-row{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 4px; }
+.quick-status-row button{ border:1px solid color-mix(in srgb,var(--brand) 20%,#fff); background:#fff; color:var(--ts-navy); border-radius:999px; padding:8px 12px; font-weight:800; cursor:pointer; }
+.quick-status-row button:hover{ background:color-mix(in srgb,var(--brand) 12%,#fff); }
+.time-box{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px; }
+.time-box div{ background:#f8fafc; border:1px solid var(--ts-border); border-radius:14px; padding:12px; font-weight:800; color:var(--ts-navy); }
+.break-box{ border:1px solid #dbeafe; background:#eff6ff; color:#1e3a8a; }
+.online-now-card{ border:1px solid var(--ts-border); background:#fff; border-radius:18px; padding:14px; margin:12px 0; }
+.online-now-list{ max-height:170px; overflow:auto; display:grid; gap:8px; }
+.online-dot.online,.dot-online{ background:#22c55e !important; box-shadow:0 0 0 3px rgba(34,197,94,.16); }
+.online-dot.away,.dot-away,.dot-warn{ background:#f59e0b !important; box-shadow:0 0 0 3px rgba(245,158,11,.16); }
+.online-dot.offline,.dot-offline{ background:#94a3b8 !important; }
+
+/* Ticket creation must feel like a modal, not a giant page block */
+#ticket-form.ticket-form{ position:fixed !important; left:50%; top:50%; transform:translate(-50%,-50%); z-index:1300; background:#fff; border:1px solid rgba(15,23,42,.1); border-radius:24px; box-shadow:0 30px 90px rgba(15,23,42,.35); width:min(920px,calc(100vw - 36px)) !important; max-height:min(780px,calc(100vh - 48px)) !important; overflow:auto !important; }
+#ticket-form.ticket-form.hidden{ display:none !important; }
+body.ticket-modal-open::before{ content:""; position:fixed; inset:0; z-index:1290; background:rgba(15,23,42,.35); backdrop-filter:blur(5px); }
+#ticket-form .ticket-form-head{ position:sticky; top:0; z-index:2; background:#fff; border-bottom:1px solid var(--ts-border); }
+#ticket-form .ticket-form-footer{ position:sticky; bottom:0; z-index:2; border-top:1px solid var(--ts-border); box-shadow:0 -10px 24px rgba(15,23,42,.04); }
+.modal-x{ border:none !important; color:#334155; }
+.modal-x:hover{ color:#dc2626 !important; background:#fee2e2 !important; }
+.ticket-order-preview{ background:#f8fafc; border:1px dashed #cbd5e1; border-radius:14px; padding:10px; font-size:12px; color:#334155; }
+
+/* Ticket board: list + detail should scroll independently */
+.tickets-card{ min-height:calc(100vh - 130px); overflow:hidden; }
+.tickets-layout{ display:grid !important; grid-template-columns:minmax(290px,380px) 1fr; gap:16px; height:calc(100vh - 430px) !important; min-height:540px; max-height:840px; overflow:hidden; }
+.tickets-list-panel,.ticket-detail-panel{ min-height:0; overflow:hidden; border:1px solid var(--ts-border); background:#fff; border-radius:20px; }
+.tickets-list{ height:calc(100% - 48px); overflow:auto; padding:10px; }
+.ticket-detail-panel{ padding:0; }
+#ticket-detail{ height:100%; overflow:auto; padding:18px; }
+.ticket-detail-empty{ height:100%; display:grid; place-items:center; color:var(--ts-muted); font-weight:800; }
+.ticket-row{ text-align:left; }
+.ticket-row.active{ outline:3px solid color-mix(in srgb,var(--brand) 20%,transparent); }
+.timeline-line{ display:flex; flex-direction:column; gap:2px; border-left:3px solid color-mix(in srgb,var(--brand) 35%,#dbeafe); padding:6px 0 6px 10px; margin:4px 0; font-size:12px; }
+.timeline-line span{ color:var(--ts-muted); }
+.ticket-history-box{ display:grid; gap:10px; }
+
+/* Reports: faster to read, clear modal editing */
+.reports-card{ min-height:calc(100vh - 130px); overflow:hidden; }
+.reports-layout{ display:grid; grid-template-columns:minmax(360px,520px) 1fr; gap:18px; min-height:650px; }
+.report-form,.reports-history{ min-height:0; overflow:auto; }
+.report-row{ cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
+.report-row:hover{ transform:translateY(-2px); box-shadow:0 14px 30px rgba(15,23,42,.12); }
+.report-grid-read{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.report-grid-read div{ background:#f8fafc; border:1px solid var(--ts-border); border-radius:14px; padding:10px; white-space:pre-wrap; }
+.report-modal-card{ border-radius:24px; }
+.report-modal-body textarea{ min-height:92px; }
+
+/* Settings should be readable and saved state visible */
+#page-settings .card{ max-width:900px; margin:auto; }
+#settings-form .hint{ display:block; margin:5px 0 0; color:var(--ts-muted); }
+#settings-form button[type="submit"]{ font-weight:900; }
+
+/* Apple Notes style: sidebar + paper editor */
+.notes-app-card{ border-radius:28px; }
+.notes-app{ background:#f4f5f7 !important; }
+.notes-sidebar{ background:rgba(255,255,255,.78); border-right:1px solid var(--ts-border); padding:18px; }
+.notes-head{ align-items:flex-start; }
+.notes-search{ border-radius:14px; background:#fff; }
+.notes-list{ padding-top:12px; display:grid; gap:8px; max-height:calc(100vh - 265px); overflow:auto; }
+.note-row{ border:0; background:#fff; border-radius:16px; padding:12px; text-align:left; box-shadow:0 2px 8px rgba(15,23,42,.04); cursor:pointer; }
+.note-row.active{ background:#fff7cc; box-shadow:inset 4px 0 0 #facc15, 0 8px 20px rgba(15,23,42,.08); }
+.note-row strong{ display:block; color:var(--ts-navy); margin-bottom:4px; }
+.note-row span{ display:block; color:var(--ts-muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.notes-editor{ background:#fff; padding:28px 34px; }
+.note-title-input{ border:0 !important; box-shadow:none !important; font-size:26px; font-weight:900; padding:8px 0; }
+.note-body-input{ border:0 !important; box-shadow:none !important; min-height:calc(100vh - 300px); font-size:16px; line-height:1.65; padding:8px 0; }
+.notes-editor-footer{ border-top:1px solid var(--ts-border); padding-top:10px; display:flex; justify-content:space-between; align-items:center; }
+
+/* Messages: show live/away/last seen more clearly */
+.chat-room-sub[data-sub]{ font-weight:700; color:#64748b; }
+.status-dot{ width:10px !important; height:10px !important; border-radius:50%; display:inline-block; border:2px solid white; }
+.chat-dm .chat-row,.chat-room .chat-row{ align-items:center; }
+
+/* Floating mini chat should be useful while working */
+.floating-chat-toggle{ width:62px; height:62px; font-size:26px; z-index:1500; }
+.floating-chat-panel{ z-index:1501; width:min(420px,calc(100vw - 24px)); border-radius:24px; overflow:hidden; box-shadow:0 30px 80px rgba(15,23,42,.35); }
+
+/* Meetings become link scheduler/attendance, not video clone */
+.meeting-stage,.meeting-video-area,.meeting-controls{ display:none !important; }
+.meeting-note{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:16px; padding:14px; color:#1e3a8a; font-weight:700; }
+#join-meeting-btn{ font-weight:900; }
+.meeting-item{ text-align:left; }
+.meeting-pill{ background:#f8fafc; border:1px solid var(--ts-border); border-radius:999px; padding:4px 8px; font-size:12px; }
+
+/* Calendar issue heat */
+.mini-day.issue-low::after,.mini-day.issue-mid::after,.mini-day.issue-high::after{ content:""; display:block; width:6px; height:6px; border-radius:50%; margin:3px auto 0; }
+.mini-day.issue-low::after{ background:#22c55e; }
+.mini-day.issue-mid::after{ background:#f59e0b; }
+.mini-day.issue-high::after{ background:#ef4444; }
+.issue-calendar-summary{ margin-top:10px; font-size:12px; color:#475569; font-weight:800; background:#f8fafc; border:1px solid var(--ts-border); padding:10px; border-radius:14px; }
+
+@media (max-width: 900px){
+  .tickets-layout,.reports-layout,.notes-app{ grid-template-columns:1fr !important; height:auto !important; max-height:none !important; }
+  .tickets-list-panel{ height:360px; }
+  .ticket-detail-panel{ min-height:420px; }
+  .report-grid-read,.report-modal-body{ grid-template-columns:1fr !important; }
+  .time-box{ grid-template-columns:1fr; }
+}

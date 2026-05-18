@@ -241,6 +241,28 @@ function customerHistoryHtml(ticket) {
   `;
 }
 
+function addHistory(existing, event, by) {
+  const row = {
+    event,
+    by: by || currentUser?.id || "system",
+    byName: currentUser?.name || staffName(by) || "System",
+    atMs: Date.now(),
+  };
+  return [...(Array.isArray(existing) ? existing : []), row].slice(-30);
+}
+
+function ticketTimelineHtml(ticket) {
+  const rows = Array.isArray(ticket.history) ? ticket.history : [];
+  const base = [
+    { event: "Created", byName: staffName(ticket.createdBy), atMs: tsToMs(ticket.createdAt) },
+    ...rows,
+  ].filter((x) => x.event);
+  if (!base.length) return "";
+  return `<div class="lookup-title">Timeline</div>` + base.slice(-8).reverse().map((x) => `
+    <div class="timeline-line"><b>${escapeHtml(x.event)}</b><span>${escapeHtml(x.byName || x.by || "System")} • ${escapeHtml(x.atMs ? new Date(x.atMs).toLocaleString() : "now")}</span></div>
+  `).join("");
+}
+
 function inferPriority(type) {
   return EMERGENCY_TYPES.has(type) ? "emergency" : "normal";
 }
@@ -376,6 +398,7 @@ function selectTicket(id) {
   selectedTicketId = id;
   renderTicketList();
   renderTicketDetail();
+  el("ticket-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function renderTicketDetail() {
@@ -427,7 +450,7 @@ function renderTicketDetail() {
   }
 
   const history = el("ticket-history-box");
-  if (history) history.innerHTML = customerHistoryHtml(t);
+  if (history) history.innerHTML = `${ticketTimelineHtml(t)}${customerHistoryHtml(t)}`;
 
   const editable = canEditAll(currentUser) || t.assignedTo === currentUser?.id || t.createdBy === currentUser?.id;
   ["ticket-detail-status", "ticket-detail-assigned", "ticket-detail-priority-select", "ticket-detail-mood", "ticket-detail-notes", "ticket-detail-resolution"].forEach((id) => {
@@ -522,6 +545,7 @@ function hookUI() {
       updatedAt: serverTimestamp(),
       escalatedAt: serverTimestamp(),
       escalatedBy: currentUser?.id || "",
+      history: addHistory(allTickets.find((x) => x.id === selectedTicketId)?.history, "Escalated to manager", currentUser?.id || ""),
     });
     showTicketAlert("Ticket escalated to manager.");
   });
@@ -533,7 +557,7 @@ async function createTicket() {
   const oldCreateText = createBtn?.textContent || "Create Ticket";
   if (createBtn) { createBtn.disabled = true; createBtn.textContent = "Creating..."; }
   const orderNumber = normaliseOrderNumber(el("ticket-order")?.value);
-  if (!orderNumber) { if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; } return showTicketAlert("Order number is required.", true); }
+  if (!orderNumber) return showTicketAlert("Order number is required.", true);
 
   const type = el("ticket-type")?.value || "general_question";
   const priority = el("ticket-priority")?.value || inferPriority(type);
@@ -572,6 +596,7 @@ async function createTicket() {
     } : {},
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    history: addHistory([], `Created ticket (${TYPE_LABELS[type] || type})`, currentUser.id),
   };
 
   try {
@@ -613,7 +638,7 @@ async function loadOrderCacheForm() {
 async function saveOrderCacheForm() {
   if (!canManageOrderCache(currentUser)) return showTicketAlert("Only supervisor, manager, or admin can save order cache.", true);
   const orderNumber = normaliseOrderNumber(el("order-cache-number")?.value);
-  if (!orderNumber) { if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; } return showTicketAlert("Order number is required.", true); }
+  if (!orderNumber) return showTicketAlert("Order number is required.", true);
   const payload = {
     orderNumber,
     customerName: cleanText(el("order-cache-customer")?.value),
@@ -630,6 +655,7 @@ async function saveOrderCacheForm() {
     notes: cleanText(el("order-cache-notes")?.value),
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
+    history: addHistory(t.history, `Saved changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
     updatedByName: currentUser?.name || "",
   };
   const existing = await getCachedOrder(orderNumber);
@@ -655,6 +681,7 @@ async function saveSelectedTicket() {
     resolution: el("ticket-detail-resolution")?.value || "",
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
+    history: addHistory(t.history, `Saved changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
   };
   if (status === "resolved" || status === "closed") {
     update.resolvedAt = serverTimestamp();
