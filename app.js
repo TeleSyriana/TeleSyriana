@@ -752,6 +752,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       } catch {}
     }
     updatePresence(false).catch(() => {});
+  try { translateFeaturePages(getLanguage()); setTimeout(() => translateFeaturePages(getLanguage()), 60); } catch {}
   });
 
   try {
@@ -797,6 +798,7 @@ function switchPage(pageId) {
   });
 
   updatePresence(false).catch(() => {});
+  try { translateFeaturePages(getLanguage()); applyPhase21LanguagePolish(getLanguage()); setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 80); } catch {}
 
   // floating chat toggle visibility rules
   const floatToggle = document.getElementById("float-chat-toggle");
@@ -1480,6 +1482,9 @@ function applyLanguage(language = "ar") {
   const mainNav = document.getElementById("main-nav");
   if (mainNav) mainNav.dataset.menuTitle = dict.menu;
   translateStaticUI(lang);
+  try { translateFeaturePages(lang); } catch {}
+  try { applyPhase21LanguagePolish(lang); setTimeout(() => applyPhase21LanguagePolish(lang), 120); } catch {}
+
 
   // Let feature modules translate their own static UI.
   try { window.dispatchEvent(new CustomEvent("telesyriana:language-changed", { detail: { language: lang } })); } catch {}
@@ -1700,3 +1705,436 @@ function showDashboard() {
   startPresence();
   subscribeIssueCalendar();
 }
+
+function setPlaceholder(selector, value) {
+  const el = document.querySelector(selector);
+  if (el && value != null) el.setAttribute('placeholder', value);
+}
+
+function setTitleAttr(selector, value) {
+  const el = document.querySelector(selector);
+  if (el && value != null) el.setAttribute('title', value);
+}
+
+function setLabelText(selector, value) {
+  const el = document.querySelector(selector);
+  if (!el || value == null) return;
+  const node = Array.from(el.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+  if (node) node.textContent = `${value} `;
+  else el.insertBefore(document.createTextNode(`${value} `), el.firstChild || null);
+}
+
+function setSelectOptions(selectSelector, map) {
+  const select = document.querySelector(selectSelector);
+  if (!select) return;
+  Array.from(select.options || []).forEach((opt) => {
+    if (Object.prototype.hasOwnProperty.call(map, opt.value)) opt.textContent = map[opt.value];
+  });
+}
+
+function translateFeaturePages(lang = 'en') {
+  const isAr = lang === 'ar';
+  const t = isAr ? {
+    todaySnapshot: 'ملخص اليوم',
+    quickReminders: 'تذكيرات سريعة:',
+    reminder1: '✔ حدّث حالتك دائماً.',
+    reminder2: '✔ استخدم وقت الاستراحة بانتظام.',
+    reminder3: '✔ تعامل مع العملاء بهدوء واحترام.',
+    onlineEmpty: 'لا يوجد أحد متصل حالياً.',
+    clock: 'الساعة',
+    today: 'اليوم',
+    localDate: 'التاريخ المحلي',
+    calendarSummary: 'سيظهر تقويم نسب المشاكل بعد استخدام التذاكر.',
+    breakTitle: 'الاستراحة',
+    breakUsed: 'دقيقة مستخدمة',
+    workHours: 'ساعات العمل',
+    remaining: 'المتبقي:',
+    settingsMeta: 'الكود: ',
+    settingsRole: 'الدور: ',
+    notesTitle: 'الملاحظات',
+    notesSubtitle: 'ملاحظات شخصية بأسلوب بسيط للمتابعة والأفكار.',
+    newNote: '+ ملاحظة جديدة',
+    notesSearch: 'البحث في الملاحظات...',
+    noteTitle: 'عنوان الملاحظة',
+    noteBody: 'ابدأ الكتابة...',
+    delete: 'حذف',
+    noNotes: 'لا توجد ملاحظات بعد.',
+    ticketsTitle: 'تذاكر الدعم',
+    ticketsSubtitle: 'الطوارئ • مشاكل الطلبات • الإرجاع • ملاحظات داخلية',
+    refresh: 'تحديث',
+    newTicket: '+ تذكرة جديدة',
+    shopifyMemory: 'بيانات الطلب / ذاكرة Shopify',
+    shopifyMemorySub: 'حفظ يدوي لبيانات الطلب حالياً لاستخدام الملء التلقائي. يمكن ربط Shopify API لاحقاً.',
+    addUpdateOrder: 'إضافة / تحديث طلب',
+    open: 'مفتوحة',
+    emergency: 'طارئ',
+    escalated: 'مصعّدة',
+    resolvedToday: 'محلولة اليوم',
+    createTicket: 'إنشاء التذكرة',
+    ticketNote: 'رقم الطلب فقط مطلوب، والباقي اختياري.',
+    autoFill: 'ملء تلقائي من رقم الطلب',
+    create: 'إنشاء',
+    ticketSearch: 'بحث برقم الطلب أو العميل أو الملاحظات…',
+    allStates: 'كل الحالات',
+    allPriorities: 'كل الأولويات',
+    allOwners: 'All owners',
+    escalate: 'تصعيد',
+    saveChanges: 'حفظ التعديلات',
+    reportsTitle: 'التقارير اليومية',
+    reportsSubtitle: 'Morning • Midday • End of shift — support handover and emergency visibility',
+    delayed: 'متأخر',
+    returns: 'الإرجاع / الاستبدال',
+    createReport: 'إنشاء تقرير',
+    reportType: 'نوع التقرير',
+    morning: 'تقرير صباحي',
+    midday: 'تقرير منتصف اليوم',
+    endShift: 'تقرير نهاية الدوام',
+    useTemplate: 'استخدام القالب',
+    clear: 'مسح',
+    searchReports: 'بحث في التقارير...',
+    meetingsTitle: 'الاجتماعات',
+    meetingSearch: 'البحث برقم الاجتماع / العنوان / المضيف…',
+    clearSearch: 'مسح',
+    createSection: 'إنشاء',
+    meetingTitle: 'العنوان (مثلاً: اجتماع يومي)',
+    meetingLink: 'ضع رابط Google Meet / Zoom / Teams',
+    meetingId: 'رقم الاجتماع',
+    meetingPass: 'كود الدخول',
+    newCode: 'كود جديد',
+    upcomingMeetings: 'الاجتماعات القادمة',
+    noMeetings: 'لا توجد اجتماعات قادمة',
+    meetingLinkTitle: 'رابط الاجتماع',
+    meetingLinkSub: 'أدخل رقم الاجتماع واضغط فتح الرابط. سيتم تسجيل الحضور تلقائياً.',
+    openLink: 'فتح الرابط',
+    meetingNote: 'يمكن للمدير أو المشرف لصق رابط Google Meet أو Zoom. الضغط على فتح الرابط يسجل الحضور. بعد ساعة يمكن اعتبار من لم يضغط الرابط غائباً.',
+    homeLabel: 'الرئيسية',
+    notesLabel: 'الملاحظات',
+    ticketsLabel: 'التذاكر',
+    reportsLabel: 'التقارير',
+    payrollLabel: 'الرواتب',
+    messagesLabel: 'الرسائل',
+    meetingsLabel: 'الاجتماعات',
+    settingsLabel: 'الإعدادات',
+    logout: 'تسجيل الخروج'
+  } : {
+    todaySnapshot: "Today's Snapshot",
+    quickReminders: 'Quick reminders:',
+    reminder1: '✔ Always update your status.',
+    reminder2: '✔ Use your break time properly.',
+    reminder3: '✔ Treat customers calmly and respectfully.',
+    onlineEmpty: 'No one is online right now.',
+    clock: 'Clock',
+    today: 'Today',
+    localDate: 'Local date',
+    calendarSummary: 'The issue-rate calendar will appear after using tickets.',
+    breakTitle: 'Break',
+    breakUsed: 'minutes used',
+    workHours: 'Work hours',
+    remaining: 'Remaining:',
+    settingsMeta: 'Code: ',
+    settingsRole: 'Role: ',
+    notesTitle: 'Notes',
+    notesSubtitle: 'Simple personal notes for follow-up and ideas.',
+    newNote: '+ New note',
+    notesSearch: 'Search notes...',
+    noteTitle: 'Note title',
+    noteBody: 'Start typing...',
+    delete: 'Delete',
+    noNotes: 'No notes yet.',
+    ticketsTitle: 'Support tickets',
+    ticketsSubtitle: 'Emergencies • order issues • returns • internal notes',
+    refresh: 'Refresh',
+    newTicket: '+ New ticket',
+    shopifyMemory: 'Shopify order memory',
+    shopifyMemorySub: 'Manual order storage for autofill right now. Shopify API can be connected later.',
+    addUpdateOrder: 'Add / update order',
+    open: 'Open',
+    emergency: 'Emergency',
+    escalated: 'Escalated',
+    resolvedToday: 'Resolved today',
+    createTicket: 'Create ticket',
+    ticketNote: 'Only the order number is required. Everything else is optional.',
+    autoFill: 'Autofill from order number',
+    create: 'Create',
+    ticketSearch: 'Search by order number, customer, or notes…',
+    allStates: 'All statuses',
+    allPriorities: 'All priorities',
+    allOwners: 'All owners',
+    escalate: 'Escalate',
+    saveChanges: 'Save changes',
+    reportsTitle: 'Daily reports',
+    reportsSubtitle: 'Morning • Midday • End of shift — support handover and emergency visibility',
+    delayed: 'Delayed',
+    returns: 'Returns / Exchange',
+    createReport: 'Create report',
+    reportType: 'Report type',
+    morning: 'Morning report',
+    midday: 'Midday report',
+    endShift: 'End of shift report',
+    useTemplate: 'Use template',
+    clear: 'Clear',
+    searchReports: 'Search reports...',
+    meetingsTitle: 'Meetings',
+    meetingSearch: 'Search by meeting ID / title / host…',
+    clearSearch: 'Clear',
+    createSection: 'Create',
+    meetingTitle: 'Title (e.g. Daily meeting)',
+    meetingLink: 'Paste a Google Meet / Zoom / Teams link',
+    meetingId: 'Meeting ID',
+    meetingPass: 'Meeting passcode',
+    newCode: 'New code',
+    upcomingMeetings: 'Upcoming meetings',
+    noMeetings: 'No upcoming meetings',
+    meetingLinkTitle: 'Meeting link',
+    meetingLinkSub: 'Enter the meeting ID and press Open link. Attendance will be recorded automatically.',
+    openLink: 'Open link',
+    meetingNote: 'Manager or supervisor can paste a Google Meet or Zoom link. Clicking Open link records attendance. After one hour, staff who did not click the link can be reviewed as missing.',
+    homeLabel: 'Home',
+    notesLabel: 'Notes',
+    ticketsLabel: 'Tickets',
+    reportsLabel: 'Reports',
+    payrollLabel: 'Payroll',
+    messagesLabel: 'Messages',
+    meetingsLabel: 'Meetings',
+    settingsLabel: 'Settings',
+    logout: 'Logout'
+  };
+
+  setText('#page-home .dashboard-side h2', t.todaySnapshot);
+  setText('#page-home .dashboard-side > .subtitle', t.quickReminders);
+  const sideItems = Array.from(document.querySelectorAll('#page-home .side-list li'));
+  if (sideItems[0]) sideItems[0].textContent = t.reminder1;
+  if (sideItems[1]) sideItems[1].textContent = t.reminder2;
+  if (sideItems[2]) sideItems[2].textContent = t.reminder3;
+  const onlineEmpty = document.getElementById('online-now-list');
+  if (onlineEmpty && !onlineEmpty.children.length) onlineEmpty.textContent = t.onlineEmpty;
+  const widgetTitles = Array.from(document.querySelectorAll('#page-home .widget-card .widget-title'));
+  if (widgetTitles[0]) widgetTitles[0].textContent = t.clock;
+  if (widgetTitles[1]) widgetTitles[1].textContent = t.today;
+  if (widgetTitles[3]) widgetTitles[3].textContent = t.breakTitle;
+  if (widgetTitles[4]) widgetTitles[4].textContent = t.workHours;
+  const widgetSubs = Array.from(document.querySelectorAll('#page-home .widget-card .widget-sub'));
+  if (widgetSubs[1]) widgetSubs[1].textContent = t.localDate;
+  if (widgetSubs[2]) widgetSubs[2].textContent = t.breakUsed;
+  const workSub = document.querySelector('#page-home .widget-card:last-child .widget-sub');
+  if (workSub) {
+    const rem = document.getElementById('work-remaining-text')?.textContent || '';
+    workSub.textContent = (t.remaining + ' ' + rem).trim();
+  }
+  const calSummary = document.getElementById('issue-calendar-summary');
+  if (calSummary && /سيظهر تقويم نسب المشاكل|issue-rate calendar/i.test(calSummary.textContent || '')) calSummary.textContent = t.calendarSummary;
+  setSelectOptions('#status-select', isAr ? { in_operation:'قيد التشغيل', break:'استراحة', handling:'متابعة حالة', meeting:'اجتماع', unavailable:'غير متاح' } : { in_operation:'Operating', break:'Break', handling:'Handling', meeting:'Meeting', unavailable:'Unavailable' });
+
+  const metaHint = document.querySelector('#page-settings .hint');
+  if (metaHint) {
+    const code = document.getElementById('set-staff-code')?.textContent || '—';
+    const role = document.getElementById('set-role')?.textContent || '—';
+    metaHint.textContent = t.settingsMeta + code + ' • ' + t.settingsRole + role;
+  }
+
+  setText('#page-tasks .notes-head h2', t.notesTitle);
+  setText('#page-tasks .notes-head .subtitle', t.notesSubtitle);
+  setText('#note-new-btn', t.newNote);
+  setPlaceholder('#notes-search', t.notesSearch);
+  setPlaceholder('#note-title', t.noteTitle);
+  setPlaceholder('#note-body', t.noteBody);
+  setText('#note-delete-btn', t.delete);
+  const noNotes = document.querySelector('#notes-list .notes-empty');
+  if (noNotes) noNotes.textContent = t.noNotes;
+
+  setText('#page-tickets .tickets-top h2', t.ticketsTitle);
+  setText('#page-tickets .tickets-top .subtitle', t.ticketsSubtitle);
+  setText('#ticket-refresh-btn', t.refresh);
+  setText('#ticket-new-toggle', t.newTicket);
+  setText('#order-admin-panel h3', t.shopifyMemory);
+  setText('#order-admin-panel p', t.shopifyMemorySub);
+  setText('#order-admin-toggle', t.addUpdateOrder);
+  const ticketStats = Array.from(document.querySelectorAll('#page-tickets .ticket-stat span'));
+  if (ticketStats[0]) ticketStats[0].textContent = t.open;
+  if (ticketStats[1]) ticketStats[1].textContent = t.emergency;
+  if (ticketStats[2]) ticketStats[2].textContent = t.escalated;
+  if (ticketStats[3]) ticketStats[3].textContent = t.resolvedToday;
+  setText('#ticket-form .ticket-form-head h3', t.createTicket);
+  setText('#ticket-form .ticket-form-note', t.ticketNote);
+  setText('#ticket-autofill-btn', t.autoFill);
+  const ticketCreateBtn = document.querySelector('#ticket-form button[type="submit"]');
+  if (ticketCreateBtn) ticketCreateBtn.textContent = t.create;
+  setPlaceholder('#ticket-search', t.ticketSearch);
+  setSelectOptions('#ticket-filter-status', { '': t.allStates, open:t.open, waiting_customer: isAr?'بانتظار العميل':'Waiting customer', waiting_courier:isAr?'بانتظار الشحن':'Waiting courier', waiting_supplier:isAr?'بانتظار المورد':'Waiting supplier', escalated:t.escalated, resolved:isAr?'محلولة':'Resolved', closed:isAr?'مغلقة':'Closed' });
+  setSelectOptions('#ticket-filter-priority', { '': t.allPriorities, emergency:t.emergency, high:'High', medium:'Medium', normal:'Normal' });
+  setSelectOptions('#ticket-filter-owner', { '': t.allOwners });
+  setText('#ticket-escalate-btn', t.escalate);
+  setText('#ticket-save-btn', t.saveChanges);
+
+  const reportTitle = document.querySelector('#page-reports h2');
+  if (reportTitle) reportTitle.textContent = t.reportsTitle;
+  const reportTopSubtitle = document.querySelector('#page-reports > .card > p.subtitle');
+  if (reportTopSubtitle) reportTopSubtitle.textContent = t.reportsSubtitle;
+  const reportStats = Array.from(document.querySelectorAll('#page-reports .report-snap span'));
+  if (reportStats[0]) reportStats[0].textContent = isAr ? 'مفتوحة TICKETS' : 'Open tickets';
+  if (reportStats[1]) reportStats[1].textContent = t.emergency;
+  if (reportStats[2]) reportStats[2].textContent = t.escalated;
+  if (reportStats[3]) reportStats[3].textContent = t.delayed;
+  if (reportStats[4]) reportStats[4].textContent = t.returns;
+  const reportCreate = document.querySelector('#report-form .report-form-head h3');
+  if (reportCreate) reportCreate.textContent = t.createReport;
+  setLabelText(document.querySelector('label[for="report-type"]') ? 'label[for="report-type"]' : '#report-form label', t.reportType);
+  setSelectOptions('#report-type', { morning:t.morning, midday:t.midday, evening:t.endShift });
+  setText('#report-template-btn', t.useTemplate);
+  setText('#report-clear-form', t.clear);
+  setPlaceholder('#report-search', t.searchReports);
+
+  setText('#page-meetings .meetings-sidebar .ms-title', t.meetingsTitle);
+  setPlaceholder('#meeting-search', t.meetingSearch);
+  setTitleAttr('#meeting-search-clear', t.clearSearch);
+  const meetHeaders = Array.from(document.querySelectorAll('#page-meetings .meetings-sidebar-header.small'));
+  if (meetHeaders[0]) meetHeaders[0].textContent = t.createSection;
+  if (meetHeaders[1]) meetHeaders[1].textContent = t.upcomingMeetings;
+  setPlaceholder('#create-title', t.meetingTitle);
+  setPlaceholder('#create-link', t.meetingLink);
+  setPlaceholder('#create-id', t.meetingId);
+  setPlaceholder('#create-pass', t.meetingPass);
+  setText('#btn-new-pass', t.newCode);
+  setText('#create-meeting-btn', t.create);
+  setText('#meetings-empty', t.noMeetings);
+  const createHint = document.querySelector('#create-meeting-box .create-hint');
+  if (createHint) createHint.textContent = isAr ? 'الصق رابط الاجتماع. ينتهي الاجتماع بعد ساعة من وقت البدء. يمكن مراجعة الموظفين الغائبين.' : 'Paste the meeting link. The meeting expires 1 hour after the start time. Missing staff can be reviewed.';
+  setText('#page-meetings .meetings-main .chat-room-name', t.meetingLinkTitle);
+  setText('#page-meetings .meetings-main .chat-room-desc', t.meetingLinkSub);
+  setPlaceholder('#join-meeting-id', t.meetingId);
+  setPlaceholder('#join-meeting-pass', t.meetingPass);
+  setText('#join-meeting-btn', t.openLink);
+  const meetingNote = document.querySelector('#page-meetings .meeting-note');
+  if (meetingNote) meetingNote.textContent = t.meetingNote;
+
+  const navMap = { home:t.homeLabel, tasks:t.notesLabel, tickets:t.ticketsLabel, reports:t.reportsLabel, payroll:t.payrollLabel, messages:t.messagesLabel, meetings:t.meetingsLabel, settings:t.settingsLabel };
+  document.querySelectorAll('.nav-link[data-page]').forEach((btn) => {
+    const page = btn.dataset.page;
+    if (!page || !navMap[page]) return;
+    const badge = btn.querySelector('#nav-messages-badge');
+    Array.from(btn.childNodes).forEach((n) => { if (n.nodeType === Node.TEXT_NODE) n.remove(); });
+    btn.prepend(document.createTextNode(navMap[page]));
+    if (badge && !btn.contains(badge)) btn.appendChild(badge);
+  });
+  setText('#logout-btn', t.logout);
+}
+
+
+/* ------------------------------------------------------------------
+   PHASE 21 — stronger language polish after dynamic page renders
+   This avoids mixed Arabic/English labels when switching language/pages.
+------------------------------------------------------------------- */
+function phase21Set(selector, value) {
+  const el = document.querySelector(selector);
+  if (el && value != null) el.textContent = value;
+}
+function phase21All(selector, values) {
+  const nodes = Array.from(document.querySelectorAll(selector));
+  nodes.forEach((el, i) => { if (values[i] != null) el.textContent = values[i]; });
+}
+function phase21Ph(selector, value) {
+  const el = document.querySelector(selector);
+  if (el && value != null) el.setAttribute('placeholder', value);
+}
+function phase21Opt(selector, labels) {
+  const el = document.querySelector(selector);
+  if (!el) return;
+  Array.from(el.options || []).forEach((o) => { if (Object.prototype.hasOwnProperty.call(labels, o.value)) o.textContent = labels[o.value]; });
+}
+function phase21ReplaceTextNodes(root, pairs) {
+  if (!root) return;
+  const skip = new Set(['SCRIPT','STYLE','TEXTAREA','INPUT','SELECT','OPTION']);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const p = node.parentElement;
+      if (!p || skip.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+      const txt = node.nodeValue || '';
+      if (!txt.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    let txt = node.nodeValue;
+    pairs.forEach(([a,b]) => { txt = txt.split(a).join(b); });
+    node.nodeValue = txt;
+  });
+}
+function applyPhase21LanguagePolish(lang = getLanguage()) {
+  const isAr = lang === 'ar';
+  document.body.dataset.language = isAr ? 'ar' : 'en';
+  document.documentElement.dir = isAr ? 'rtl' : 'ltr';
+  document.documentElement.lang = isAr ? 'ar' : 'en';
+
+  if (!isAr) {
+    phase21ReplaceTextNodes(document.getElementById('app') || document.body, [
+      ['مرحباً،', 'Welcome,'], ['مرحباً', 'Welcome'], ['الحالة الحالية:', 'Current status:'], ['تغيير الحالة:', 'Change status:'],
+      ['بدء الدوام', 'Clock in'], ['بدء الاستراحة', 'Start break'], ['إنهاء الدوام', 'Clock out'], ['متابعة حالة', 'Handling'],
+      ['نظرة عامة على الفريق', 'Team Overview'], ['المشرف يرى الموظفين التابعين له، والمدير/الأدمن يرى الفريق بالكامل.', 'Supervisor sees assigned agents. Manager/Admin sees the full team.'],
+      ['الموظف', 'Agent'], ['الدور', 'Role'], ['الحالة', 'Status'], ['تشغيل', 'Operating'], ['استراحة', 'Break'], ['غير متاح', 'Unavailable'], ['آخر دخول', 'Last login'], ['الأجر المتوقع', 'Estimated pay'],
+      ['ملخص اليوم', "Today's Snapshot"], ['تذكيرات سريعة:', 'Quick reminders:'], ['المتواجدون الآن', 'Online now'], ['الساعة', 'Clock'], ['إلىday', 'Today'], ['اليوم', 'Today'], ['التاريخ المحلي', 'Local date'], ['دقيقة مستخدمة', 'minutes used'], ['ساعات العمل', 'Work hours'], ['المتبقي:', 'Remaining:'],
+      ['الإعدادات', 'Settings'], ['تحديث المعلومات الشخصية', 'Update personal info'], ['الاسم الكامل', 'Full Name'], ['الكود:', 'Code:'], ['الدور:', 'Role:'], ['لغة النظام', 'System language'], ['لون الواجهة', 'Interface colour'], ['الخلفية', 'Background'], ['رفع صورة خلفية (اختياري)', 'Upload background image (optional)'], ['حذف الخلفية المرفوعة', 'Remove uploaded background'], ['تاريخ الميلاد', 'Birthday'], ['الملاحظات', 'Notes'], ['اكتب أي ملاحظة أو مشكلة...', 'Write any note or issue...'],
+      ['تذاكر الدعم', 'Support tickets'], ['الطوارئ', 'Emergencies'], ['مشاكل الطلبات', 'order issues'], ['الإرجاع', 'returns'], ['ملاحظات داخلية', 'internal notes'], ['تحديث', 'Refresh'], ['تذكرة جديدة', 'New ticket'], ['مفتوحة', 'Open'], ['طارئ', 'Emergency'], ['مصعّدة', 'Escalated'], ['محلولة اليوم', 'Resolved today'], ['إنشاء التذكرة', 'Create ticket'], ['رقم الطلب فقط مطلوب، والباقي اختياري.', 'Only the order number is required. Everything else is optional.'], ['ملء تلقائي من رقم الطلب', 'Autofill from order number'], ['كل الحالات', 'All statuses'], ['كل الأولويات', 'All priorities'], ['حفظ التعديلات', 'Save changes'], ['تصعيد', 'Escalate'],
+      ['التقارير اليومية', 'Daily reports'], ['إنشاء تقرير', 'Create report'], ['نوع التقرير', 'Report type'], ['تقرير صباحي', 'Morning report'], ['تقرير منتصف اليوم', 'Midday report'], ['تقرير نهاية الدوام', 'End of shift report'], ['استخدام القالب', 'Use template'], ['مسح', 'Clear'], ['التذاكر المحلولة', 'Solved tickets'], ['الشحنات المتأخرة', 'Delayed shipments'], ['مؤجل للغد', 'Pending tomorrow'], ['عملاء غاضبون أو حالات حساسة', 'Angry customers or sensitive cases'], ['المهام المطلوبة', 'Required actions'], ['ملاحظات عامة', 'General notes'],
+      ['الاجتماعات', 'Meetings'], ['إنشاء', 'Create'], ['الاجتماعات القادمة', 'Upcoming meetings'], ['لا توجد اجتماعات قادمة', 'No upcoming meetings'], ['رابط الاجتماع', 'Meeting link'], ['رقم الاجتماع', 'Meeting ID'], ['كود الدخول', 'Passcode'], ['فتح الرابط', 'Open link'], ['كود جديد', 'New code'], ['حذف اجتماعي', 'Delete my meeting'], ['إظهار كلمة المرور', 'Show password'], ['إخفاء كلمة المرور', 'Hide password'], ['نسخ كلمة المرور', 'Copy Password'], ['نسخ رقم الاجتماع', 'Copy ID'], ['مشاركة', 'Share'], ['القائمة', 'Menu'], ['الرئيسية', 'Home'], ['التذاكر', 'Tickets'], ['التقارير', 'Reports'], ['الرواتب', 'Payroll'], ['الرسائل', 'Messages'], ['تسجيل الخروج', 'Logout']
+    ]);
+  }
+
+  // Core controls and placeholders after broad text cleanup.
+  phase21Set('#logout-btn', isAr ? 'تسجيل الخروج' : 'Logout');
+  phase21Set('#ticket-refresh-btn', isAr ? 'تحديث' : 'Refresh');
+  phase21Set('#ticket-new-toggle', isAr ? '+ تذكرة جديدة' : '+ New ticket');
+  phase21Ph('#set-notes', isAr ? 'اكتب أي ملاحظة أو مشكلة...' : 'Write any note or issue...');
+  phase21Ph('#ticket-search', isAr ? 'بحث برقم الطلب أو العميل أو الملاحظات…' : 'Search by order number, customer, or notes…');
+  phase21Ph('#report-search', isAr ? 'بحث في التقارير...' : 'Search reports...');
+  phase21Ph('#meeting-search', isAr ? 'البحث برقم الاجتماع / العنوان / المضيف…' : 'Search by meeting ID / title / host…');
+  phase21Ph('#notes-search', isAr ? 'البحث في الملاحظات...' : 'Search notes...');
+  phase21Ph('#note-title', isAr ? 'عنوان الملاحظة' : 'Note title');
+  phase21Ph('#note-body', isAr ? 'ابدأ الكتابة...' : 'Start typing...');
+  phase21Ph('#create-title', isAr ? 'العنوان (مثلاً: اجتماع يومي)' : 'Title (e.g. Daily meeting)');
+  phase21Ph('#create-link', isAr ? 'ضع رابط Google Meet / Zoom / Teams' : 'Paste a Google Meet / Zoom / Teams link');
+  phase21Ph('#join-meeting-id', isAr ? 'رقم الاجتماع' : 'Meeting ID');
+  phase21Ph('#join-meeting-pass', isAr ? 'كود الدخول' : 'Passcode');
+
+  phase21Opt('#status-select', isAr
+    ? { in_operation:'قيد التشغيل', break:'استراحة', handling:'متابعة حالة', meeting:'اجتماع', unavailable:'غير متاح' }
+    : { in_operation:'Operating', break:'Break', handling:'Handling', meeting:'Meeting', unavailable:'Unavailable' }
+  );
+  phase21Opt('#ticket-filter-status', isAr
+    ? { '':'كل الحالات', open:'مفتوحة', waiting_customer:'بانتظار العميل', waiting_courier:'بانتظار الشحن', waiting_supplier:'بانتظار المورد', escalated:'مصعّدة', resolved:'محلولة', closed:'مغلقة' }
+    : { '':'All statuses', open:'Open', waiting_customer:'Waiting customer', waiting_courier:'Waiting courier', waiting_supplier:'Waiting supplier', escalated:'Escalated', resolved:'Resolved', closed:'Closed' }
+  );
+  phase21Opt('#ticket-filter-priority', isAr
+    ? { '':'كل الأولويات', emergency:'طارئ', high:'عالي', medium:'متوسط', normal:'عادي' }
+    : { '':'All priorities', emergency:'Emergency', high:'High', medium:'Medium', normal:'Normal' }
+  );
+  phase21Opt('#report-type', isAr
+    ? { morning:'تقرير صباحي', midday:'تقرير منتصف اليوم', evening:'تقرير نهاية الدوام' }
+    : { morning:'Morning report', midday:'Midday report', evening:'End of shift report' }
+  );
+
+  phase21All('#page-home .sup-table th', isAr
+    ? ['الموظف','CCMS','الدور','الحالة','تشغيل','استراحة','اجتماع','غير متاح','آخر دخول','الأجر المتوقع']
+    : ['Agent','CCMS','Role','Status','Operating','Break','Meeting','Unavailable','Last login','Estimated pay']
+  );
+  const mainNav = document.getElementById('main-nav');
+  if (mainNav) mainNav.dataset.menuTitle = isAr ? 'القائمة' : 'Menu';
+}
+
+try {
+  window.addEventListener('telesyriana:language-changed', (e) => {
+    const lang = e?.detail?.language || getLanguage();
+    setTimeout(() => applyPhase21LanguagePolish(lang), 0);
+    setTimeout(() => applyPhase21LanguagePolish(lang), 180);
+  });
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 120);
+    setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 500);
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target?.closest?.('.nav-link,[data-page],#set-language')) {
+      setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 120);
+    }
+  });
+} catch {}

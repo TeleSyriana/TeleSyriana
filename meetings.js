@@ -541,27 +541,27 @@ if (window.__TS_MEETINGS_INIT__) {
     const btnShow = document.createElement("button");
     btnShow.type = "button";
     btnShow.className = "btn-secondary";
-    btnShow.textContent = "👁 Show password";
+    btnShow.textContent = mt("👁 إظهار كلمة المرور", "👁 Show password");
 
     const btnCopyId = document.createElement("button");
     btnCopyId.type = "button";
     btnCopyId.className = "btn-secondary";
-    btnCopyId.textContent = "📋 Copy ID";
+    btnCopyId.textContent = mt("📋 نسخ رقم الاجتماع", "📋 Copy ID");
 
     const btnCopyPass = document.createElement("button");
     btnCopyPass.type = "button";
     btnCopyPass.className = "btn-secondary";
-    btnCopyPass.textContent = "📋 Copy Password";
+    btnCopyPass.textContent = mt("📋 نسخ كلمة المرور", "📋 Copy Password");
 
     const btnShare = document.createElement("button");
     btnShare.type = "button";
     btnShare.className = "btn-secondary";
-    btnShare.textContent = "📤 Share";
+    btnShare.textContent = mt("📤 مشاركة", "📤 Share");
 
     const btnDeleteMine = document.createElement("button");
     btnDeleteMine.type = "button";
     btnDeleteMine.className = "btn-secondary danger";
-    btnDeleteMine.textContent = "🗑 Delete my meeting";
+    btnDeleteMine.textContent = mt("🗑 حذف اجتماعي", "🗑 Delete my meeting");
 
     tools.appendChild(btnShow);
     tools.appendChild(btnCopyId);
@@ -575,7 +575,7 @@ if (window.__TS_MEETINGS_INIT__) {
       if (!elCreatePass) return;
       const isPwd = elCreatePass.type === "password";
       elCreatePass.type = isPwd ? "text" : "password";
-      btnShow.textContent = isPwd ? "🙈 Hide password" : "👁 Show password";
+      btnShow.textContent = isPwd ? mt("🙈 إخفاء كلمة المرور", "🙈 Hide password") : mt("👁 إظهار كلمة المرور", "👁 Show password");
     });
 
     btnCopyId.addEventListener("click", async () => {
@@ -680,3 +680,5 @@ if (window.__TS_MEETINGS_INIT__) {
 
   document.addEventListener("DOMContentLoaded", initاجتماعs);
 }
+
+try { window.addEventListener("telesyriana:language-changed", () => { try { injectShareButtons(); } catch {} }); } catch {}

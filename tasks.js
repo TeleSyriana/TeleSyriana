@@ -25,6 +25,8 @@ let unsubNotes = null;
 let isHooked = false;
 let autosaveTimer = null;
 let isDirty = false;
+function noteLang(){ return ((document.body?.dataset?.language || document.documentElement.lang || "en") === "ar") ? "ar" : "en"; }
+function nt(ar, en){ return noteLang() === "ar" ? ar : en; }
 
 function el(id) { return document.getElementById(id); }
 function uid() { return `note_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`; }
@@ -45,7 +47,7 @@ function blankEditor() {
   if (el("note-body")) el("note-body").value = "";
   selectedId = null;
   isDirty = false;
-  setالحالة("جاهز");
+  setالحالة(nt("جاهز", "Ready"));
   renderNotesList();
 }
 
@@ -57,7 +59,7 @@ function selectNote(id) {
   if (el("note-title")) el("note-title").value = note.title || "";
   if (el("note-body")) el("note-body").value = note.body || "";
   isDirty = false;
-  setالحالة("تم الحفظ");
+  setالحالة(nt("تم الحفظ", "Saved"));
   renderNotesList();
 }
 
@@ -70,7 +72,7 @@ function renderNotesList() {
     return `${n.title || ""} ${n.body || ""}`.toLowerCase().includes(q);
   });
   if (!visible.length) {
-    list.innerHTML = `<div class="notes-empty">No notes yet.</div>`;
+    list.innerHTML = `<div class="notes-empty">${nt("لا توجد ملاحظات بعد.", "No notes yet.")}</div>`;
     return;
   }
   list.innerHTML = visible.map((n) => {
@@ -86,13 +88,13 @@ function renderNotesList() {
 }
 
 async function saveCurrentNote() {
-  if (!currentUser) return setالحالة("Login required", true);
+  if (!currentUser) return setالحالة(nt("يلزم تسجيل الدخول", "Login required"), true);
   const title = (el("note-title")?.value || "").trim() || "Untitled";
   const body = el("note-body")?.value || "";
   if (!selectedId) selectedId = uid();
   const ref = doc(collection(db, NOTES_COL), selectedId);
   const exists = notes.some((n) => n.id === selectedId);
-  setالحالة("جاري الحفظ...");
+  setالحالة(nt("جاري الحفظ...", "Saving..."));
   try {
     await setDoc(ref, {
       userId: currentUser.id,
@@ -102,7 +104,7 @@ async function saveCurrentNote() {
       ...(exists ? {} : { createdAt: serverTimestamp() }),
     }, { merge: true });
     isDirty = false;
-    setالحالة("تم الحفظ");
+    setالحالة(nt("تم الحفظ", "Saved"));
   } catch (err) {
     console.error("note save failed", err);
     setالحالة("Save failed — check Firebase rules/internet", true);
@@ -111,7 +113,7 @@ async function saveCurrentNote() {
 
 function scheduleSave() {
   isDirty = true;
-  setالحالة("يكتب...");
+  setالحالة(nt("يكتب...", "Typing..."));
   if (autosaveTimer) clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(saveCurrentNote, 900);
 }
@@ -122,7 +124,7 @@ async function deleteCurrentNote() {
   try {
     await deleteDoc(doc(db, NOTES_COL, selectedId));
     blankEditor();
-    setالحالة("تم الحذف");
+    setالحالة(nt("تم الحذف", "Deleted"));
   } catch (err) {
     console.error("delete note failed", err);
     setالحالة("Delete failed", true);
@@ -150,7 +152,7 @@ function newNote() {
   if (el("note-title")) el("note-title").value = "";
   if (el("note-body")) el("note-body").value = "";
   isDirty = false;
-  setالحالة("ملاحظة جديدة");
+  setالحالة(nt("ملاحظة جديدة", "New note"));
   renderNotesList();
   el("note-title")?.focus();
 }
