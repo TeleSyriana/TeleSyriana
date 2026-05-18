@@ -15,6 +15,7 @@
       <nav id="main-nav" class="main-nav hidden">
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
+        <button class="nav-link" data-page="tickets">Tickets</button>
 
         <!-- ✅ UPDATED: Messages nav badge holder -->
         <button class="nav-link" data-page="messages" id="nav-messages">
@@ -334,6 +335,204 @@
             </form>
           </div>
         </div>
+      </section>
+
+
+
+      <!-- TICKETS PAGE -->
+      <section id="page-tickets" class="page-section hidden">
+        <section class="card tickets-card">
+          <div class="tickets-top">
+            <div>
+              <h2 style="margin:0">Support Tickets</h2>
+              <p class="subtitle" style="margin:6px 0 0">Emergency queue • order issues • returns • internal notes</p>
+            </div>
+            <div class="tickets-actions">
+              <button id="ticket-refresh-btn" class="btn-secondary" type="button">Refresh</button>
+              <button id="ticket-new-toggle" class="btn-primary" type="button" style="width:auto;padding:10px 16px">+ New Ticket</button>
+            </div>
+          </div>
+
+          <div id="ticket-alert" class="alert hidden"></div>
+
+          <div class="ticket-stats-grid">
+            <div class="ticket-stat"><span>Open</span><strong id="ticket-stat-open">0</strong></div>
+            <div class="ticket-stat emergency"><span>Emergency</span><strong id="ticket-stat-emergency">0</strong></div>
+            <div class="ticket-stat"><span>Escalated</span><strong id="ticket-stat-escalated">0</strong></div>
+            <div class="ticket-stat"><span>Resolved today</span><strong id="ticket-stat-resolved">0</strong></div>
+          </div>
+
+          <form id="ticket-form" class="ticket-form hidden">
+            <div class="ticket-form-head">
+              <h3>Create Ticket</h3>
+              <span class="ticket-form-note">Only order number is required. Fill the rest if available.</span>
+            </div>
+
+            <div class="ticket-form-grid">
+              <label>
+                Order number #
+                <input id="ticket-order" type="text" placeholder="e.g. 2515" required />
+              </label>
+
+              <label>
+                Category
+                <select id="ticket-type">
+                  <option value="address_change">Address Change</option>
+                  <option value="product_not_arrived">Product Not Arrived</option>
+                  <option value="item_not_genuine">Item Not Genuine / Fake Claim</option>
+                  <option value="return">Return</option>
+                  <option value="exchange">Exchange</option>
+                  <option value="angry_customer">Angry Customer</option>
+                  <option value="refund_request">Refund Request</option>
+                  <option value="chargeback_risk">Chargeback Risk</option>
+                  <option value="general_question">General Question</option>
+                </select>
+              </label>
+
+              <label>
+                Priority
+                <select id="ticket-priority">
+                  <option value="emergency">🔴 Emergency</option>
+                  <option value="high">🟠 High</option>
+                  <option value="medium">🟡 Medium</option>
+                  <option value="normal">🟢 Normal</option>
+                </select>
+              </label>
+
+              <label>
+                Assign to
+                <select id="ticket-assigned"></select>
+              </label>
+
+              <label>
+                Customer name
+                <input id="ticket-customer" type="text" placeholder="Optional" />
+              </label>
+
+              <label>
+                Customer email
+                <input id="ticket-email" type="email" placeholder="Optional" />
+              </label>
+            </div>
+
+            <label>
+              Internal notes
+              <textarea id="ticket-notes" rows="3" placeholder="What happened? What do we need to do next?"></textarea>
+            </label>
+
+            <div class="ticket-form-footer">
+              <button type="button" id="ticket-autofill-btn" class="btn-secondary">Autofill from order #</button>
+              <button type="submit" class="btn-primary" style="width:auto">Create Ticket</button>
+            </div>
+          </form>
+
+          <div class="ticket-filters">
+            <input id="ticket-search" type="text" placeholder="Search order, customer, notes…" />
+            <select id="ticket-filter-status">
+              <option value="all">All statuses</option>
+              <option value="open">Open</option>
+              <option value="waiting_customer">Waiting Customer</option>
+              <option value="waiting_courier">Waiting Courier</option>
+              <option value="waiting_supplier">Waiting Supplier</option>
+              <option value="escalated">Escalated</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
+            <select id="ticket-filter-priority">
+              <option value="all">All priorities</option>
+              <option value="emergency">Emergency</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="normal">Normal</option>
+            </select>
+            <select id="ticket-filter-owner">
+              <option value="all">All owners</option>
+              <option value="mine">My tickets</option>
+              <option value="unassigned">Unassigned</option>
+            </select>
+          </div>
+
+          <div class="tickets-layout">
+            <aside class="tickets-list-panel">
+              <div class="tickets-list-head">Ticket Queue</div>
+              <div id="tickets-list" class="tickets-list"></div>
+              <div id="tickets-empty" class="ms-empty hidden">No tickets found</div>
+            </aside>
+
+            <section class="ticket-detail-panel">
+              <div id="ticket-detail-empty" class="ticket-detail-empty">
+                Select a ticket to view details.
+              </div>
+
+              <div id="ticket-detail" class="hidden">
+                <div class="ticket-detail-head">
+                  <div>
+                    <div id="ticket-detail-title" class="ticket-detail-title">Ticket</div>
+                    <div id="ticket-detail-sub" class="ticket-detail-sub">—</div>
+                  </div>
+                  <span id="ticket-detail-priority" class="ticket-priority-pill">Normal</span>
+                </div>
+
+                <div class="ticket-detail-grid">
+                  <label>
+                    Status
+                    <select id="ticket-detail-status">
+                      <option value="open">Open</option>
+                      <option value="waiting_customer">Waiting Customer</option>
+                      <option value="waiting_courier">Waiting Courier</option>
+                      <option value="waiting_supplier">Waiting Supplier</option>
+                      <option value="escalated">Escalated</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Assign to
+                    <select id="ticket-detail-assigned"></select>
+                  </label>
+
+                  <label>
+                    Priority
+                    <select id="ticket-detail-priority-select">
+                      <option value="emergency">Emergency</option>
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="normal">Normal</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Customer mood
+                    <select id="ticket-detail-mood">
+                      <option value="calm">Calm</option>
+                      <option value="worried">Worried</option>
+                      <option value="angry">Angry</option>
+                      <option value="chargeback_risk">Chargeback risk</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="ticket-info-box" id="ticket-info-box"></div>
+
+                <label>
+                  Internal notes / handling log
+                  <textarea id="ticket-detail-notes" rows="6"></textarea>
+                </label>
+
+                <label>
+                  Resolution
+                  <textarea id="ticket-detail-resolution" rows="3" placeholder="How was this resolved?"></textarea>
+                </label>
+
+                <div class="ticket-detail-actions">
+                  <button id="ticket-escalate-btn" class="btn-secondary danger" type="button">Escalate</button>
+                  <button id="ticket-save-btn" class="btn-primary" type="button" style="width:auto">Save Changes</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
       </section>
 
       <!-- MESSAGES PAGE -->
@@ -711,6 +910,7 @@
   <!-- scripts -->
   <script type="module" src="app.js"></script>
   <script type="module" src="tasks.js"></script>
+  <script type="module" src="tickets.js"></script>
   <script type="module" src="messages.js"></script>
   <script type="module" src="groups.js"></script>
   <script type="module" src="meetings.js"></script>
