@@ -3318,3 +3318,276 @@ body.ticket-modal-open::before{ display:none !important; content:none !important
   #ticket-form.ticket-form{ border-radius:20px !important; padding:14px !important; }
   .ticket-form-head{ align-items:flex-start; }
 }
+
+/* =========================
+   PHASE 17 — Global Glass UI + Auto Contrast
+   Make every major panel/header/menu translucent with blur.
+========================= */
+:root{
+  --glass-blur:14px;
+  --glass-shadow:0 18px 40px rgba(0,0,0,.08);
+  --glass-border:rgba(255,255,255,.34);
+  --glass-surface:rgba(255,255,255,.54);
+  --glass-surface-strong:rgba(255,255,255,.68);
+  --glass-surface-soft:rgba(255,255,255,.34);
+  --glass-field:rgba(255,255,255,.82);
+  --glass-text:#172033;
+  --glass-muted:rgba(23,32,51,.68);
+}
+body[data-bg-tone="dark"]{
+  --glass-border:rgba(255,255,255,.18);
+  --glass-surface:rgba(255,255,255,.12);
+  --glass-surface-strong:rgba(255,255,255,.20);
+  --glass-surface-soft:rgba(255,255,255,.10);
+  --glass-field:rgba(255,255,255,.88);
+  --glass-text:#f8fbff;
+  --glass-muted:rgba(248,251,255,.72);
+  --text:#f8fbff;
+  --muted:rgba(248,251,255,.72);
+  --line:rgba(255,255,255,.16);
+}
+body[data-bg-tone="light"]{
+  --glass-border:rgba(255,255,255,.48);
+  --glass-surface:rgba(255,255,255,.58);
+  --glass-surface-strong:rgba(255,255,255,.76);
+  --glass-surface-soft:rgba(255,255,255,.36);
+  --glass-field:rgba(255,255,255,.88);
+  --glass-text:#14213d;
+  --glass-muted:rgba(20,33,61,.68);
+  --text:#14213d;
+  --muted:rgba(20,33,61,.68);
+  --line:rgba(15,23,42,.10);
+}
+
+body{ color:var(--glass-text); }
+
+.app-header,
+.mobile-drawer,
+.card,
+.login-card,
+.messages-card,
+.messages-sidebar,
+.messages-main,
+.chat-header,
+.chat-input-row,
+.meetings-shell,
+.meetings-sidebar,
+.meetings-main,
+.tickets-main,
+.tickets-list-panel,
+.ticket-detail-panel,
+.ticket-form,
+.report-card,
+.report-form-card,
+.report-history-card,
+.payroll-card,
+.payroll-snap,
+.payroll-table-wrapper,
+.online-now-card,
+.today-card,
+.snapshot-card,
+.calendar-card,
+.notes-app,
+.notes-sidebar,
+.notes-editor,
+.kanban-column,
+.settings-card,
+#page-settings .card,
+#page-home .card,
+#page-tickets .card,
+#page-reports .card,
+#page-payroll .card,
+#page-meetings .card,
+#page-tasks .card,
+#page-messages .card{
+  background:var(--glass-surface) !important;
+  border:1px solid var(--glass-border) !important;
+  box-shadow:var(--glass-shadow) !important;
+  backdrop-filter:blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter:blur(var(--glass-blur)) !important;
+  color:var(--glass-text) !important;
+}
+
+.app-header,
+.card,
+.login-card,
+.report-history-card,
+.report-form-card,
+.payroll-snap,
+.tickets-list-panel,
+.ticket-detail-panel,
+.notes-app{
+  background:linear-gradient(135deg,var(--glass-surface-strong),var(--glass-surface-soft)) !important;
+}
+
+.nav-link,
+.mobile-drawer .nav-link,
+.btn-secondary,
+.chat-room,
+.chat-dm,
+.chat-recent,
+.ticket-row,
+.ticket-stat,
+.report-card,
+.online-person,
+.calendar-day,
+.note-row,
+.meeting-item,
+.payroll-rate-row,
+.quick-status-row button,
+.status-box,
+.metric-box,
+.action-pill,
+.glass-chip{
+  background:var(--glass-surface-strong) !important;
+  border:1px solid var(--glass-border) !important;
+  box-shadow:0 10px 24px rgba(0,0,0,.06) !important;
+  backdrop-filter:blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter:blur(var(--glass-blur)) !important;
+  color:var(--glass-text) !important;
+}
+
+.nav-link.active,
+.chat-room.active,
+.chat-dm.active,
+.ticket-row.active,
+.note-row.active{
+  background:color-mix(in srgb, var(--brand) 24%, var(--glass-surface-strong)) !important;
+  color:var(--glass-text) !important;
+  border-color:color-mix(in srgb, var(--brand) 42%, var(--glass-border)) !important;
+  box-shadow:0 16px 34px color-mix(in srgb, var(--brand) 20%, transparent) !important;
+}
+
+.logo,
+.card h1,
+.card h2,
+.card h3,
+.page-title,
+.section-title,
+.chat-room-title,
+.ticket-title,
+.report-title,
+.meeting-title,
+.note-title,
+.nav-link,
+.mobile-drawer-title,
+.subtitle,
+.tagline,
+small,
+.hint,
+.muted,
+.ticket-meta,
+.chat-room-sub,
+.report-meta,
+.meeting-meta{
+  color:var(--glass-text) !important;
+}
+.subtitle,
+.tagline,
+small,
+.hint,
+.muted,
+.ticket-meta,
+.chat-room-sub,
+.report-meta,
+.meeting-meta,
+.team-subtext,
+.page-subtitle{
+  color:var(--glass-muted) !important;
+}
+.logo span{ color:var(--brand) !important; }
+
+input,
+textarea,
+select,
+.chat-input,
+.notes-title-input,
+.notes-body-input,
+.search-input,
+.ticket-search,
+.report-search{
+  background:var(--glass-field) !important;
+  color:#122033 !important;
+  border:1px solid rgba(255,255,255,.46) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4) !important;
+}
+input::placeholder,
+textarea::placeholder{ color:rgba(18,32,51,.55) !important; }
+
+/* Keep tables readable while staying glassy */
+table,
+.table,
+.team-table,
+.payroll-table{ color:var(--glass-text) !important; }
+th,td{ border-color:var(--line) !important; }
+thead,
+.table-head{ background:var(--glass-surface-strong) !important; }
+
+/* Mobile drawer: full glass sheet but never clipped by header. */
+.mobile-drawer{
+  background:linear-gradient(160deg,var(--glass-surface-strong),var(--glass-surface)) !important;
+  color:var(--glass-text) !important;
+}
+.mobile-drawer-backdrop{
+  background:rgba(2,6,23,.42) !important;
+  backdrop-filter:blur(8px) !important;
+  -webkit-backdrop-filter:blur(8px) !important;
+}
+
+/* Chat panes keep their structure but use glass surfaces. */
+#page-messages .messages-main,
+#page-messages .messages-sidebar,
+#page-messages .chat-header,
+#page-messages .chat-input-row{
+  background:var(--glass-surface) !important;
+  color:var(--glass-text) !important;
+}
+@media (max-width: 860px){
+  #page-messages .messages-main{
+    background:linear-gradient(135deg,var(--glass-surface-strong),var(--glass-surface)) !important;
+    backdrop-filter:blur(var(--glass-blur)) !important;
+    -webkit-backdrop-filter:blur(var(--glass-blur)) !important;
+  }
+}
+
+/* Tickets form stays inline but glassy. */
+#ticket-form.ticket-form,
+#ticket-form .ticket-form-head,
+#ticket-form .ticket-form-footer{
+  background:var(--glass-surface) !important;
+  color:var(--glass-text) !important;
+}
+.ticket-order-preview,
+.ticket-detail-card,
+.ticket-timeline,
+.ticket-note-card{
+  background:var(--glass-surface-soft) !important;
+  border:1px solid var(--glass-border) !important;
+  backdrop-filter:blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter:blur(var(--glass-blur)) !important;
+}
+
+/* Background presets can override the auto tone default. */
+body[data-bg="night"],
+body[data-theme="navy"]{ color-scheme:dark; }
+body[data-bg="grid"],
+body[data-bg="soft"]{ color-scheme:light; }
+
+/* Strong contrast fixes when background is very dark. */
+body[data-bg-tone="dark"] .btn-secondary,
+body[data-bg-tone="dark"] .nav-link,
+body[data-bg-tone="dark"] .chat-room,
+body[data-bg-tone="dark"] .chat-dm,
+body[data-bg-tone="dark"] .ticket-row,
+body[data-bg-tone="dark"] .report-card,
+body[data-bg-tone="dark"] .note-row{
+  text-shadow:0 1px 12px rgba(0,0,0,.12);
+}
+body[data-bg-tone="dark"] .app-header,
+body[data-bg-tone="dark"] .card,
+body[data-bg-tone="dark"] .messages-card,
+body[data-bg-tone="dark"] .tickets-list-panel,
+body[data-bg-tone="dark"] .ticket-detail-panel,
+body[data-bg-tone="dark"] .notes-app{
+  box-shadow:0 18px 44px rgba(0,0,0,.22) !important;
+}

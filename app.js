@@ -1196,21 +1196,96 @@ function showSettingsAlert(message, danger = false) {
   setTimeout(() => box.classList.add("hidden"), 3500);
 }
 
+function parseCssColorToRgb(value) {
+  const v = String(value || "").trim();
+  const rgb = v.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  const hex = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!hex) return null;
+  let h = hex[1];
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+
+function brightnessFromRgb(rgb) {
+  if (!rgb) return 255;
+  return (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
+}
+
+function setBackgroundTone(tone) {
+  document.body.dataset.bgTone = tone === "dark" ? "dark" : "light";
+}
+
+function detectToneFromThemeAndBackground() {
+  const bg = document.body.dataset.bg || "default";
+  const theme = document.body.dataset.theme || "female";
+  if (bg === "night" || theme === "navy") return "dark";
+  if (bg === "grid" || bg === "soft") return "light";
+
+  const styles = getComputedStyle(document.body);
+  const c1 = parseCssColorToRgb(styles.getPropertyValue("--bg1"));
+  const c2 = parseCssColorToRgb(styles.getPropertyValue("--bg2"));
+  const avg = ((brightnessFromRgb(c1) || 0) + (brightnessFromRgb(c2) || 0)) / 2;
+  return avg < 132 ? "dark" : "light";
+}
+
+function detectToneFromImage(imageData) {
+  if (!imageData) {
+    setBackgroundTone(detectToneFromThemeAndBackground());
+    return;
+  }
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      const size = 24;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+      let total = 0, count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3] / 255;
+        if (alpha < 0.2) continue;
+        total += brightnessFromRgb([data[i], data[i + 1], data[i + 2]]);
+        count += 1;
+      }
+      const avg = count ? total / count : 255;
+      setBackgroundTone(avg < 142 ? "dark" : "light");
+    } catch (err) {
+      console.warn("Background tone detection failed", err);
+      setBackgroundTone("dark");
+    }
+  };
+  img.onerror = () => setBackgroundTone(detectToneFromThemeAndBackground());
+  img.src = imageData;
+}
+
 function applyTheme(gender) {
   const g = String(gender || "").toLowerCase().trim();
   document.body.removeAttribute("data-theme");
   if (["male", "female", "orange", "green", "navy", "red"].includes(g)) {
     document.body.setAttribute("data-theme", g);
   }
+  setBackgroundTone(detectToneFromThemeAndBackground());
 }
 
 function applyBackground(background, imageData = "") {
   const bg = String(background || "default").toLowerCase().trim();
   document.body.dataset.bg = bg || "default";
   if (bg === "custom" && imageData) {
-    document.body.style.backgroundImage = `linear-gradient(rgba(0,0,0,.12), rgba(0,0,0,.12)), url(${imageData})`;
+    document.body.style.backgroundImage = `linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.18)), url(${imageData})`;
+    document.body.style.backgroundSize = "cover";
+    document.body.style.backgroundPosition = "center";
+    document.body.style.backgroundAttachment = "fixed";
+    detectToneFromImage(imageData);
   } else {
     document.body.style.backgroundImage = "";
+    document.body.style.backgroundSize = "";
+    document.body.style.backgroundPosition = "";
+    document.body.style.backgroundAttachment = "";
+    setBackgroundTone(detectToneFromThemeAndBackground());
   }
 }
 
