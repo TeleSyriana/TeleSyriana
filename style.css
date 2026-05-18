@@ -3811,7 +3811,7 @@ body[data-bg-tone="dark"] .notes-app{
     padding-top:86px !important;
   }
   body[data-bg-tone="light"] #main-nav.main-nav{ background:white !important; }
-  body[data-bg-tone="dark"] #main-nav.main-nav{ background:white !important; }
+  body[data-bg-tone="dark"] #main-nav.main-nav{ background:#334155 !important; }
   #main-nav.main-nav::before{ top:26px !important; font-size:20px !important; line-height:1 !important; }
   body[data-language="en"] #main-nav.main-nav::before,
   html[dir="ltr"] #main-nav.main-nav::before{ left:72px !important; }
