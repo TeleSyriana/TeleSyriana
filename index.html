@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8" />
-  <title>TeleSyriana – لوحة إدارة الدعم</title>
+  <title>TeleSyriana – Support OS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -1177,7 +1177,8 @@
             <label>
               رفع صورة خلفية (اختياري)
               <input type="file" id="set-bg-upload" accept="image/*" />
-              <small class="hint">للتجربة يتم الحفظ محلياً أولاً. المزامنة مع Firestore تعمل بعد إنشاء قاعدة البيانات.</small>
+              <button type="button" id="remove-bg-btn" class="btn-secondary bg-remove-btn">Remove uploaded background</button>
+              <small class="hint">Saved locally first for testing. Firestore sync works after the database is created.</small>
             </label>
 
             <label>

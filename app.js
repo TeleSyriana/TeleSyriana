@@ -1367,6 +1367,55 @@ function setLabelFor(inputId, labelText, hintText) {
   if (hint && hintText) hint.textContent = hintText;
 }
 
+function translateStaticUI(lang = "en") {
+  const isAr = lang === "ar";
+  const labels = isAr ? {
+    homeTitlePrefix: "مرحباً،",
+    currentStatus: "الحالة الحالية:",
+    changeStatus: "تغيير الحالة:",
+    clockIn: "بدء الدوام",
+    startBreak: "بدء الاستراحة",
+    handling: "متابعة حالة",
+    meeting: "اجتماع",
+    clockOut: "إنهاء الدوام",
+    teamOverview: "نظرة عامة على الفريق",
+    todaySnapshot: "ملخص اليوم",
+    onlineNow: "المتواجدون الآن",
+  } : {
+    homeTitlePrefix: "Welcome,",
+    currentStatus: "Current status:",
+    changeStatus: "Change status:",
+    clockIn: "Clock in",
+    startBreak: "Start break",
+    handling: "Handling",
+    meeting: "Meeting",
+    clockOut: "Clock out",
+    teamOverview: "Team Overview",
+    todaySnapshot: "Today’s Snapshot",
+    onlineNow: "Online now",
+  };
+
+  // Keep this function intentionally defensive: different phases have slightly
+  // different DOM structures, so missing elements must never block login.
+  const safeSet = (selector, value) => {
+    const el = document.querySelector(selector);
+    if (el && value) el.textContent = value;
+  };
+  try {
+    safeSet('#page-home .status-card label, #page-home label[for="status-select"]', labels.changeStatus);
+    safeSet('#clock-in-btn', labels.clockIn);
+    safeSet('#start-break-btn', labels.startBreak);
+    safeSet('#handling-btn', labels.handling);
+    safeSet('#meeting-btn', labels.meeting);
+    safeSet('#clock-out-btn', labels.clockOut);
+    safeSet('.team-overview-title', labels.teamOverview);
+    safeSet('.today-snapshot-title', labels.todaySnapshot);
+    safeSet('.online-now-title', labels.onlineNow);
+  } catch (err) {
+    console.warn('translateStaticUI skipped:', err);
+  }
+}
+
 function applyLanguage(language = "ar") {
   const lang = language === "en" ? "en" : "ar";
   const dict = UI_TEXT[lang];
