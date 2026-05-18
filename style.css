@@ -3151,7 +3151,7 @@ body[data-language="ar"] input[id*="tracking" i] { direction: ltr; text-align: l
   .app-header{ overflow:visible !important; }
   #mobile-menu-toggle.mobile-menu-toggle{
     position:fixed !important;
-    top:38px !important;
+    top:22px !important;
     width:58px !important;
     height:58px !important;
     border-radius:999px !important;
@@ -3868,7 +3868,7 @@ body[data-bg-tone="dark"] .notes-app{
     height:38px !important;
     min-width:38px !important;
     min-height:38px !important;
-    top:18px !important;
+    top:34px !important;
     border-radius:999px !important;
     padding:0 !important;
     display:flex !important;
