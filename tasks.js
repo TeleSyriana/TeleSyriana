@@ -33,7 +33,7 @@ function getUser() {
   try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch { return null; }
 }
 
-function setStatus(message, danger = false) {
+function setالحالة(message, danger = false) {
   const box = el("note-save-status");
   if (!box) return;
   box.textContent = message;
@@ -45,7 +45,7 @@ function blankEditor() {
   if (el("note-body")) el("note-body").value = "";
   selectedId = null;
   isDirty = false;
-  setStatus("Ready");
+  setالحالة("جاهز");
   renderNotesList();
 }
 
@@ -57,7 +57,7 @@ function selectNote(id) {
   if (el("note-title")) el("note-title").value = note.title || "";
   if (el("note-body")) el("note-body").value = note.body || "";
   isDirty = false;
-  setStatus("Saved");
+  setالحالة("تم الحفظ");
   renderNotesList();
 }
 
@@ -86,13 +86,13 @@ function renderNotesList() {
 }
 
 async function saveCurrentNote() {
-  if (!currentUser) return setStatus("Login required", true);
+  if (!currentUser) return setالحالة("Login required", true);
   const title = (el("note-title")?.value || "").trim() || "Untitled";
   const body = el("note-body")?.value || "";
   if (!selectedId) selectedId = uid();
   const ref = doc(collection(db, NOTES_COL), selectedId);
   const exists = notes.some((n) => n.id === selectedId);
-  setStatus("Saving...");
+  setالحالة("جاري الحفظ...");
   try {
     await setDoc(ref, {
       userId: currentUser.id,
@@ -102,16 +102,16 @@ async function saveCurrentNote() {
       ...(exists ? {} : { createdAt: serverTimestamp() }),
     }, { merge: true });
     isDirty = false;
-    setStatus("Saved");
+    setالحالة("تم الحفظ");
   } catch (err) {
     console.error("note save failed", err);
-    setStatus("Save failed — check Firebase rules/internet", true);
+    setالحالة("Save failed — check Firebase rules/internet", true);
   }
 }
 
 function scheduleSave() {
   isDirty = true;
-  setStatus("Typing...");
+  setالحالة("يكتب...");
   if (autosaveTimer) clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(saveCurrentNote, 900);
 }
@@ -122,10 +122,10 @@ async function deleteCurrentNote() {
   try {
     await deleteDoc(doc(db, NOTES_COL, selectedId));
     blankEditor();
-    setStatus("Deleted");
+    setالحالة("تم الحذف");
   } catch (err) {
     console.error("delete note failed", err);
-    setStatus("Delete failed", true);
+    setالحالة("Delete failed", true);
   }
 }
 
@@ -140,7 +140,7 @@ function subscribeNotes() {
     if (!selectedId && notes.length) selectNote(notes[0].id);
   }, (err) => {
     console.error("notes listener failed", err);
-    setStatus("Could not load notes. Check Firestore rules/indexes.", true);
+    setالحالة("Could not load notes. Check Firestore rules/indexes.", true);
   });
 }
 
@@ -150,7 +150,7 @@ function newNote() {
   if (el("note-title")) el("note-title").value = "";
   if (el("note-body")) el("note-body").value = "";
   isDirty = false;
-  setStatus("New note");
+  setالحالة("ملاحظة جديدة");
   renderNotesList();
   el("note-title")?.focus();
 }

@@ -46,27 +46,27 @@ const TYPE_LABELS = {
   item_not_genuine: "Item Not Genuine / Fake Claim",
   return: "Return",
   exchange: "Exchange",
-  angry_customer: "Angry Customer",
+  angry_customer: "Angry العميل",
   refund_request: "Refund Request",
   chargeback_risk: "Chargeback Risk",
   general_question: "General Question",
 };
 
 const STATUS_LABELS = {
-  open: "Open",
-  waiting_customer: "Waiting Customer",
-  waiting_courier: "Waiting Courier",
-  waiting_supplier: "Waiting Supplier",
-  escalated: "Escalated",
-  resolved: "Resolved",
-  closed: "Closed",
+  open: "مفتوحة",
+  waiting_customer: "بانتظار العميل",
+  waiting_courier: "بانتظار الشحن",
+  waiting_supplier: "بانتظار المورد",
+  escalated: "مصعّدة",
+  resolved: "محلولة",
+  closed: "مغلقة",
 };
 
 const PRIORITY_LABELS = {
-  emergency: "Emergency",
-  high: "High",
-  medium: "Medium",
-  normal: "Normal",
+  emergency: "طارئ",
+  high: "عالي",
+  medium: "متوسط",
+  normal: "عادي",
 };
 
 let currentUser = null;
@@ -134,17 +134,17 @@ function canViewTicket(ticket) {
   return ticket.assignedTo === currentUser.id || ticket.createdBy === currentUser.id;
 }
 
-function normaliseOrderNumber(v) {
+function normaliseالطلبNumber(v) {
   return String(v || "").trim().replace(/^#/, "");
 }
 
 function orderDocRef(orderNumber) {
-  const order = normaliseOrderNumber(orderNumber);
+  const order = normaliseالطلبNumber(orderNumber);
   if (!order) return null;
   return doc(db, ORDER_RECORDS_COL, order);
 }
 
-async function getCachedOrder(orderNumber) {
+async function getCachedالطلب(orderNumber) {
   const ref = orderDocRef(orderNumber);
   if (!ref) return null;
   const snap = await getDoc(ref);
@@ -165,7 +165,7 @@ function escapeHtml(value) {
 }
 
 
-function orderStatusLabel(v) {
+function orderالحالةLabel(v) {
   const labels = {
     unknown: "Unknown", unfulfilled: "Unfulfilled", processing: "Processing", fulfilled: "Fulfilled",
     cancelled: "Cancelled", refunded: "Refunded", label_created: "Label created", in_transit: "In transit",
@@ -174,7 +174,7 @@ function orderStatusLabel(v) {
   return labels[v] || v || "Unknown";
 }
 
-function renderOrderPreview(order) {
+function renderالطلبPreview(order) {
   const card = el("ticket-order-preview");
   const body = el("ticket-order-preview-body");
   if (!card || !body) return;
@@ -185,11 +185,11 @@ function renderOrderPreview(order) {
   }
   card.classList.remove("hidden");
   body.innerHTML = `
-    <div><strong>Customer:</strong> ${escapeHtml(order.customerName || "—")}</div>
+    <div><strong>العميل:</strong> ${escapeHtml(order.customerName || "—")}</div>
     <div><strong>Email:</strong> ${escapeHtml(order.email || "—")}</div>
     <div><strong>Items:</strong> ${escapeHtml(order.items || "—")}</div>
     <div><strong>Tracking:</strong> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</div>
-    <div><strong>Status:</strong> ${escapeHtml(orderStatusLabel(order.orderStatus))} • ${escapeHtml(orderStatusLabel(order.deliveryStatus))}</div>
+    <div><strong>الحالة:</strong> ${escapeHtml(orderالحالةLabel(order.orderالحالة))} • ${escapeHtml(orderالحالةLabel(order.deliveryالحالة))}</div>
   `;
 }
 
@@ -197,26 +197,26 @@ function orderNoteBlock(order) {
   if (!order) return "";
   return [
     `Shopify order cache loaded:`,
-    `Customer: ${order.customerName || "—"}`,
+    `العميل: ${order.customerName || "—"}`,
     `Email: ${order.email || "—"}`,
     `Phone: ${order.phone || "—"}`,
     `Items: ${order.items || "—"}`,
     `Total: ${order.totalPaid || "—"}`,
     `Tracking: ${order.trackingNumber || "—"} ${order.courier ? `(${order.courier})` : ""}`,
-    `Order status: ${orderStatusLabel(order.orderStatus)}`,
-    `Delivery status: ${orderStatusLabel(order.deliveryStatus)}`,
-    order.notes ? `Order notes: ${order.notes}` : ""
+    `الطلب status: ${orderالحالةLabel(order.orderالحالة)}`,
+    `Delivery status: ${orderالحالةLabel(order.deliveryالحالة)}`,
+    order.notes ? `الطلب notes: ${order.notes}` : ""
   ].filter(Boolean).join("\n");
 }
 
-function riskFromTypeAndOrder(type, order) {
+function riskFromTypeAndالطلب(type, order) {
   if (type === "chargeback_risk" || type === "item_not_genuine") return "chargeback";
-  if (order?.deliveryStatus === "lost" || order?.deliveryStatus === "delayed") return "high";
+  if (order?.deliveryالحالة === "lost" || order?.deliveryالحالة === "delayed") return "high";
   if (EMERGENCY_TYPES.has(type)) return "medium";
   return "normal";
 }
 
-function canManageOrderCache(u) {
+function canManageالطلبCache(u) {
   return roleLevel(u) >= ROLE_LEVELS.supervisor;
 }
 
@@ -232,11 +232,11 @@ function customerHistoryHtml(ticket) {
       return (email && xe === email) || (customer && xc === customer);
     })
     .slice(0, 5);
-  if (!matches.length) return `<div class="lookup-title">Customer history</div><div>No previous tickets found for this customer.</div>`;
+  if (!matches.length) return `<div class="lookup-title">العميل history</div><div>No previous tickets found for this customer.</div>`;
   return `
-    <div class="lookup-title">Customer history</div>
+    <div class="lookup-title">العميل history</div>
     ${matches.map((x) => `
-      <div class="history-line">#${escapeHtml(x.orderNumber || "—")} • ${escapeHtml(TYPE_LABELS[x.type] || x.type || "Ticket")} • ${escapeHtml(STATUS_LABELS[x.status] || x.status || "Open")}</div>
+      <div class="history-line">#${escapeHtml(x.orderNumber || "—")} • ${escapeHtml(TYPE_LABELS[x.type] || x.type || "Ticket")} • ${escapeHtml(STATUS_LABELS[x.status] || x.status || "مفتوحة")}</div>
     `).join("")}
   `;
 }
@@ -254,7 +254,7 @@ function addHistory(existing, event, by) {
 function ticketTimelineHtml(ticket) {
   const rows = Array.isArray(ticket.history) ? ticket.history : [];
   const base = [
-    { event: "Created", byName: staffName(ticket.createdBy), atMs: tsToMs(ticket.createdAt) },
+    { event: "تم الإنشاء", byName: staffName(ticket.createdBy), atMs: tsToMs(ticket.createdAt) },
     ...rows,
   ].filter((x) => x.event);
   if (!base.length) return "";
@@ -263,7 +263,7 @@ function ticketTimelineHtml(ticket) {
   `).join("");
 }
 
-function inferPriority(type) {
+function inferالأولوية(type) {
   return EMERGENCY_TYPES.has(type) ? "emergency" : "normal";
 }
 
@@ -282,7 +282,7 @@ function showTicketAlert(message, danger = false) {
   setTimeout(() => box.classList.add("hidden"), 3500);
 }
 
-function setTicketFormOpen(open) {
+function setTicketFormمفتوحة(open) {
   const form = el("ticket-form");
   if (!form) return;
   form.classList.toggle("hidden", !open);
@@ -378,12 +378,12 @@ function renderTicketList() {
     btn.innerHTML = `
       <div class="ticket-row-top">
         <strong>#${escapeHtml(t.orderNumber || "—")}</strong>
-        <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(PRIORITY_LABELS[t.priority] || "Normal")}</span>
+        <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(PRIORITY_LABELS[t.priority] || "عادي")}</span>
       </div>
       <div class="ticket-row-title">${escapeHtml(TYPE_LABELS[t.type] || t.type || "Ticket")}</div>
       <div class="ticket-row-meta">
         <span class="ticket-status-dot status-${t.status || "open"}"></span>
-        <span>${escapeHtml(STATUS_LABELS[t.status] || t.status || "Open")}</span>
+        <span>${escapeHtml(STATUS_LABELS[t.status] || t.status || "مفتوحة")}</span>
         <span>•</span>
         <span>${escapeHtml(staffName(t.assignedTo))}</span>
       </div>
@@ -417,11 +417,11 @@ function renderTicketDetail() {
   empty.classList.add("hidden");
 
   el("ticket-detail-title").textContent = `Ticket #${t.orderNumber || "—"}`;
-  el("ticket-detail-sub").textContent = `${TYPE_LABELS[t.type] || t.type} • Created ${fmtDate(t.createdAt)}`;
+  el("ticket-detail-sub").textContent = `${TYPE_LABELS[t.type] || t.type} • تم الإنشاء ${fmtDate(t.createdAt)}`;
 
   const pill = el("ticket-detail-priority");
   if (pill) {
-    pill.textContent = PRIORITY_LABELS[t.priority] || "Normal";
+    pill.textContent = PRIORITY_LABELS[t.priority] || "عادي";
     pill.className = `ticket-priority-pill ${t.priority || "normal"}`;
   }
 
@@ -437,13 +437,13 @@ function renderTicketDetail() {
   if (info) {
     const orderData = t.orderData || {};
     info.innerHTML = `
-      <div><strong>Customer:</strong> ${escapeHtml(t.customerName || orderData.customerName || "—")}</div>
+      <div><strong>العميل:</strong> ${escapeHtml(t.customerName || orderData.customerName || "—")}</div>
       <div><strong>Email:</strong> ${escapeHtml(t.email || orderData.email || "—")}</div>
       <div><strong>Items:</strong> ${escapeHtml(orderData.items || "—")}</div>
       <div><strong>Tracking:</strong> ${escapeHtml(orderData.trackingNumber || "—")} ${orderData.courier ? `(${escapeHtml(orderData.courier)})` : ""}</div>
-      <div><strong>Order status:</strong> ${escapeHtml(orderStatusLabel(orderData.orderStatus))}</div>
-      <div><strong>Delivery:</strong> ${escapeHtml(orderStatusLabel(orderData.deliveryStatus))}</div>
-      <div><strong>Created by:</strong> ${escapeHtml(staffName(t.createdBy))} (${escapeHtml(t.createdBy || "—")})</div>
+      <div><strong>الطلب status:</strong> ${escapeHtml(orderالحالةLabel(orderData.orderالحالة))}</div>
+      <div><strong>Delivery:</strong> ${escapeHtml(orderالحالةLabel(orderData.deliveryالحالة))}</div>
+      <div><strong>تم الإنشاء by:</strong> ${escapeHtml(staffName(t.createdBy))} (${escapeHtml(t.createdBy || "—")})</div>
       <div><strong>Updated:</strong> ${escapeHtml(fmtDate(t.updatedAt))}</div>
       <div><strong>Risk:</strong> ${escapeHtml(t.risk || "normal")}</div>
     `;
@@ -465,12 +465,12 @@ function hookUI() {
   if (isHooked) return;
   isHooked = true;
 
-  el("ticket-new-toggle")?.addEventListener("click", () => setTicketFormOpen(true));
+  el("ticket-new-toggle")?.addEventListener("click", () => setTicketFormمفتوحة(true));
 
-  el("ticket-form-close")?.addEventListener("click", () => setTicketFormOpen(false));
+  el("ticket-form-close")?.addEventListener("click", () => setTicketFormمفتوحة(false));
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !el("ticket-form")?.classList.contains("hidden")) setTicketFormOpen(false);
+    if (e.key === "Escape" && !el("ticket-form")?.classList.contains("hidden")) setTicketFormمفتوحة(false);
   });
 
   el("ticket-refresh-btn")?.addEventListener("click", () => {
@@ -486,42 +486,42 @@ function hookUI() {
   });
 
   el("ticket-autofill-btn")?.addEventListener("click", async () => {
-    const order = normaliseOrderNumber(el("ticket-order")?.value);
+    const order = normaliseالطلبNumber(el("ticket-order")?.value);
     if (!order) return showTicketAlert("Enter an order number first.", true);
-    const cached = await getCachedOrder(order);
+    const cached = await getCachedالطلب(order);
     if (cached) {
       if (el("ticket-customer")) el("ticket-customer").value = cached.customerName || "";
       if (el("ticket-email")) el("ticket-email").value = cached.email || "";
-      renderOrderPreview(cached);
+      renderالطلبPreview(cached);
       const existing = el("ticket-notes")?.value || "";
       if (el("ticket-notes") && !existing.includes("Shopify order cache loaded:")) {
         el("ticket-notes").value = `${existing ? existing + "\n\n" : ""}${orderNoteBlock(cached)}`;
       }
-      showTicketAlert("Order cache found and ticket fields were filled.");
+      showTicketAlert("الطلب cache found and ticket fields were filled.");
       return;
     }
-    renderOrderPreview(null);
+    renderالطلبPreview(null);
     if (!el("ticket-notes")?.value) {
-      el("ticket-notes").value = `Order #${order}. Please check Shopify for customer details, tracking status, delivery status, and latest customer message.`;
+      el("ticket-notes").value = `الطلب #${order}. Please check Shopify for customer details, tracking status, delivery status, and latest customer message.`;
     }
     showTicketAlert("No cached order found. Manual ticket template filled.", true);
   });
 
   el("ticket-order")?.addEventListener("blur", async () => {
-    const order = normaliseOrderNumber(el("ticket-order")?.value);
-    if (!order) return renderOrderPreview(null);
-    renderOrderPreview(await getCachedOrder(order));
+    const order = normaliseالطلبNumber(el("ticket-order")?.value);
+    if (!order) return renderالطلبPreview(null);
+    renderالطلبPreview(await getCachedالطلب(order));
   });
 
   el("order-admin-toggle")?.addEventListener("click", () => {
     el("order-cache-form")?.classList.toggle("hidden");
   });
 
-  el("order-cache-load")?.addEventListener("click", loadOrderCacheForm);
+  el("order-cache-load")?.addEventListener("click", loadالطلبCacheForm);
 
   el("order-cache-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await saveOrderCacheForm();
+    await saveالطلبCacheForm();
   });
 
   el("ticket-form")?.addEventListener("submit", async (e) => {
@@ -545,7 +545,7 @@ function hookUI() {
       updatedAt: serverTimestamp(),
       escalatedAt: serverTimestamp(),
       escalatedBy: currentUser?.id || "",
-      history: addHistory(allTickets.find((x) => x.id === selectedTicketId)?.history, "Escalated to manager", currentUser?.id || ""),
+      history: addHistory(allTickets.find((x) => x.id === selectedTicketId)?.history, "مصعّدة to manager", currentUser?.id || ""),
     });
     showTicketAlert("Ticket escalated to manager.");
   });
@@ -554,17 +554,17 @@ function hookUI() {
 async function createTicket() {
   if (!currentUser) return;
   const createBtn = document.querySelector('#ticket-form button[type="submit"]');
-  const oldCreateText = createBtn?.textContent || "Create Ticket";
-  if (createBtn) { createBtn.disabled = true; createBtn.textContent = "Creating..."; }
-  const orderNumber = normaliseOrderNumber(el("ticket-order")?.value);
-  if (!orderNumber) return showTicketAlert("Order number is required.", true);
+  const oldCreateText = createBtn?.textContent || "إنشاء التذكرة";
+  if (createBtn) { createBtn.disabled = true; createBtn.textContent = "جاري الإنشاء..."; }
+  const orderNumber = normaliseالطلبNumber(el("ticket-order")?.value);
+  if (!orderNumber) return showTicketAlert("الطلب number is required.", true);
 
   const type = el("ticket-type")?.value || "general_question";
-  const priority = el("ticket-priority")?.value || inferPriority(type);
+  const priority = el("ticket-priority")?.value || inferالأولوية(type);
   const assignedTo = canEditAll(currentUser)
     ? (el("ticket-assigned")?.value || "")
     : currentUser.id;
-  const cachedOrder = await getCachedOrder(orderNumber);
+  const cachedالطلب = await getCachedالطلب(orderNumber);
 
   const payload = {
     orderNumber,
@@ -574,39 +574,39 @@ async function createTicket() {
     assignedTo,
     createdBy: currentUser.id,
     createdByName: currentUser.name,
-    customerName: el("ticket-customer")?.value?.trim() || cachedOrder?.customerName || "",
-    email: el("ticket-email")?.value?.trim() || cachedOrder?.email || "",
-    notes: el("ticket-notes")?.value?.trim() || (cachedOrder ? orderNoteBlock(cachedOrder) : ""),
+    customerName: el("ticket-customer")?.value?.trim() || cachedالطلب?.customerName || "",
+    email: el("ticket-email")?.value?.trim() || cachedالطلب?.email || "",
+    notes: el("ticket-notes")?.value?.trim() || (cachedالطلب ? orderNoteBlock(cachedالطلب) : ""),
     resolution: "",
     customerMood: inferMood(type, priority),
-    risk: riskFromTypeAndOrder(type, cachedOrder),
-    source: cachedOrder ? "order_cache" : "manual",
-    orderData: cachedOrder ? {
-      customerName: cachedOrder.customerName || "",
-      email: cachedOrder.email || "",
-      phone: cachedOrder.phone || "",
-      items: cachedOrder.items || "",
-      totalPaid: cachedOrder.totalPaid || "",
-      orderDate: cachedOrder.orderDate || "",
-      courier: cachedOrder.courier || "",
-      trackingNumber: cachedOrder.trackingNumber || "",
-      orderStatus: cachedOrder.orderStatus || "unknown",
-      deliveryStatus: cachedOrder.deliveryStatus || "unknown",
-      shippingAddress: cachedOrder.shippingAddress || "",
+    risk: riskFromTypeAndالطلب(type, cachedالطلب),
+    source: cachedالطلب ? "order_cache" : "manual",
+    orderData: cachedالطلب ? {
+      customerName: cachedالطلب.customerName || "",
+      email: cachedالطلب.email || "",
+      phone: cachedالطلب.phone || "",
+      items: cachedالطلب.items || "",
+      totalPaid: cachedالطلب.totalPaid || "",
+      orderDate: cachedالطلب.orderDate || "",
+      courier: cachedالطلب.courier || "",
+      trackingNumber: cachedالطلب.trackingNumber || "",
+      orderالحالة: cachedالطلب.orderالحالة || "unknown",
+      deliveryالحالة: cachedالطلب.deliveryالحالة || "unknown",
+      shippingAddress: cachedالطلب.shippingAddress || "",
     } : {},
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    history: addHistory([], `Created ticket (${TYPE_LABELS[type] || type})`, currentUser.id),
+    history: addHistory([], `تم الإنشاء ticket (${TYPE_LABELS[type] || type})`, currentUser.id),
   };
 
   try {
     const created = await addDoc(collection(db, TICKETS_COL), payload);
     selectedTicketId = created.id;
     el("ticket-form")?.reset();
-    renderOrderPreview(null);
+    renderالطلبPreview(null);
     fillAssigneeSelect(el("ticket-assigned"), true);
-    setTicketFormOpen(false);
-    showTicketAlert("Ticket created successfully.");
+    setTicketFormمفتوحة(false);
+    showTicketAlert("تم إنشاء التذكرة بنجاح.");
   } catch (err) {
     console.error("createTicket failed", err);
     showTicketAlert(`Ticket could not be created: ${err?.code || err?.message || "check Firestore permissions/internet"}`, true);
@@ -615,10 +615,10 @@ async function createTicket() {
   }
 }
 
-async function loadOrderCacheForm() {
-  const order = normaliseOrderNumber(el("order-cache-number")?.value);
+async function loadالطلبCacheForm() {
+  const order = normaliseالطلبNumber(el("order-cache-number")?.value);
   if (!order) return showTicketAlert("Enter order number to load.", true);
-  const data = await getCachedOrder(order);
+  const data = await getCachedالطلب(order);
   if (!data) return showTicketAlert("No order cache found for this number.", true);
   el("order-cache-customer").value = data.customerName || "";
   el("order-cache-email").value = data.email || "";
@@ -627,18 +627,18 @@ async function loadOrderCacheForm() {
   el("order-cache-date").value = data.orderDate || "";
   el("order-cache-courier").value = data.courier || "";
   el("order-cache-tracking").value = data.trackingNumber || "";
-  el("order-cache-status").value = data.orderStatus || "unknown";
-  el("order-cache-delivery").value = data.deliveryStatus || "unknown";
+  el("order-cache-status").value = data.orderالحالة || "unknown";
+  el("order-cache-delivery").value = data.deliveryالحالة || "unknown";
   el("order-cache-items").value = data.items || "";
   el("order-cache-address").value = data.shippingAddress || "";
   el("order-cache-notes").value = data.notes || "";
-  showTicketAlert("Order cache loaded.");
+  showTicketAlert("الطلب cache loaded.");
 }
 
-async function saveOrderCacheForm() {
-  if (!canManageOrderCache(currentUser)) return showTicketAlert("Only supervisor, manager, or admin can save order cache.", true);
-  const orderNumber = normaliseOrderNumber(el("order-cache-number")?.value);
-  if (!orderNumber) return showTicketAlert("Order number is required.", true);
+async function saveالطلبCacheForm() {
+  if (!canManageالطلبCache(currentUser)) return showTicketAlert("Only supervisor, manager, or admin can save order cache.", true);
+  const orderNumber = normaliseالطلبNumber(el("order-cache-number")?.value);
+  if (!orderNumber) return showTicketAlert("الطلب number is required.", true);
   const payload = {
     orderNumber,
     customerName: cleanText(el("order-cache-customer")?.value),
@@ -648,28 +648,28 @@ async function saveOrderCacheForm() {
     orderDate: cleanText(el("order-cache-date")?.value),
     courier: cleanText(el("order-cache-courier")?.value),
     trackingNumber: cleanText(el("order-cache-tracking")?.value),
-    orderStatus: el("order-cache-status")?.value || "unknown",
-    deliveryStatus: el("order-cache-delivery")?.value || "unknown",
+    orderالحالة: el("order-cache-status")?.value || "unknown",
+    deliveryالحالة: el("order-cache-delivery")?.value || "unknown",
     items: cleanText(el("order-cache-items")?.value),
     shippingAddress: cleanText(el("order-cache-address")?.value),
     notes: cleanText(el("order-cache-notes")?.value),
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
-    history: addHistory(t.history, `Saved changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
+    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
     updatedByName: currentUser?.name || "",
   };
-  const existing = await getCachedOrder(orderNumber);
+  const existing = await getCachedالطلب(orderNumber);
   if (!existing) payload.createdAt = serverTimestamp();
   await setDoc(orderDocRef(orderNumber), payload, { merge: true });
-  showTicketAlert("Order cache saved. Agents can now autofill this order.");
+  showTicketAlert("الطلب cache saved. Agents can now autofill this order.");
 }
 
 async function saveSelectedTicket() {
   const t = allTickets.find((x) => x.id === selectedTicketId);
   if (!t) return showTicketAlert("Select a ticket first.", true);
   const saveBtn = el("ticket-save-btn");
-  const oldText = saveBtn?.textContent || "Save Changes";
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Saving..."; }
+  const oldText = saveBtn?.textContent || "حفظ التعديلات";
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "جاري الحفظ..."; }
 
   const status = el("ticket-detail-status")?.value || "open";
   const update = {
@@ -681,7 +681,7 @@ async function saveSelectedTicket() {
     resolution: el("ticket-detail-resolution")?.value || "",
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
-    history: addHistory(t.history, `Saved changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
+    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
   };
   if (status === "resolved" || status === "closed") {
     update.resolvedAt = serverTimestamp();
@@ -693,7 +693,7 @@ async function saveSelectedTicket() {
     showTicketAlert("Ticket updated and saved.");
   } catch (err) {
     console.error("saveSelectedTicket failed", err);
-    showTicketAlert(`Save failed: ${err?.code || err?.message || "check Firestore permissions/internet"}`, true);
+    showTicketAlert(`فشل الحفظ: ${err?.code || err?.message || "تحقق من صلاحيات Firestore أو الاتصال"}`, true);
   } finally {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = oldText; }
   }
@@ -719,7 +719,7 @@ function initTickets() {
   hookUI();
   fillAssigneeSelect(el("ticket-assigned"), true);
   fillAssigneeSelect(el("ticket-detail-assigned"), true);
-  el("order-admin-panel")?.classList.toggle("hidden", !canManageOrderCache(currentUser));
+  el("order-admin-panel")?.classList.toggle("hidden", !canManageالطلبCache(currentUser));
 
   if (!currentUser) {
     allTickets = [];

@@ -2921,3 +2921,195 @@ body[data-bg="custom"]{
     white-space:nowrap !important;
   }
 }
+
+/* ------------------------------------------------------------------
+   Phase 14 — Arabic RTL polish + mobile drawer + logout reliability
+------------------------------------------------------------------- */
+html[dir="rtl"], html[dir="rtl"] body {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="rtl"] body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Tahoma", "Arial", sans-serif;
+}
+
+html[dir="rtl"] .app-header,
+html[dir="rtl"] .main-nav,
+html[dir="rtl"] .dashboard-layout,
+html[dir="rtl"] .tickets-top,
+html[dir="rtl"] .ticket-workspace,
+html[dir="rtl"] .reports-layout,
+html[dir="rtl"] .messages-shell,
+html[dir="rtl"] .payroll-filters,
+html[dir="rtl"] .payroll-rate-grid,
+html[dir="rtl"] .settings-grid,
+html[dir="rtl"] .quick-status-row,
+html[dir="rtl"] .ticket-filter-row,
+html[dir="rtl"] .report-filters,
+html[dir="rtl"] .meeting-join-row,
+html[dir="rtl"] .create-row,
+html[dir="rtl"] .modal-actions {
+  direction: rtl;
+}
+
+html[dir="rtl"] .header-right {
+  margin-right: auto;
+  margin-left: 0;
+  text-align: left;
+}
+
+html[dir="rtl"] .logo,
+html[dir="rtl"] .tagline {
+  text-align: left;
+}
+
+html[dir="rtl"] input,
+html[dir="rtl"] textarea,
+html[dir="rtl"] select {
+  text-align: right;
+  direction: rtl;
+}
+
+html[dir="rtl"] input[type="email"],
+html[dir="rtl"] input[type="url"],
+html[dir="rtl"] input[type="password"],
+html[dir="rtl"] input[id*="ccms"],
+html[dir="rtl"] input[id*="order"],
+html[dir="rtl"] input[id*="tracking"],
+html[dir="rtl"] input[id*="meeting"],
+html[dir="rtl"] code {
+  direction: ltr;
+  text-align: left;
+}
+
+html[dir="rtl"] .nav-link,
+html[dir="rtl"] button,
+html[dir="rtl"] .btn-primary,
+html[dir="rtl"] .btn-secondary {
+  font-weight: 800;
+}
+
+html[dir="rtl"] table {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="rtl"] th,
+html[dir="rtl"] td {
+  text-align: right;
+}
+
+html[dir="rtl"] .modal-x {
+  left: 18px;
+  right: auto;
+}
+
+html[dir="rtl"] #toast-container {
+  right: auto !important;
+  left: 18px !important;
+}
+
+html[dir="rtl"] .floating-chat-toggle {
+  left: 28px;
+  right: auto;
+}
+
+html[dir="rtl"] .floating-chat-panel {
+  left: 28px;
+  right: auto;
+}
+
+html[dir="rtl"] .chat-back-btn {
+  direction: rtl;
+}
+
+html[dir="rtl"] .chat-message,
+html[dir="rtl"] .msg-bubble,
+html[dir="rtl"] .chat-line {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="rtl"] .chat-meta,
+html[dir="rtl"] .presence-text,
+html[dir="rtl"] .widget-sub,
+html[dir="rtl"] .subtitle,
+html[dir="rtl"] .hint {
+  direction: rtl;
+}
+
+/* Mobile drawer in Arabic: opens from the right and fills the screen height */
+@media (max-width: 760px) {
+  html[dir="rtl"] .app-header {
+    overflow: visible !important;
+    transform: none !important;
+  }
+
+  html[dir="rtl"] #main-nav.main-nav {
+    position: fixed !important;
+    inset: 0 auto 0 0 !important;
+    right: 0 !important;
+    left: auto !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: min(82vw, 360px) !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    padding: 28px 18px !important;
+    border-radius: 0 0 0 30px !important;
+    z-index: 99998 !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    transform: translateX(110%) !important;
+    transition: transform .24s ease;
+  }
+
+  html[dir="rtl"] body.menu-open #main-nav.main-nav {
+    transform: translateX(0) !important;
+  }
+
+  html[dir="rtl"] .main-nav .nav-link,
+  html[dir="rtl"] .main-nav #logout-btn {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: right;
+    min-height: 52px;
+    margin: 5px 0;
+  }
+
+  html[dir="rtl"] .mobile-menu-toggle {
+    right: 18px;
+    left: auto;
+    z-index: 100000 !important;
+  }
+
+  html[dir="rtl"] .mobile-menu-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    z-index: 99990 !important;
+  }
+
+  html[dir="rtl"] .header-right {
+    width: 100%;
+    text-align: center;
+    margin: 0;
+  }
+
+  html[dir="rtl"] .logo,
+  html[dir="rtl"] .tagline {
+    text-align: center;
+  }
+
+  html[dir="rtl"] .messages-shell,
+  html[dir="rtl"] .tickets-workspace,
+  html[dir="rtl"] .reports-layout,
+  html[dir="rtl"] .dashboard-layout {
+    grid-template-columns: 1fr !important;
+  }
+}

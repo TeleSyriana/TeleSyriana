@@ -188,9 +188,9 @@ function renderPayroll() {
   empty.classList.toggle("hidden", rows.length > 0);
 
   let totalWorked = 0;
-  let totalOperation = 0;
-  let totalBreak = 0;
-  let lateBreaks = 0;
+  let totalتشغيل = 0;
+  let totalاستراحة = 0;
+  let lateاستراحةs = 0;
   const payByCurrency = {};
 
   rows.forEach((row) => {
@@ -202,9 +202,9 @@ function renderPayroll() {
     const pay = (worked / 60) * rate.hourlyRate;
 
     totalWorked += worked;
-    totalOperation += op;
-    totalBreak += br;
-    if (br > BREAK_LIMIT_MIN) lateBreaks += 1;
+    totalتشغيل += op;
+    totalاستراحة += br;
+    if (br > BREAK_LIMIT_MIN) lateاستراحةs += 1;
     payByCurrency[rate.currency] = (payByCurrency[rate.currency] || 0) + pay;
 
     const breakNote = br > BREAK_LIMIT_MIN
@@ -231,9 +231,9 @@ function renderPayroll() {
   });
 
   if (el("payroll-sum-worked")) el("payroll-sum-worked").textContent = formatDuration(totalWorked);
-  if (el("payroll-sum-operation")) el("payroll-sum-operation").textContent = formatDuration(totalOperation);
-  if (el("payroll-sum-break")) el("payroll-sum-break").textContent = formatDuration(totalBreak);
-  if (el("payroll-sum-late")) el("payroll-sum-late").textContent = String(lateBreaks);
+  if (el("payroll-sum-operation")) el("payroll-sum-operation").textContent = formatDuration(totalتشغيل);
+  if (el("payroll-sum-break")) el("payroll-sum-break").textContent = formatDuration(totalاستراحة);
+  if (el("payroll-sum-late")) el("payroll-sum-late").textContent = String(lateاستراحةs);
   if (el("payroll-sum-pay")) {
     const parts = Object.entries(payByCurrency).map(([currency, amount]) => money(currency, amount));
     el("payroll-sum-pay").textContent = parts.length ? parts.join(" + ") : "—";

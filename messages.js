@@ -5,7 +5,7 @@ function tsCanUseSupervisorRoom(u) { return tsRoleLevel(u) >= TS_ROLE_LEVELS.sup
 // messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots
 // ✅ Recents (CLOUD, AFTER SEND ONLY) + Search by name/room/CCMS + Glass sidebar support
 // ✅ Groups (CLOUD) + Groups open via events (telesyriana:open-group / telesyriana:open-room)
-// ✅ Unread counters (true count + 99+) on each chat item + nav Messages badge
+// ✅ Unread counters (true count + 99+) on each chat item + nav الرسائل badge
 // ✅ Beep sound on new incoming messages (Sounds/Beep.mp3)
 // ✅ NO alert() on firestore snapshot errors (console only)
 
@@ -25,7 +25,7 @@ const {
 
 const USER_KEY = "telesyrianaUser";
 
-const MESSAGES_COL = "globalMessages";
+const MESSAGES_COL = "globalالرسائل";
 const AGENT_DAYS_COL = "agentDays";
 const GROUPS_COL = "groups";
 const PRESENCE_COL = "userPresence";
@@ -42,7 +42,7 @@ let activeChat = null;
 
 let unsubscribeMain = null;
 let unsubscribeFloat = null;
-let unsubscribeStatus = null;
+let unsubscribeالحالة = null;
 let unsubscribeGroups = null;
 let unsubscribeRecents = null;
 
@@ -112,8 +112,8 @@ const lastMsgTsByRoom = new Map();  // roomId -> ms
 const unreadUnsubs = new Map();     // roomId -> unsubscribe()
 const roomButtons = new Map();      // roomId -> Set(buttons)
 
-let navMessagesBtn = null;
-let navMessagesBadge = null;
+let navالرسائلBtn = null;
+let navالرسائلBadge = null;
 
 function lastSeenKey(roomId) {
   return `${LAST_SEEN_PREFIX}${String(roomId || "")}`;
@@ -144,18 +144,18 @@ function ensureNavBadge() {
   const btn = document.querySelector(`.nav-link[data-page="messages"]`);
   if (!btn) return;
 
-  navMessagesBtn = btn;
+  navالرسائلBtn = btn;
 
-  if (!navMessagesBtn.id) navMessagesBtn.id = "nav-messages";
-  if (navMessagesBtn.id !== "nav-messages") navMessagesBtn.id = "nav-messages";
+  if (!navالرسائلBtn.id) navالرسائلBtn.id = "nav-messages";
+  if (navالرسائلBtn.id !== "nav-messages") navالرسائلBtn.id = "nav-messages";
 
-  navMessagesBadge = document.getElementById("nav-messages-badge");
-  if (!navMessagesBadge) {
-    navMessagesBadge = document.createElement("span");
-    navMessagesBadge.id = "nav-messages-badge";
-    navMessagesBadge.className = "hidden";
-    navMessagesBadge.textContent = "0";
-    navMessagesBtn.appendChild(navMessagesBadge);
+  navالرسائلBadge = document.getElementById("nav-messages-badge");
+  if (!navالرسائلBadge) {
+    navالرسائلBadge = document.createElement("span");
+    navالرسائلBadge.id = "nav-messages-badge";
+    navالرسائلBadge.className = "hidden";
+    navالرسائلBadge.textContent = "0";
+    navالرسائلBtn.appendChild(navالرسائلBadge);
   }
 }
 
@@ -186,16 +186,16 @@ function setBadgeCountOnButton(btnEl, count) {
 
 function updateNavBadge() {
   ensureNavBadge();
-  if (!navMessagesBadge) return;
+  if (!navالرسائلBadge) return;
 
   let total = 0;
   unreadByRoom.forEach((v) => (total += Number(v || 0)));
 
   if (total > 0) {
-    navMessagesBadge.textContent = formatBadgeNumber(total);
-    navMessagesBadge.classList.remove("hidden");
+    navالرسائلBadge.textContent = formatBadgeNumber(total);
+    navالرسائلBadge.classList.remove("hidden");
   } else {
-    navMessagesBadge.classList.add("hidden");
+    navالرسائلBadge.classList.add("hidden");
   }
 }
 
@@ -475,8 +475,8 @@ function renderChunkToTop(listEl, items, showRole) {
 function setHeader(title, desc) {
   const roomNameEl = document.getElementById("chat-room-name");
   const roomDescEl = document.getElementById("chat-room-desc");
-  if (roomNameEl) roomNameEl.textContent = title || "Messages";
-  if (roomDescEl) roomDescEl.textContent = desc || "Start chatting…";
+  if (roomNameEl) roomNameEl.textContent = title || "الرسائل";
+  if (roomDescEl) roomDescEl.textContent = desc || "ابدأ المحادثة…";
 }
 
 function setEmpty(on) {
@@ -592,15 +592,15 @@ function subscribeMainToRoom(roomId) {
   );
 }
 
-// ---------------- Status dots ----------------
+// ---------------- الحالة dots ----------------
 
-function subscribeStatusDots() {
-  unsubscribeStatus?.();
-  unsubscribeStatus = null;
+function subscribeالحالةDots() {
+  unsubscribeالحالة?.();
+  unsubscribeالحالة = null;
 
   const qS = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
 
-  unsubscribeStatus = onSnapshot(
+  unsubscribeالحالة = onSnapshot(
     qS,
     (snap) => {
       document.querySelectorAll("[data-status-dot]").forEach((d) => {
@@ -624,7 +624,7 @@ function subscribeStatusDots() {
         if (sub) sub.textContent = d.status ? String(d.status).replaceAll("_", " ") : "unavailable";
       });
     },
-    (err) => console.error("Status snapshot error:", err)
+    (err) => console.error("الحالة snapshot error:", err)
   );
 }
 
@@ -800,7 +800,7 @@ function subscribeRecentsCloud() {
   );
 }
 
-async function bumpRecentAfterSendCloud() {
+async function bumpRecentAfterإرسالCloud() {
   if (!currentUser?.id || !activeChat?.roomId) return;
 
   const type = activeChat.type; // dm/room/group
@@ -842,7 +842,7 @@ async function bumpRecentAfterSendCloud() {
       { merge: true }
     );
   } catch (e) {
-    console.error("bumpRecentAfterSendCloud error:", e);
+    console.error("bumpRecentAfterإرسالCloud error:", e);
   }
 }
 
@@ -986,7 +986,7 @@ function hookSearch() {
 
 
 // ---------------- presence / last seen ----------------
-function presenceStatus(row) {
+function presenceالحالة(row) {
   const ms = Number(row?.lastSeenMs || 0);
   if (!ms) return "offline";
   const age = Date.now() - ms;
@@ -995,15 +995,15 @@ function presenceStatus(row) {
   return "offline";
 }
 function presenceText(row) {
-  const status = presenceStatus(row);
+  const status = presenceالحالة(row);
   if (status === "online") return `Live now • ${row?.page || "home"}`;
-  if (status === "away") return `Away • ${row?.page || "home"}`;
+  if (status === "away") return `بعيد • ${row?.page || "home"}`;
   const ms = Number(row?.lastSeenMs || 0);
-  if (!ms) return "Offline";
+  if (!ms) return "غير متصل";
   const mins = Math.floor((Date.now() - ms) / 60000);
-  if (mins < 60) return `Last seen ${mins} min ago`;
+  if (mins < 60) return `آخر ظهور ${mins} min ago`;
   const hrs = Math.floor(mins / 60);
-  return `Last seen ${hrs} hr${hrs === 1 ? "" : "s"} ago`;
+  return `آخر ظهور ${hrs} hr${hrs === 1 ? "" : "s"} ago`;
 }
 function subscribePresenceSidebar() {
   if (unsubPresence) return;
@@ -1011,7 +1011,7 @@ function subscribePresenceSidebar() {
     snap.forEach((d) => {
       const row = { id: d.id, ...d.data() };
       const id = row.userId || d.id;
-      const st = presenceStatus(row);
+      const st = presenceالحالة(row);
       const dot = document.querySelector(`[data-status-dot="${id}"]`);
       if (dot) {
         dot.classList.remove("dot-offline", "dot-online", "dot-away");
@@ -1050,7 +1050,7 @@ document.addEventListener("DOMContentLoaded", () => {
   makeCollapsible("Recent", "recent-list");
   makeCollapsible("Direct messages", "dm-list");
 
-  setHeader("Messages", "Start chatting…");
+  setHeader("الرسائل", "ابدأ المحادثة…");
   setEmpty(true);
   setInputEnabled(false);
 
@@ -1148,20 +1148,20 @@ document.addEventListener("DOMContentLoaded", () => {
         ts: serverTimestamp(),
       });
 
-      await bumpRecentAfterSendCloud();
+      await bumpRecentAfterإرسالCloud();
 
       setLastSeen(String(activeChat.roomId), Date.now());
       unreadByRoom.set(String(activeChat.roomId), 0);
       updateBadgesForRoom(String(activeChat.roomId));
       restartUnreadWatcher(String(activeChat.roomId));
     } catch (err) {
-      console.error("Send error:", err);
+      console.error("إرسال error:", err);
     }
 
     inputEl.value = "";
   });
 
-  subscribeStatusDots();
+  subscribeالحالةDots();
 });
 
 // user change (login/logout) ✅ ONLY ONE listener
@@ -1175,7 +1175,7 @@ window.addEventListener("telesyriana:user-changed", () => {
   clearActiveButtons();
   activeChat = null;
 
-  setHeader("Messages", "Start chatting…");
+  setHeader("الرسائل", "ابدأ المحادثة…");
   setEmpty(true);
   setInputEnabled(false);
 
@@ -1185,7 +1185,7 @@ window.addEventListener("telesyriana:user-changed", () => {
 
   subscribeGroupsCloud();
   subscribeRecentsCloud();
-  subscribeStatusDots();
+  subscribeالحالةDots();
 
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => {

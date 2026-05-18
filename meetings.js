@@ -73,7 +73,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
   const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
   function roleLevel(user) { return ROLE_LEVELS[String(user?.role || "").toLowerCase()] || 0; }
-  function canManageMeetings(user) { return roleLevel(user) >= ROLE_LEVELS.supervisor; }
+  function canManageاجتماعs(user) { return roleLevel(user) >= ROLE_LEVELS.supervisor; }
 
   function getCurrentUser() {
     try {
@@ -87,7 +87,7 @@ if (window.__TS_MEETINGS_INIT__) {
     return String(n).padStart(4, "0");
   }
 
-  function fallbackMeetingId() {
+  function fallbackاجتماعId() {
     return pad4((Date.now() % 10000) || 1);
   }
 
@@ -174,7 +174,7 @@ if (window.__TS_MEETINGS_INIT__) {
   }
 
   // -------------------- supervisor: enforce ONE meeting --------------------
-  async function findMyUpcomingMeeting(userId) {
+  async function findMyUpcomingاجتماع(userId) {
     // only check meetings in the future
     const now = Timestamp.fromDate(new Date());
     const qy = query(
@@ -191,17 +191,17 @@ if (window.__TS_MEETINGS_INIT__) {
     return { id: d.id, ...d.data() };
   }
 
-  async function deleteMeetingById(meetingId) {
+  async function deleteاجتماعById(meetingId) {
     if (!meetingId) return;
     await deleteDoc(doc(db, MEETINGS_COL, String(meetingId)));
   }
 
   // -------------------- meeting ID transaction --------------------
-  async function nextMeetingId() {
+  async function nextاجتماعId() {
     const now = Date.now();
     if (now - lastCounterFetchMs < COUNTER_MIN_GAP_MS) {
       const cur = (elCreateId?.value || "").trim();
-      return cur || fallbackMeetingId();
+      return cur || fallbackاجتماعId();
     }
     lastCounterFetchMs = now;
 
@@ -221,8 +221,8 @@ if (window.__TS_MEETINGS_INIT__) {
 
       return pad4(idNum);
     } catch (e) {
-      console.warn("nextMeetingId fallback:", e);
-      return fallbackMeetingId();
+      console.warn("nextاجتماعId fallback:", e);
+      return fallbackاجتماعId();
     }
   }
 
@@ -244,14 +244,14 @@ if (window.__TS_MEETINGS_INIT__) {
       btn.type = "button";
       btn.className = "meeting-item";
 
-      const canDelete = user && canManageMeetings(user) && (String(m.hostId || "") === String(user.id || "") || roleLevel(user) >= ROLE_LEVELS.manager);
+      const canDelete = user && canManageاجتماعs(user) && (String(m.hostId || "") === String(user.id || "") || roleLevel(user) >= ROLE_LEVELS.manager);
 
       btn.innerHTML = `
         <div class="meeting-row">
           <div class="meeting-badge">M</div>
           <div class="meeting-text">
             <div class="meeting-title">
-              ${escapeHtml(m.title || "Meeting")}
+              ${escapeHtml(m.title || "اجتماع")}
               <span class="meeting-id">#${escapeHtml(m.meetingId)}</span>
             </div>
             <div class="meeting-sub">
@@ -283,16 +283,16 @@ if (window.__TS_MEETINGS_INIT__) {
 
       btn.querySelector('[data-act="share"]')?.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const txt = `TeleSyriana Meeting\nID: ${m.meetingId}\nTime: ${formatStartAt(m.startAt)}\nHost: ${m.hostName || m.hostId || "-"}`;
-        await shareText("Meeting", txt);
+        const txt = `TeleSyriana اجتماع\nID: ${m.meetingId}\nTime: ${formatStartAt(m.startAt)}\nHost: ${m.hostName || m.hostId || "-"}`;
+        await shareText("اجتماع", txt);
       });
 
       btn.querySelector('[data-act="delete"]')?.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!confirm(`Delete meeting #${m.meetingId}?`)) return;
         try {
-          await deleteMeetingById(m.meetingId);
-          alert("Deleted ✅");
+          await deleteاجتماعById(m.meetingId);
+          alert("تم الحذف ✅");
         } catch (err) {
           console.error(err);
           alert(isQuotaErr(err) ? "Quota issue (wait a bit) ⚠️" : "Delete failed ⚠️");
@@ -335,7 +335,7 @@ if (window.__TS_MEETINGS_INIT__) {
         applySearch(elSearch?.value || "");
       },
       (err) => {
-        console.error("Meetings snapshot error:", err);
+        console.error("اجتماعs snapshot error:", err);
         allUpcoming = [];
         renderList([]);
       }
@@ -348,7 +348,7 @@ if (window.__TS_MEETINGS_INIT__) {
     if (defaultsLoading) return;
 
     const user = getCurrentUser();
-    const isSup = !!user && canManageMeetings(user);
+    const isSup = !!user && canManageاجتماعs(user);
 
     // ✅ nicer UX: show password as password field + ability to toggle
     // (HTML currently uses type="text" readonly; we turn it into password + readonly)
@@ -368,7 +368,7 @@ if (window.__TS_MEETINGS_INIT__) {
       // if supervisor already has an upcoming meeting → reuse it (ONE meeting rule)
       if (isSup) {
         try {
-          const existing = await findMyUpcomingMeeting(user.id);
+          const existing = await findMyUpcomingاجتماع(user.id);
           if (existing?.meetingId) {
             // fill from existing
             elCreateId.value = existing.meetingId || "";
@@ -386,7 +386,7 @@ if (window.__TS_MEETINGS_INIT__) {
             return;
           }
         } catch (e) {
-          console.warn("findMyUpcomingMeeting skipped:", e);
+          console.warn("findMyUpcomingاجتماع skipped:", e);
         }
       }
 
@@ -397,7 +397,7 @@ if (window.__TS_MEETINGS_INIT__) {
       elCreateDate.value = toLocalDateInput(d);
       elCreateTime.value = toLocalTimeInput(d);
 
-      elCreateId.value = await nextMeetingId();
+      elCreateId.value = await nextاجتماعId();
       elCreatePass.value = randomPassword(6);
 
       defaultsLoadedOnce = true;
@@ -406,18 +406,18 @@ if (window.__TS_MEETINGS_INIT__) {
     }
   }
 
-  async function createMeeting() {
+  async function createاجتماع() {
     const user = getCurrentUser();
-    if (!user || !canManageMeetings(user)) return alert("Supervisor, Manager or Admin only.");
+    if (!user || !canManageاجتماعs(user)) return alert("Supervisor, Manager or Admin only.");
 
     // ✅ ONE meeting only: if there is already upcoming meeting, block creation
     try {
-      const existing = await findMyUpcomingMeeting(user.id);
+      const existing = await findMyUpcomingاجتماع(user.id);
       if (existing?.meetingId) {
         // fill UI + tell user
         if (elCreateId) elCreateId.value = existing.meetingId || "";
         if (elCreatePass) elCreatePass.value = existing.password || "";
-        alert(`You already have an upcoming meeting ✅\nMeeting ID: ${existing.meetingId}\n(You can delete it first if you want a new one)`);
+        alert(`You already have an upcoming meeting ✅\nاجتماع ID: ${existing.meetingId}\n(You can delete it first if you want a new one)`);
         return;
       }
     } catch (e) {
@@ -425,7 +425,7 @@ if (window.__TS_MEETINGS_INIT__) {
       // continue (don’t block) if check fails
     }
 
-    const title = (elCreateTitle?.value || "").trim() || "Meeting";
+    const title = (elCreateTitle?.value || "").trim() || "اجتماع";
     const meetingLink = (elCreateLink?.value || "").trim();
     const startAt = parseStartAt(elCreateDate?.value, elCreateTime?.value);
     if (!startAt) return alert("Choose date & time.");
@@ -433,7 +433,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
     const meetingId = (elCreateId?.value || "").trim();
     const password = (elCreatePass?.value || "").trim();
-    if (!meetingId || !password) return alert("Missing Meeting ID or password.");
+    if (!meetingId || !password) return alert("غائب اجتماع ID or password.");
 
     const payload = {
       meetingId,
@@ -455,21 +455,21 @@ if (window.__TS_MEETINGS_INIT__) {
     await prepareCreateDefaults(false);
 
     // ✅ quick share
-    const msg = `TeleSyriana Meeting\nID: ${meetingId}\nPassword: ${password}\nTime: ${formatStartAt(startAt)}\nHost: ${user.name}`;
+    const msg = `TeleSyriana اجتماع\nID: ${meetingId}\nPassword: ${password}\nTime: ${formatStartAt(startAt)}\nHost: ${user.name}`;
     await copyText(`ID: ${meetingId}\nPassword: ${password}`);
-    alert(`Created ✅\nMeeting ID: ${meetingId}\nPassword: ${password}\n\nCopied to clipboard ✅`);
+    alert(`تم الإنشاء ✅\nاجتماع ID: ${meetingId}\nPassword: ${password}\n\nCopied to clipboard ✅`);
     // optional: share sheet
-    // await shareText("Meeting", msg);
+    // await shareText("اجتماع", msg);
   }
 
-  // -------------------- Join meeting (local preview only) --------------------
-  async function joinMeeting() {
+  // -------------------- انضمام meeting (local preview only) --------------------
+  async function joinاجتماع() {
     const id = (joinId?.value || "").trim();
     const pass = (joinPass?.value || "").trim();
-    if (!id) return alert("Enter Meeting ID.");
+    if (!id) return alert("Enter اجتماع ID.");
 
     const snap = await getDoc(doc(db, MEETINGS_COL, id));
-    if (!snap.exists()) return alert("Meeting not found.");
+    if (!snap.exists()) return alert("اجتماع not found.");
 
     const data = snap.data();
     if ((data.password || "") && (data.password || "") !== pass) return alert("Wrong access code.");
@@ -495,7 +495,7 @@ if (window.__TS_MEETINGS_INIT__) {
     window.open(link, "_blank", "noopener,noreferrer");
   }
 
-  function leaveMeeting() {
+  function leaveاجتماع() {
     if (localStream) {
       localStream.getTracks().forEach((t) => t.stop());
       localStream = null;
@@ -589,15 +589,15 @@ if (window.__TS_MEETINGS_INIT__) {
     btnShare.addEventListener("click", async () => {
       const id = (elCreateId?.value || "").trim();
       const pw = (elCreatePass?.value || "").trim();
-      const t = (elCreateTitle?.value || "Meeting").trim();
+      const t = (elCreateTitle?.value || "اجتماع").trim();
       const d = `${elCreateDate?.value || ""} ${elCreateTime?.value || ""}`.trim();
-      const msg = `TeleSyriana Meeting\nTitle: ${t}\nID: ${id}\nPassword: ${pw}\nTime: ${d}`;
-      await shareText("Meeting", msg);
+      const msg = `TeleSyriana اجتماع\nTitle: ${t}\nID: ${id}\nPassword: ${pw}\nTime: ${d}`;
+      await shareText("اجتماع", msg);
     });
 
     btnDeleteMine.addEventListener("click", async () => {
       const user = getCurrentUser();
-      if (!user || !canManageMeetings(user)) return;
+      if (!user || !canManageاجتماعs(user)) return;
 
       // try delete by current createId first
       const id = (elCreateId?.value || "").trim();
@@ -606,14 +606,14 @@ if (window.__TS_MEETINGS_INIT__) {
       if (!confirm(`Delete your meeting #${id}?`)) return;
 
       try {
-        await deleteMeetingById(id);
+        await deleteاجتماعById(id);
         // clear fields after delete
         if (elCreateTitle) elCreateTitle.value = "";
         if (elCreateId) elCreateId.value = "";
         if (elCreatePass) elCreatePass.value = "";
         defaultsLoadedOnce = false;
         await prepareCreateDefaults(false);
-        alert("Deleted ✅");
+        alert("تم الحذف ✅");
       } catch (err) {
         console.error(err);
         alert(isQuotaErr(err) ? "Quota issue (wait a bit) ⚠️" : "Delete failed ⚠️");
@@ -622,12 +622,12 @@ if (window.__TS_MEETINGS_INIT__) {
   }
 
   // -------------------- init --------------------
-  function initMeetings() {
+  function initاجتماعs() {
     const user = getCurrentUser();
 
     // supervisor create UI
     if (elCreateBox) {
-      const show = !!user && canManageMeetings(user);
+      const show = !!user && canManageاجتماعs(user);
       elCreateBox.classList.toggle("hidden", !show);
       if (show) {
         injectShareButtons();
@@ -649,27 +649,27 @@ if (window.__TS_MEETINGS_INIT__) {
     });
 
     btnCreate?.addEventListener("click", () => {
-      createMeeting().catch((e) => {
+      createاجتماع().catch((e) => {
         console.error(e);
         alert(isQuotaErr(e) ? "Quota exceeded ⚠️ (wait 1-2 min)" : "Create failed (rules/quota) ⚠️");
       });
     });
 
     joinBtn?.addEventListener("click", () => {
-      joinMeeting().catch((e) => {
+      joinاجتماع().catch((e) => {
         console.error(e);
-        alert(isQuotaErr(e) ? "Quota exceeded ⚠️ (wait 1-2 min)" : "Join failed ⚠️");
+        alert(isQuotaErr(e) ? "Quota exceeded ⚠️ (wait 1-2 min)" : "انضمام failed ⚠️");
       });
     });
 
     micBtn?.addEventListener("click", toggleMic);
     camBtn?.addEventListener("click", toggleCam);
     handBtn?.addEventListener("click", raiseHand);
-    leaveBtn?.addEventListener("click", leaveMeeting);
+    leaveBtn?.addEventListener("click", leaveاجتماع);
 
     window.addEventListener("telesyriana:user-changed", () => {
       const u = getCurrentUser();
-      const show = !!u && canManageMeetings(u);
+      const show = !!u && canManageاجتماعs(u);
       elCreateBox?.classList.toggle("hidden", !show);
       if (show) {
         injectShareButtons();
@@ -678,5 +678,5 @@ if (window.__TS_MEETINGS_INIT__) {
     });
   }
 
-  document.addEventListener("DOMContentLoaded", initMeetings);
+  document.addEventListener("DOMContentLoaded", initاجتماعs);
 }

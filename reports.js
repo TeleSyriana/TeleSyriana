@@ -29,14 +29,14 @@ const STAFF = {
 };
 
 const REPORT_LABELS = {
-  morning: "Morning Report",
-  midday: "Midday Report",
-  evening: "End of Shift Report",
+  morning: "تقرير صباحي",
+  midday: "تقرير منتصف اليوم",
+  evening: "تقرير نهاية الدوام",
 };
 
 const REPORT_HINTS = {
-  morning: "Emergencies, fake claims, address changes, angry customers, and yesterday’s unresolved cases.",
-  midday: "Solved tickets, pending emergencies, new issues, and anything that needs supervisor attention.",
+  morning: "طوارئ, fake claims, address changes, angry customers, and yesterday’s unresolved cases.",
+  midday: "محلول tickets, pending emergencies, new issues, and anything that needs supervisor attention.",
   evening: "New tickets, solved tickets, delayed parcels, pending tomorrow, returns, exchanges, and sensitive cases.",
 };
 
@@ -126,9 +126,9 @@ function reportMatchesFilters(report) {
       report.emergencies,
       report.delayedShipments,
       report.solvedTickets,
-      report.pendingTomorrow,
+      report.pendingغداً,
       report.returnsExchanges,
-      report.angryCustomers,
+      report.angryالعميلs,
       report.actions,
     ].join(" ").toLowerCase();
     if (!hay.includes(q)) return false;
@@ -167,7 +167,7 @@ function setTemplateForType(type) {
   if (hint) hint.textContent = REPORT_HINTS[type] || "Daily support summary.";
 
   const title = el("report-title");
-  if (title && !title.value.trim()) title.value = REPORT_LABELS[type] || "Daily Report";
+  if (title && !title.value.trim()) title.value = REPORT_LABELS[type] || "تقرير يومي";
 }
 
 function showReportAlert(message, danger = false) {
@@ -194,18 +194,18 @@ function renderReports() {
     card.innerHTML = `
       <div class="report-row-head">
         <div>
-          <strong>${REPORT_LABELS[r.reportType] || r.title || "Report"}</strong>
+          <strong>${REPORT_LABELS[r.reportType] || r.title || "تقرير"}</strong>
           <div class="report-row-sub">${r.day || "—"} • ${staffName(r.createdBy)} • ${fmtDate(r.createdAt)}</div>
         </div>
         <span class="report-pill ${r.reportType || "general"}">${r.reportType || "report"}</span>
       </div>
       <div class="report-grid-read">
-        ${r.emergencies ? `<div><b>Emergencies:</b> ${escapeHtml(r.emergencies)}</div>` : ""}
+        ${r.emergencies ? `<div><b>طوارئ:</b> ${escapeHtml(r.emergencies)}</div>` : ""}
         ${r.delayedShipments ? `<div><b>Delayed:</b> ${escapeHtml(r.delayedShipments)}</div>` : ""}
-        ${r.solvedTickets ? `<div><b>Solved:</b> ${escapeHtml(r.solvedTickets)}</div>` : ""}
-        ${r.pendingTomorrow ? `<div><b>Tomorrow:</b> ${escapeHtml(r.pendingTomorrow)}</div>` : ""}
+        ${r.solvedTickets ? `<div><b>محلول:</b> ${escapeHtml(r.solvedTickets)}</div>` : ""}
+        ${r.pendingغداً ? `<div><b>غداً:</b> ${escapeHtml(r.pendingغداً)}</div>` : ""}
         ${r.returnsExchanges ? `<div><b>Returns/Exchange:</b> ${escapeHtml(r.returnsExchanges)}</div>` : ""}
-        ${r.angryCustomers ? `<div><b>Sensitive:</b> ${escapeHtml(r.angryCustomers)}</div>` : ""}
+        ${r.angryالعميلs ? `<div><b>Sensitive:</b> ${escapeHtml(r.angryالعميلs)}</div>` : ""}
         ${r.actions ? `<div><b>Actions:</b> ${escapeHtml(r.actions)}</div>` : ""}
         ${r.notes ? `<div><b>Notes:</b> ${escapeHtml(r.notes)}</div>` : ""}
       </div>
@@ -236,15 +236,15 @@ function openReportModal(id) {
   selectedReportId = id;
   const modal = el("report-modal");
   if (!modal) return;
-  if (el("report-modal-title")) el("report-modal-title").textContent = r.title || REPORT_LABELS[r.reportType] || "Report";
+  if (el("report-modal-title")) el("report-modal-title").textContent = r.title || REPORT_LABELS[r.reportType] || "تقرير";
   if (el("report-modal-sub")) el("report-modal-sub").textContent = `${r.day || "—"} • ${staffName(r.createdBy)} • ${fmtDate(r.createdAt)}`;
   const map = {
     "report-edit-emergencies": r.emergencies || "",
     "report-edit-delayed": r.delayedShipments || "",
     "report-edit-solved": r.solvedTickets || "",
-    "report-edit-pending": r.pendingTomorrow || "",
+    "report-edit-pending": r.pendingغداً || "",
     "report-edit-returns": r.returnsExchanges || "",
-    "report-edit-angry": r.angryCustomers || "",
+    "report-edit-angry": r.angryالعميلs || "",
     "report-edit-actions": r.actions || "",
     "report-edit-notes": r.notes || "",
   };
@@ -259,19 +259,19 @@ async function saveReportEdit() {
       emergencies: el("report-edit-emergencies")?.value?.trim() || "",
       delayedShipments: el("report-edit-delayed")?.value?.trim() || "",
       solvedTickets: el("report-edit-solved")?.value?.trim() || "",
-      pendingTomorrow: el("report-edit-pending")?.value?.trim() || "",
+      pendingغداً: el("report-edit-pending")?.value?.trim() || "",
       returnsExchanges: el("report-edit-returns")?.value?.trim() || "",
-      angryCustomers: el("report-edit-angry")?.value?.trim() || "",
+      angryالعميلs: el("report-edit-angry")?.value?.trim() || "",
       actions: el("report-edit-actions")?.value?.trim() || "",
       notes: el("report-edit-notes")?.value?.trim() || "",
       updatedAt: serverTimestamp(),
       updatedBy: currentUser?.id || "",
     });
-    showReportAlert("Report updated.");
+    showReportAlert("تم تحديث التقرير.");
     closeReportModal();
   } catch (err) {
     console.error("save report edit failed", err);
-    showReportAlert("Report changes were not saved. Check Firestore permissions/internet.", true);
+    showReportAlert("لم يتم حفظ تعديلات التقرير. تحقق من صلاحيات Firestore أو الاتصال.", true);
   }
 }
 
@@ -306,10 +306,10 @@ function hookUI() {
 function fillTemplate() {
   const type = el("report-type")?.value || "morning";
   if (type === "morning") {
-    el("report-emergencies").value ||= "Emergency emails:\nFake claims:\nAddress changes:\nAngry customers:";
+    el("report-emergencies").value ||= "طارئ emails:\nFake claims:\nAddress changes:\nAngry customers:";
     el("report-pending").value ||= "Unresolved from yesterday:\nNeeds Mohammad/Supervisor:";
   } else if (type === "midday") {
-    el("report-solved").value ||= "Solved so far:\nPending emergencies:\nNew issues:";
+    el("report-solved").value ||= "محلول so far:\nPending emergencies:\nNew issues:";
     el("report-actions").value ||= "Actions needed before end of shift:";
   } else {
     el("report-solved").value ||= "Tickets solved today:";
@@ -322,12 +322,12 @@ function fillTemplate() {
 
 async function submitReport(e) {
   e.preventDefault();
-  if (!currentUser) return showReportAlert("Please login first.", true);
+  if (!currentUser) return showReportAlert("يرجى تسجيل الدخول أولاً.", true);
 
   const type = el("report-type")?.value || "morning";
   const payload = {
     reportType: type,
-    title: el("report-title")?.value?.trim() || REPORT_LABELS[type] || "Daily Report",
+    title: el("report-title")?.value?.trim() || REPORT_LABELS[type] || "تقرير يومي",
     day: el("report-day")?.value || todayKey(),
     createdBy: currentUser.id,
     createdByName: currentUser.name,
@@ -335,9 +335,9 @@ async function submitReport(e) {
     emergencies: el("report-emergencies")?.value?.trim() || "",
     delayedShipments: el("report-delayed")?.value?.trim() || "",
     solvedTickets: el("report-solved")?.value?.trim() || "",
-    pendingTomorrow: el("report-pending")?.value?.trim() || "",
+    pendingغداً: el("report-pending")?.value?.trim() || "",
     returnsExchanges: el("report-returns")?.value?.trim() || "",
-    angryCustomers: el("report-angry")?.value?.trim() || "",
+    angryالعميلs: el("report-angry")?.value?.trim() || "",
     actions: el("report-actions")?.value?.trim() || "",
     notes: el("report-notes")?.value?.trim() || "",
     createdAt: serverTimestamp(),
@@ -350,10 +350,10 @@ async function submitReport(e) {
     if (el("report-type")) el("report-type").value = type;
     if (el("report-day")) el("report-day").value = todayKey();
     setTemplateForType(type);
-    showReportAlert("Report saved successfully.");
+    showReportAlert("تم حفظ التقرير بنجاح.");
   } catch (err) {
     console.error("report save failed", err);
-    showReportAlert("Report was not saved. Check Firestore permissions/internet.", true);
+    showReportAlert("لم يتم حفظ التقرير. تحقق من صلاحيات Firestore أو الاتصال.", true);
   }
 }
 
@@ -366,7 +366,7 @@ function subscribeReports() {
     renderReports();
   }, (err) => {
     console.error("reports snapshot error", err);
-    showReportAlert("Could not load reports. Check Firestore rules/indexes.", true);
+    showReportAlert("تعذر تحميل التقارير. تحقق من قواعد أو فهارس Firestore.", true);
   });
 }
 

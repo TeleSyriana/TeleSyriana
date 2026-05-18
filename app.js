@@ -56,6 +56,17 @@ function canViewAllStaff(user) {
   return hasRoleAtLeast(user, "manager");
 }
 
+
+function roleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "agent": return "موظف دعم";
+    case "supervisor": return "مشرف";
+    case "manager": return "مدير";
+    case "admin": return "أدمن";
+    default: return role || "—";
+  }
+}
+
 function safeUserPayload(id) {
   const u = USERS[id];
   if (!u) return null;
@@ -715,7 +726,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("mobile-menu-backdrop")?.addEventListener("click", closeMobileMenu);
 
   document.getElementById("login-form")?.addEventListener("submit", handleLogin);
-  document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
+  document.getElementById("logout-btn")?.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); handleLogout(); });
+  document.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("#logout-btn");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    handleLogout();
+  }, true);
   document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
   document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
 
@@ -776,7 +794,7 @@ function switchPage(pageId) {
 
   const target = document.getElementById(`page-${pageId}`);
   if (!target) {
-    console.warn(`Page not found: page-${pageId}. Check your HTML IDs.`);
+    console.warn(`الصفحة غير موجودة: page-${pageId}. تحقق من معرفات HTML.`);
     return;
   }
   target.classList.remove("hidden");
@@ -808,14 +826,14 @@ async function handleLogin(e) {
   const pw = document.getElementById("password")?.value || "";
   const submitBtn = e?.target?.querySelector('button[type="submit"]');
 
-  if (!USERS[id]) return showError("User not found. Try 0001, 0002, 1001, 2001 or 9001.");
-  if (USERS[id].password !== pw) return showError("Incorrect password.");
+  if (!USERS[id]) return showError("المستخدم غير موجود. جرّب 0001 أو 0002 أو 1001 أو 2001 أو 9001.");
+  if (USERS[id].password !== pw) return showError("كلمة المرور غير صحيحة.");
 
   try {
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.dataset.originalText = submitBtn.textContent;
-      submitBtn.textContent = "Logging in...";
+      submitBtn.textContent = "جاري الدخول...";
     }
 
     currentUser = safeUserPayload(id);
@@ -833,53 +851,57 @@ async function handleLogin(e) {
     window.dispatchEvent(new Event("telesyriana:user-changed"));
   } catch (err) {
     console.error("Login failed:", err);
-    showError(`Login failed: ${err?.message || err}`);
+    showError(`فشل تسجيل الدخول: ${err?.message || err}`);
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.textContent = submitBtn.dataset.originalText || "Login";
+      submitBtn.textContent = submitBtn.dataset.originalText || "دخول";
     }
   }
 }
 
 async function handleLogout() {
-  closeFloatingChat();
+  // Robust logout: never let Firebase/network errors block the user from leaving the session.
+  try { closeFloatingChat(); } catch {}
 
-  if (currentUser && state) {
-    const now = Date.now();
-    applyElapsedToState(now);
-    state.status = "unavailable";
-    state.lastStatusChange = now;
-    saveState();
-
-    try {
-      await syncStateToFirestore(recomputeLiveUsage(now), true); // ✅ force
-    } catch {}
+  try {
+    if (currentUser && state) {
+      const now = Date.now();
+      try { applyElapsedToState(now); } catch {}
+      state.status = "unavailable";
+      state.lastStatusChange = now;
+      try { saveState(); } catch {}
+      try { await syncStateToFirestore(recomputeLiveUsage(now), true); } catch (err) { console.warn("logout sync skipped", err); }
+    }
+  } catch (err) {
+    console.warn("logout state cleanup skipped", err);
   }
 
-  await stopPresence();
+  try { await stopPresence(); } catch (err) { console.warn("logout presence skipped", err); }
 
-  localStorage.removeItem(USER_KEY);
+  try { localStorage.removeItem(USER_KEY); } catch {}
+  try { localStorage.removeItem(STATE_KEY); } catch {}
 
-  window.dispatchEvent(new Event("telesyriana:user-changed"));
+  try { window.dispatchEvent(new Event("telesyriana:user-changed")); } catch {}
 
-  if (timerId) clearInterval(timerId);
+  try { if (timerId) clearInterval(timerId); } catch {}
   timerId = null;
 
-  if (clockIntervalId) clearInterval(clockIntervalId);
+  try { if (clockIntervalId) clearInterval(clockIntervalId); } catch {}
   clockIntervalId = null;
 
-  if (supUnsub) supUnsub();
+  try { if (supUnsub) supUnsub(); } catch {}
   supUnsub = null;
-  if (presenceUnsub) presenceUnsub();
+  try { if (presenceUnsub) presenceUnsub(); } catch {}
   presenceUnsub = null;
-  if (issueCalendarUnsub) issueCalendarUnsub();
+  try { if (issueCalendarUnsub) issueCalendarUnsub(); } catch {}
   issueCalendarUnsub = null;
 
   currentUser = null;
   state = null;
 
   showLogin();
+  showToast("تم تسجيل الخروج بنجاح", "success", 2200);
 }
 
 function showError(msg) {
@@ -976,7 +998,7 @@ async function initStateForUser() {
   } catch (err) {
     console.error("Login state init failed. Starting local session instead:", err);
     state = buildDefaultDayState(now);
-    showToast(isFirestoreDatabaseMissingError(err) ? "Logged in locally. Firestore database is not created yet." : "Logged in locally. Firebase read failed; check rules/network.", "warning", 6000);
+    showToast(isFirestoreDatabaseMissingError(err) ? "تم الدخول محلياً. قاعدة Firestore غير منشأة بعد." : "تم الدخول محلياً. تعذّرت قراءة Firebase؛ تحقق من القواعد أو الاتصال.", "warning", 6000);
   }
 
   saveState();
@@ -1054,7 +1076,7 @@ function updateDashboardUI() {
   const statusValue = document.getElementById("status-value");
   const statusSelect = document.getElementById("status-select");
 
-  if (welcomeTitle) welcomeTitle.textContent = `Welcome, ${currentUser.name}`;
+  if (welcomeTitle) welcomeTitle.textContent = `مرحباً، ${currentUser.name}`;
   if (welcomeSubtitle) {
     welcomeSubtitle.textContent = `Logged in as ${currentUser.role.toUpperCase()} (CCMS: ${currentUser.id})`;
   }
@@ -1132,13 +1154,13 @@ function buildSupervisorTableFromFirestore(rows) {
       tr.innerHTML = `
         <td>${r.name}</td>
         <td>${r.userId}</td>
-        <td>${String(r.role || "").toUpperCase()}</td>
+        <td>${roleLabel(r.role)}</td>
         <td><span class="sup-status-pill status-${status}">${statusLabel(status)}</span></td>
         <td>${formatDuration(r.operationMinutes || 0)}</td>
         <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
         <td>${formatDuration(r.meetingMinutes || 0)}</td>
         <td>${formatDuration(r.unavailableMinutes || 0)}</td>
-        <td>${r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"}</td>
+        <td>${r.loginTime ? new Date(r.loginTime).toLocaleString("ar") : "لم يسجل"}</td>
         <td>${r.currency || "USD"} ${pay}</td>
       `;
       body.appendChild(tr);
@@ -1256,8 +1278,8 @@ async function handleSettingsSave(e) {
   e.preventDefault();
   if (!currentUser) return;
   const btn = e.submitter || document.querySelector('#settings-form button[type="submit"]');
-  const oldText = btn?.textContent || "Save";
-  if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
+  const oldText = btn?.textContent || "حفظ";
+  if (btn) { btn.disabled = true; btn.textContent = "جاري الحفظ..."; }
 
   const name = document.getElementById("set-name")?.value?.trim() || currentUser.name || currentUser.id;
   const birthday = document.getElementById("set-birthday")?.value || "";
@@ -1293,10 +1315,10 @@ async function handleSettingsSave(e) {
       },
       { merge: true }
     );
-    showSettingsAlert("Settings saved successfully.");
+    showSettingsAlert("تم حفظ الإعدادات بنجاح.");
   } catch (err) {
     console.error("settings save failed", err);
-    showSettingsAlert(`Saved locally, but Firestore save failed: ${err?.code || err?.message || "Check permissions/internet"}`, true);
+    showSettingsAlert(`تم الحفظ محلياً، لكن فشل حفظ Firestore: ${err?.code || err?.message || "تحقق من الصلاحيات أو الاتصال"}`, true);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = oldText; }
   }
@@ -1323,7 +1345,7 @@ document.addEventListener("change", (e) => {
       const bgEl = document.getElementById("set-background");
       if (bgEl) bgEl.value = "custom";
       applyBackground("custom", img);
-      showSettingsAlert("Background image loaded locally. Press Save to sync it when Firestore is ready.");
+      showSettingsAlert("تم تحميل الخلفية محلياً. اضغط حفظ للمزامنة عندما تكون Firestore جاهزة.");
     };
     reader.readAsDataURL(file);
   }

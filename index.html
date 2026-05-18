@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <title>TeleSyriana – Agent Access Panel</title>
+  <title>TeleSyriana – لوحة إدارة الدعم</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -12,33 +12,33 @@
 
     <!-- HEADER -->
     <header class="app-header">
-      <button id="mobile-menu-toggle" class="mobile-menu-toggle hidden" type="button" aria-label="Open menu">☰</button>
+      <button id="mobile-menu-toggle" class="mobile-menu-toggle hidden" type="button" aria-label="فتح القائمة">☰</button>
       <div id="mobile-menu-backdrop" class="mobile-menu-backdrop hidden"></div>
       <nav id="main-nav" class="main-nav hidden">
-        <button class="nav-link" data-page="home">Home</button>
-        <button class="nav-link" data-page="tasks">Notes</button>
-        <button class="nav-link" data-page="tickets">Tickets</button>
-        <button class="nav-link" data-page="reports">Reports</button>
-        <button class="nav-link" data-page="payroll">Payroll</button>
+        <button class="nav-link" data-page="home">الرئيسية</button>
+        <button class="nav-link" data-page="tasks">الملاحظات</button>
+        <button class="nav-link" data-page="tickets">التذاكر</button>
+        <button class="nav-link" data-page="reports">التقارير</button>
+        <button class="nav-link" data-page="payroll">الرواتب</button>
 
         <!-- ✅ UPDATED: Messages nav badge holder -->
         <button class="nav-link" data-page="messages" id="nav-messages">
-          Messages
+          الرسائل
           <span id="nav-messages-badge" class="nav-unread-badge hidden">0</span>
         </button>
-        <button class="nav-link" data-page="meetings">Meetings</button>
+        <button class="nav-link" data-page="meetings">الاجتماعات</button>
 
 
-        <button class="nav-link" data-page="settings">Settings</button>
+        <button class="nav-link" data-page="settings">الإعدادات</button>
 
         <div class="actions">
-          <button id="logout-btn" class="nav-link" type="button">Logout</button>
+          <button id="logout-btn" class="nav-link" type="button">تسجيل الخروج</button>
         </div>
       </nav>
 
       <div class="header-right">
         <div class="logo">Tele<span>Syriana</span></div>
-        <div class="tagline">Agent Access Portal</div>
+        <div class="tagline">بوابة إدارة فريق الدعم</div>
       </div>
     </header>
 
@@ -50,31 +50,31 @@
         </section>
 
         <section class="card login-card">
-          <h1>Login</h1>
-          <p class="subtitle">Please sign in with your CCMS ID and password.</p>
+          <h1>تسجيل الدخول</h1>
+          <p class="subtitle">يرجى تسجيل الدخول باستخدام رقم الموظف وكلمة المرور.</p>
 
           <div id="login-error" class="alert hidden"></div>
 
           <form id="login-form">
             <label>
-              CCMS ID
+              رقم الموظف CCMS
               <input type="text" id="ccmsId" placeholder="e.g. 0101" required />
             </label>
 
             <label>
-              Password
-              <input type="password" id="password" placeholder="Password" required />
+              كلمة المرور
+              <input type="password" id="password" placeholder="كلمة المرور" required />
             </label>
 
-            <button type="submit" class="btn-primary">Login</button>
+            <button type="submit" class="btn-primary">دخول</button>
           </form>
 
           <p class="hint">
-            example users:<br />
-            <code>0001 / Welcome 2026!</code> (Agent)<br />
-            <code>1001 / 2411</code> (Supervisor)<br />
-            <code>2001 / 2411</code> (Manager)<br />
-            <code>9001 / 2411</code> (Admin)<br />
+            حسابات التجربة:<br />
+            <code>0001 / Welcome 2026!</code> (موظف دعم)<br />
+            <code>1001 / 2411</code> (مشرف)<br />
+            <code>2001 / 2411</code> (مدير)<br />
+            <code>9001 / 2411</code> (أدمن)<br />
           </p>
         </section>
       </div>
@@ -88,69 +88,69 @@
         <div class="dashboard-layout">
 
           <section class="card dashboard-main">
-            <h1 id="welcome-title">Welcome</h1>
+            <h1 id="welcome-title">مرحباً</h1>
             <p id="welcome-subtitle" class="subtitle"></p>
 
             <div class="status-box">
-              <div class="status-label">Current status:</div>
+              <div class="status-label">الحالة الحالية:</div>
               <div id="status-value" class="status-value status-in_operation">Operating</div>
             </div>
 
             <div class="status-controls">
-              <label for="status-select">Change status:</label>
+              <label for="status-select">تغيير الحالة:</label>
               <select id="status-select">
-                <option value="in_operation">In Operation</option>
-                <option value="break">In Break</option>
-                <option value="unavailable">Unavailable</option>
-                <option value="meeting">In Meeting</option>
-                <option value="handling">Handling</option>
+                <option value="in_operation">قيد التشغيل</option>
+                <option value="break">استراحة</option>
+                <option value="unavailable">غير متاح</option>
+                <option value="meeting">في اجتماع</option>
+                <option value="handling">متابعة حالة</option>
               </select>
               <div class="quick-status-row">
-                <button type="button" data-quick-status="in_operation">Clock in</button>
-                <button type="button" data-quick-status="break">Start break</button>
-                <button type="button" data-quick-status="handling">Handling</button>
-                <button type="button" data-quick-status="meeting">Meeting</button>
-                <button type="button" data-quick-status="unavailable">Clock out</button>
+                <button type="button" data-quick-status="in_operation">بدء الدوام</button>
+                <button type="button" data-quick-status="break">بدء الاستراحة</button>
+                <button type="button" data-quick-status="handling">متابعة حالة</button>
+                <button type="button" data-quick-status="meeting">اجتماع</button>
+                <button type="button" data-quick-status="unavailable">إنهاء الدوام</button>
               </div>
-              <small class="status-note">Break limit: <strong>45 minutes</strong>. Time updates every few seconds; payroll saves to Firestore.</small>
+              <small class="status-note">مدة الاستراحة المسموحة: <strong>45 دقيقة</strong>. يتم تحديث الوقت تلقائياً، ويتم حفظ الرواتب في Firestore عند تفعيل قاعدة البيانات.</small>
             </div>
 
             <div class="break-box">
-              <div>Break used: <span id="break-used">0</span> / 45 min</div>
-              <div>Remaining: <span id="break-remaining">45</span> min</div>
+              <div>الاستراحة المستخدمة: <span id="break-used">0</span> / 45 min</div>
+              <div>المتبقي: <span id="break-remaining">45</span> min</div>
             </div>
 
             <div class="time-box">
-              <div>Operation: <span id="op-min">0</span></div>
-              <div>Meeting: <span id="meet-min">0</span></div>
+              <div>التشغيل: <span id="op-min">0</span></div>
+              <div>الاجتماع: <span id="meet-min">0</span></div>
               <div>Handling: <span id="hand-min">0</span></div>
             </div>
 
             <section id="supervisor-panel" class="sup-panel hidden">
-              <h2>Team Overview</h2>
-              <p class="sup-note">Supervisor sees assigned agents. Manager/Admin sees the full team.</p>
+              <h2>نظرة عامة على الفريق</h2>
+              <p class="sup-note">المشرف يرى الموظفين التابعين له، والمدير/الأدمن يرى الفريق بالكامل.</p>
 
               <div class="sup-summary">
-                <span>Operation: <strong id="sum-op">0</strong></span>
-                <span>Break: <strong id="sum-break">0</strong></span>
-                <span>Meeting: <strong id="sum-meet">0</strong></span>
-                <span>Unavailable: <strong id="sum-unavail">0</strong></span>
+                <span>التشغيل: <strong id="sum-op">0</strong></span>
+                <span>الاستراحة: <strong id="sum-break">0</strong></span>
+                <span>الاجتماع: <strong id="sum-meet">0</strong></span>
+                <span>غير متاح: <strong id="sum-unavail">0</strong></span>
               </div>
 
               <div class="sup-table-wrapper">
                 <table class="sup-table">
                   <thead>
                     <tr>
-                      <th>Agent</th>
+                      <th>الموظف</th>
                       <th>CCMS</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                      <th>Operation</th>
-                      <th>Break</th>
-                      <th>Meeting</th>
-                      <th>Unavailable</th>
-                      <th>Last login</th>
-                      <th>Est. pay</th>
+                      <th>الدور</th>
+                      <th>الحالة</th>
+                      <th>تشغيل</th>
+                      <th>استراحة</th>
+                      <th>اجتماع</th>
+                      <th>غير متاح</th>
+                      <th>آخر دخول</th>
+                      <th>الأجر المتوقع</th>
                     </tr>
                   </thead>
                   <tbody id="sup-table-body"></tbody>
@@ -161,27 +161,27 @@
 
           <!-- RIGHT SIDE -->
           <section class="card dashboard-side">
-            <h2>Today’s Snapshot</h2>
-            <p class="subtitle">Quick reminders:</p>
+            <h2>ملخص اليوم</h2>
+            <p class="subtitle">تذكيرات سريعة:</p>
 
             <ul class="side-list">
-              <li>✔ Keep your status updated.</li>
-              <li>✔ Use break time wisely.</li>
-              <li>✔ Be kind with callers.</li>
+              <li>✔ حدّث حالتك دائماً.</li>
+              <li>✔ استخدم وقت الاستراحة بانتظام.</li>
+              <li>✔ تعامل مع العملاء بهدوء واحترام.</li>
             </ul>
 
             <div class="online-now-card">
               <div class="widget-head">
-                <div class="widget-title">Online now</div>
+                <div class="widget-title">المتواجدون الآن</div>
                 <span id="online-now-count" class="online-count">0</span>
               </div>
-              <div id="online-now-list" class="online-now-list">No one online yet.</div>
+              <div id="online-now-list" class="online-now-list">لا يوجد أحد متصل حالياً.</div>
             </div>
 
             <div class="widgets-grid">
               <div class="widget-card">
                 <div class="widget-head">
-                  <div class="widget-title">Clock</div>
+                  <div class="widget-title">الساعة</div>
                   <button class="kebab" type="button">⋯</button>
                 </div>
                 <div id="widget-clock" class="widget-big">--:--</div>
@@ -190,11 +190,11 @@
 
               <div class="widget-card">
                 <div class="widget-head">
-                  <div class="widget-title">Today</div>
+                  <div class="widget-title">إلىday</div>
                   <button class="kebab" type="button">⋯</button>
                 </div>
                 <div id="widget-date" class="widget-big">—</div>
-                <div class="widget-sub">Local date</div>
+                <div class="widget-sub">التاريخ المحلي</div>
               </div>
 
               <div class="widget-card widget-calendar">
@@ -212,7 +212,7 @@
                   </div>
                   <div id="cal-grid" class="mini-cal-grid"></div>
                 </div>
-                <div id="issue-calendar-summary" class="issue-calendar-summary">Issue rate calendar will appear after tickets are used.</div>
+                <div id="issue-calendar-summary" class="issue-calendar-summary">سيظهر تقويم نسب المشاكل بعد استخدام التذاكر.</div>
               </div>
 
               <div class="widget-card">
@@ -235,14 +235,14 @@
 
                   <div class="ring-text">
                     <div class="widget-big" id="break-text">0 / 45</div>
-                    <div class="widget-sub">min used</div>
+                    <div class="widget-sub">دقيقة مستخدمة</div>
                   </div>
                 </div>
               </div>
 
               <div class="widget-card">
                 <div class="widget-head">
-                  <div class="widget-title">Hours worked</div>
+                  <div class="widget-title">ساعات العمل</div>
                   <button class="kebab" type="button">⋯</button>
                 </div>
 
@@ -260,9 +260,9 @@
 
                   <div class="ring-text">
                     <div class="widget-big">
-                      <span id="work-text">0 min</span> / <span id="work-target-text">8 hrs</span>
+                      <span id="work-text">0 min</span> / <span id="work-target-text">8 ساعات</span>
                     </div>
-                    <div class="widget-sub">Remaining: <span id="work-remaining-text">8 hrs</span></div>
+                    <div class="widget-sub">المتبقي: <span id="work-remaining-text">8 ساعات</span></div>
                   </div>
                 </div>
               </div>
@@ -280,20 +280,20 @@
             <aside class="notes-sidebar">
               <div class="notes-head">
                 <div>
-                  <h2>Notes</h2>
-                  <p class="subtitle">Private Apple-style notes for follow-ups and ideas.</p>
+                  <h2>الملاحظات</h2>
+                  <p class="subtitle">ملاحظات شخصية بأسلوب بسيط للمتابعة والأفكار.</p>
                 </div>
-                <button id="note-new-btn" class="btn-primary" type="button">+ New</button>
+                <button id="note-new-btn" class="btn-primary" type="button">+ ملاحظة جديدة</button>
               </div>
-              <input id="notes-search" class="notes-search" type="text" placeholder="Search notes..." />
+              <input id="notes-search" class="notes-search" type="text" placeholder="البحث في الملاحظات..." />
               <div id="notes-list" class="notes-list"></div>
             </aside>
             <main class="notes-editor">
-              <input id="note-title" class="note-title-input" type="text" placeholder="Note title" />
-              <textarea id="note-body" class="note-body-input" placeholder="Start writing..."></textarea>
+              <input id="note-title" class="note-title-input" type="text" placeholder="عنوان الملاحظة" />
+              <textarea id="note-body" class="note-body-input" placeholder="ابدأ الكتابة..."></textarea>
               <div class="notes-editor-footer">
                 <span id="note-save-status">Ready</span>
-                <button id="note-delete-btn" class="btn-secondary danger" type="button">Delete</button>
+                <button id="note-delete-btn" class="btn-secondary danger" type="button">حذف</button>
               </div>
             </main>
           </div>
@@ -306,12 +306,12 @@
         <section class="card tickets-card">
           <div class="tickets-top">
             <div>
-              <h2 style="margin:0">Support Tickets</h2>
-              <p class="subtitle" style="margin:6px 0 0">Emergency queue • order issues • returns • internal notes</p>
+              <h2 style="margin:0">تذاكر الدعم</h2>
+              <p class="subtitle" style="margin:6px 0 0">الطوارئ • مشاكل الطلبات • الإرجاع • ملاحظات داخلية</p>
             </div>
             <div class="tickets-actions">
-              <button id="ticket-refresh-btn" class="btn-secondary" type="button">Refresh</button>
-              <button id="ticket-new-toggle" class="btn-primary" type="button" style="width:auto;padding:10px 16px">+ New Ticket</button>
+              <button id="ticket-refresh-btn" class="btn-secondary" type="button">تحديث</button>
+              <button id="ticket-new-toggle" class="btn-primary" type="button" style="width:auto;padding:10px 16px">+ تذكرة جديدة</button>
             </div>
           </div>
 
@@ -320,67 +320,67 @@
           <div id="order-admin-panel" class="order-admin-panel hidden">
             <div class="order-admin-head">
               <div>
-                <h3>Order Lookup / Shopify Cache</h3>
-                <p>Manual order cache for autofill now. Shopify API connection can be added later.</p>
+                <h3>بيانات الطلب / ذاكرة Shopify</h3>
+                <p>حفظ يدوي لبيانات الطلب حالياً لاستخدام الملء التلقائي. يمكن ربط Shopify API لاحقاً.</p>
               </div>
-              <button id="order-admin-toggle" type="button" class="btn-secondary">Add / Update Order</button>
+              <button id="order-admin-toggle" type="button" class="btn-secondary">إضافة / تحديث طلب</button>
             </div>
 
             <form id="order-cache-form" class="order-cache-form hidden">
               <div class="order-cache-grid">
-                <label>Order #<input id="order-cache-number" type="text" placeholder="2515" required /></label>
-                <label>Customer name<input id="order-cache-customer" type="text" placeholder="Customer name" /></label>
-                <label>Email<input id="order-cache-email" type="email" placeholder="customer@email.com" /></label>
-                <label>Phone<input id="order-cache-phone" type="text" placeholder="Optional" /></label>
-                <label>Total paid<input id="order-cache-total" type="text" placeholder="£34.99" /></label>
-                <label>Order date<input id="order-cache-date" type="date" /></label>
-                <label>Courier<input id="order-cache-courier" type="text" placeholder="Royal Mail / EVRI / YunExpress" /></label>
-                <label>Tracking number<input id="order-cache-tracking" type="text" placeholder="Tracking" /></label>
-                <label>Order status
+                <label>رقم الطلب #<input id="order-cache-number" type="text" placeholder="2515" required /></label>
+                <label>اسم العميل<input id="order-cache-customer" type="text" placeholder="اسم العميل" /></label>
+                <label>البريد الإلكتروني<input id="order-cache-email" type="email" placeholder="customer@email.com" /></label>
+                <label>رقم الهاتف<input id="order-cache-phone" type="text" placeholder="اختياري" /></label>
+                <label>الإجمالي المدفوع<input id="order-cache-total" type="text" placeholder="£34.99" /></label>
+                <label>تاريخ الطلب<input id="order-cache-date" type="date" /></label>
+                <label>شركة الشحن<input id="order-cache-courier" type="text" placeholder="Royal Mail / EVRI / YunExpress" /></label>
+                <label>رقم التتبع<input id="order-cache-tracking" type="text" placeholder="رقم التتبع" /></label>
+                <label>حالة الطلب
                   <select id="order-cache-status">
-                    <option value="unknown">Unknown</option>
-                    <option value="unfulfilled">Unfulfilled</option>
-                    <option value="processing">Processing</option>
-                    <option value="fulfilled">Fulfilled</option>
-                    <option value="cancelled">Cancelled</option>
-                    <option value="refunded">Refunded</option>
+                    <option value="unknown">غير معروف</option>
+                    <option value="unfulfilled">غير منفذ</option>
+                    <option value="processing">قيد المعالجة</option>
+                    <option value="fulfilled">تم التنفيذ</option>
+                    <option value="cancelled">ملغي</option>
+                    <option value="refunded">تم الاسترداد</option>
                   </select>
                 </label>
-                <label>Delivery status
+                <label>حالة التوصيل
                   <select id="order-cache-delivery">
-                    <option value="unknown">Unknown</option>
-                    <option value="label_created">Label created</option>
-                    <option value="in_transit">In transit</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="delayed">Delayed</option>
-                    <option value="lost">Lost / investigation</option>
+                    <option value="unknown">غير معروف</option>
+                    <option value="label_created">تم إنشاء الملصق</option>
+                    <option value="in_transit">قيد الشحن</option>
+                    <option value="delivered">تم التوصيل</option>
+                    <option value="delayed">متأخر</option>
+                    <option value="lost">مفقود / قيد التحقيق</option>
                   </select>
                 </label>
               </div>
-              <label>Items<textarea id="order-cache-items" rows="2" placeholder="iPhone 14 Silicone Case - Olive + Screen Protector 2D"></textarea></label>
-              <label>Shipping address<textarea id="order-cache-address" rows="2" placeholder="Optional"></textarea></label>
-              <label>Internal order notes<textarea id="order-cache-notes" rows="2" placeholder="Any useful note for support"></textarea></label>
+              <label>المنتجات<textarea id="order-cache-items" rows="2" placeholder="iرقم الهاتف 14 Silicone Case - Olive + Screen Protector 2D"></textarea></label>
+              <label>عنوان الشحن<textarea id="order-cache-address" rows="2" placeholder="اختياري"></textarea></label>
+              <label>ملاحظات داخلية للطلب<textarea id="order-cache-notes" rows="2" placeholder="أي ملاحظة مفيدة للدعم"></textarea></label>
               <div class="ticket-form-footer">
-                <button type="button" id="order-cache-load" class="btn-secondary">Load Order</button>
-                <button type="submit" class="btn-primary" style="width:auto">Save Order Cache</button>
+                <button type="button" id="order-cache-load" class="btn-secondary">تحميل الطلب</button>
+                <button type="submit" class="btn-primary" style="width:auto">حفظ بيانات الطلب</button>
               </div>
             </form>
           </div>
 
           <div class="ticket-stats-grid">
-            <div class="ticket-stat"><span>Open</span><strong id="ticket-stat-open">0</strong></div>
-            <div class="ticket-stat emergency"><span>Emergency</span><strong id="ticket-stat-emergency">0</strong></div>
-            <div class="ticket-stat"><span>Escalated</span><strong id="ticket-stat-escalated">0</strong></div>
-            <div class="ticket-stat"><span>Resolved today</span><strong id="ticket-stat-resolved">0</strong></div>
+            <div class="ticket-stat"><span>مفتوحة</span><strong id="ticket-stat-open">0</strong></div>
+            <div class="ticket-stat emergency"><span>طارئ</span><strong id="ticket-stat-emergency">0</strong></div>
+            <div class="ticket-stat"><span>مصعّدة</span><strong id="ticket-stat-escalated">0</strong></div>
+            <div class="ticket-stat"><span>محلولة today</span><strong id="ticket-stat-resolved">0</strong></div>
           </div>
 
           <form id="ticket-form" class="ticket-form hidden">
             <div class="ticket-form-head">
               <div>
-                <h3>Create Ticket</h3>
+                <h3>إنشاء التذكرة</h3>
                 <span class="ticket-form-note">Only order number is required. Fill the rest if available.</span>
               </div>
-              <button id="ticket-form-close" type="button" class="modal-x" aria-label="Close ticket form">×</button>
+              <button id="ticket-form-close" type="button" class="modal-x" aria-label="إغلاق نموذج التذكرة">×</button>
             </div>
 
             <div class="ticket-form-grid">
@@ -397,73 +397,73 @@
               <label>
                 Category
                 <select id="ticket-type">
-                  <option value="address_change">Address Change</option>
-                  <option value="product_not_arrived">Product Not Arrived</option>
-                  <option value="item_not_genuine">Item Not Genuine / Fake Claim</option>
-                  <option value="return">Return</option>
-                  <option value="exchange">Exchange</option>
-                  <option value="angry_customer">Angry Customer</option>
-                  <option value="refund_request">Refund Request</option>
-                  <option value="chargeback_risk">Chargeback Risk</option>
-                  <option value="general_question">General Question</option>
+                  <option value="address_change">تعديل العنوان</option>
+                  <option value="product_not_arrived">المنتج لم يصل</option>
+                  <option value="item_not_genuine">ادعاء المنتج غير أصلي / مزيف</option>
+                  <option value="return">إرجاع</option>
+                  <option value="exchange">استبدال</option>
+                  <option value="angry_customer">عميل غاضب</option>
+                  <option value="refund_request">طلب استرداد</option>
+                  <option value="chargeback_risk">خطر نزاع بنكي</option>
+                  <option value="general_question">سؤال عام</option>
                 </select>
               </label>
 
               <label>
                 Priority
                 <select id="ticket-priority">
-                  <option value="emergency">🔴 Emergency</option>
-                  <option value="high">🟠 High</option>
-                  <option value="medium">🟡 Medium</option>
-                  <option value="normal">🟢 Normal</option>
+                  <option value="emergency">🔴 طارئ</option>
+                  <option value="high">🟠 عالي</option>
+                  <option value="medium">🟡 متوسط</option>
+                  <option value="normal">🟢 عادي</option>
                 </select>
               </label>
 
               <label>
-                Assign to
+                تعيين إلى
                 <select id="ticket-assigned"></select>
               </label>
 
               <label>
-                Customer name
-                <input id="ticket-customer" type="text" placeholder="Optional" />
+                اسم العميل
+                <input id="ticket-customer" type="text" placeholder="اختياري" />
               </label>
 
               <label>
                 Customer email
-                <input id="ticket-email" type="email" placeholder="Optional" />
+                <input id="ticket-email" type="email" placeholder="اختياري" />
               </label>
             </div>
 
             <label>
-              Internal notes
-              <textarea id="ticket-notes" rows="3" placeholder="What happened? What do we need to do next?"></textarea>
+              ملاحظات داخلية
+              <textarea id="ticket-notes" rows="3" placeholder="ما الذي حدث؟ وما الخطوة التالية المطلوبة؟"></textarea>
             </label>
 
             <div class="ticket-form-footer">
-              <button type="button" id="ticket-autofill-btn" class="btn-secondary">Autofill from order #</button>
-              <button type="submit" class="btn-primary" style="width:auto">Create Ticket</button>
+              <button type="button" id="ticket-autofill-btn" class="btn-secondary">ملء تلقائي من رقم الطلب</button>
+              <button type="submit" class="btn-primary" style="width:auto">إنشاء التذكرة</button>
             </div>
           </form>
 
           <div class="ticket-filters">
-            <input id="ticket-search" type="text" placeholder="Search order, customer, notes…" />
+            <input id="ticket-search" type="text" placeholder="بحث برقم الطلب أو العميل أو الملاحظات…" />
             <select id="ticket-filter-status">
-              <option value="all">All statuses</option>
-              <option value="open">Open</option>
-              <option value="waiting_customer">Waiting Customer</option>
-              <option value="waiting_courier">Waiting Courier</option>
-              <option value="waiting_supplier">Waiting Supplier</option>
-              <option value="escalated">Escalated</option>
-              <option value="resolved">Resolved</option>
-              <option value="closed">Closed</option>
+              <option value="all">كل الحالات</option>
+              <option value="open">مفتوحة</option>
+              <option value="waiting_customer">بانتظار العميل</option>
+              <option value="waiting_courier">Waiting شركة الشحن</option>
+              <option value="waiting_supplier">بانتظار المورد</option>
+              <option value="escalated">مصعّدة</option>
+              <option value="resolved">محلولة</option>
+              <option value="closed">مغلقة</option>
             </select>
             <select id="ticket-filter-priority">
-              <option value="all">All priorities</option>
-              <option value="emergency">Emergency</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="normal">Normal</option>
+              <option value="all">كل الأولويات</option>
+              <option value="emergency">طارئ</option>
+              <option value="high">عالي</option>
+              <option value="medium">متوسط</option>
+              <option value="normal">عادي</option>
             </select>
             <select id="ticket-filter-owner">
               <option value="all">All owners</option>
@@ -490,35 +490,35 @@
                     <div id="ticket-detail-title" class="ticket-detail-title">Ticket</div>
                     <div id="ticket-detail-sub" class="ticket-detail-sub">—</div>
                   </div>
-                  <span id="ticket-detail-priority" class="ticket-priority-pill">Normal</span>
+                  <span id="ticket-detail-priority" class="ticket-priority-pill">عادي</span>
                 </div>
 
                 <div class="ticket-detail-grid">
                   <label>
                     Status
                     <select id="ticket-detail-status">
-                      <option value="open">Open</option>
-                      <option value="waiting_customer">Waiting Customer</option>
-                      <option value="waiting_courier">Waiting Courier</option>
-                      <option value="waiting_supplier">Waiting Supplier</option>
-                      <option value="escalated">Escalated</option>
-                      <option value="resolved">Resolved</option>
-                      <option value="closed">Closed</option>
+                      <option value="open">مفتوحة</option>
+                      <option value="waiting_customer">بانتظار العميل</option>
+                      <option value="waiting_courier">Waiting شركة الشحن</option>
+                      <option value="waiting_supplier">بانتظار المورد</option>
+                      <option value="escalated">مصعّدة</option>
+                      <option value="resolved">محلولة</option>
+                      <option value="closed">مغلقة</option>
                     </select>
                   </label>
 
                   <label>
-                    Assign to
+                    تعيين إلى
                     <select id="ticket-detail-assigned"></select>
                   </label>
 
                   <label>
                     Priority
                     <select id="ticket-detail-priority-select">
-                      <option value="emergency">Emergency</option>
-                      <option value="high">High</option>
-                      <option value="medium">Medium</option>
-                      <option value="normal">Normal</option>
+                      <option value="emergency">طارئ</option>
+                      <option value="high">عالي</option>
+                      <option value="medium">متوسط</option>
+                      <option value="normal">عادي</option>
                     </select>
                   </label>
 
@@ -538,7 +538,7 @@
                 <div class="ticket-history-box" id="ticket-history-box"></div>
 
                 <label>
-                  Internal notes / handling log
+                  ملاحظات داخلية / handling log
                   <textarea id="ticket-detail-notes" rows="6"></textarea>
                 </label>
 
@@ -549,7 +549,7 @@
 
                 <div class="ticket-detail-actions">
                   <button id="ticket-escalate-btn" class="btn-secondary danger" type="button">Escalate</button>
-                  <button id="ticket-save-btn" class="btn-primary" type="button" style="width:auto">Save Changes</button>
+                  <button id="ticket-save-btn" class="btn-primary" type="button" style="width:auto">حفظ التعديلات</button>
                 </div>
               </div>
             </section>
@@ -564,7 +564,7 @@
         <section class="card reports-card">
           <div class="reports-top">
             <div>
-              <h2 style="margin:0">Daily Reports</h2>
+              <h2 style="margin:0">التقارير اليومية</h2>
               <p class="subtitle" style="margin:6px 0 0">Morning • Midday • End of shift — support handover and emergency visibility</p>
             </div>
           </div>
@@ -572,27 +572,27 @@
           <div id="report-alert" class="alert hidden"></div>
 
           <div class="report-snapshot-grid">
-            <div class="report-snap"><span>Open tickets</span><strong id="report-snap-open">0</strong></div>
-            <div class="report-snap emergency"><span>Emergency</span><strong id="report-snap-emergency">0</strong></div>
-            <div class="report-snap"><span>Escalated</span><strong id="report-snap-escalated">0</strong></div>
-            <div class="report-snap"><span>Delayed</span><strong id="report-snap-delayed">0</strong></div>
+            <div class="report-snap"><span>مفتوحة tickets</span><strong id="report-snap-open">0</strong></div>
+            <div class="report-snap emergency"><span>طارئ</span><strong id="report-snap-emergency">0</strong></div>
+            <div class="report-snap"><span>مصعّدة</span><strong id="report-snap-escalated">0</strong></div>
+            <div class="report-snap"><span>متأخر</span><strong id="report-snap-delayed">0</strong></div>
             <div class="report-snap"><span>Returns/Exchange</span><strong id="report-snap-returns">0</strong></div>
           </div>
 
           <div class="reports-layout">
             <form id="report-form" class="report-form">
               <div class="report-form-head">
-                <h3>Create Report</h3>
+                <h3>إنشاء تقرير</h3>
                 <span id="report-type-hint" class="report-form-note">Daily support summary.</span>
               </div>
 
               <div class="report-form-grid">
                 <label>
-                  Report type
+                  نوع التقرير
                   <select id="report-type">
-                    <option value="morning">Morning Report</option>
-                    <option value="midday">Midday Report</option>
-                    <option value="evening">End of Shift Report</option>
+                    <option value="morning">تقرير صباحي</option>
+                    <option value="midday">تقرير منتصف اليوم</option>
+                    <option value="evening">تقرير نهاية الدوام</option>
                   </select>
                 </label>
 
@@ -603,74 +603,74 @@
 
                 <label>
                   Title
-                  <input id="report-title" type="text" placeholder="Morning Report" />
+                  <input id="report-title" type="text" placeholder="تقرير صباحي" />
                 </label>
               </div>
 
               <label>
-                Emergency / urgent issues
+                طارئ / urgent issues
                 <textarea id="report-emergencies" rows="3" placeholder="Fake claims, address changes, angry customers, chargeback risks..."></textarea>
               </label>
 
               <label>
-                Delayed shipments
+                الشحنات المتأخرة
                 <textarea id="report-delayed" rows="3" placeholder="Orders with tracking not moving, late parcels, courier issues..."></textarea>
               </label>
 
               <label>
-                Solved tickets
+                التذاكر المحلولة
                 <textarea id="report-solved" rows="3" placeholder="Tickets solved during this shift..."></textarea>
               </label>
 
               <label>
-                Pending tomorrow / next shift
+                مؤجل للغد / للشفت التالي
                 <textarea id="report-pending" rows="3" placeholder="Cases that need follow-up next shift..."></textarea>
               </label>
 
               <label>
-                Returns / exchanges
+                الإرجاع / الاستبدال
                 <textarea id="report-returns" rows="3" placeholder="Return requests, exchange requests, wrong model/colour..."></textarea>
               </label>
 
               <label>
-                Angry or sensitive customers
-                <textarea id="report-angry" rows="3" placeholder="High-risk customers, public review threats, legal/bank mentions..."></textarea>
+                عملاء غاضبون أو حالات حساسة
+                <textarea id="report-angry" rows="3" placeholder="عالي-risk customers, public review threats, legal/bank mentions..."></textarea>
               </label>
 
               <label>
-                Action items
+                المهام المطلوبة
                 <textarea id="report-actions" rows="3" placeholder="What needs to be done, by who, and when..."></textarea>
               </label>
 
               <label>
-                General notes
+                ملاحظات عامة
                 <textarea id="report-notes" rows="3" placeholder="Any issue between staff, system problems, Shopify app issues, laptop/internet problems..."></textarea>
               </label>
 
               <div class="report-form-footer">
-                <button type="button" id="report-template-btn" class="btn-secondary">Use Template</button>
-                <button type="button" id="report-clear-form" class="btn-secondary">Clear</button>
-                <button type="submit" class="btn-primary" style="width:auto">Save Report</button>
+                <button type="button" id="report-template-btn" class="btn-secondary">استخدام القالب</button>
+                <button type="button" id="report-clear-form" class="btn-secondary">مسح</button>
+                <button type="submit" class="btn-primary" style="width:auto">حفظ التقرير</button>
               </div>
             </form>
 
             <aside class="reports-history">
               <div class="reports-history-head">
-                <h3>Report History</h3>
-                <p class="subtitle" style="margin:4px 0 0">Manager sees all. Supervisor sees team. Agent sees own reports.</p>
+                <h3>سجل التقارير</h3>
+                <p class="subtitle" style="margin:4px 0 0">المدير يرى الكل، المشرف يرى فريقه، والموظف يرى تقاريره فقط.</p>
               </div>
 
               <div class="report-filters">
-                <input id="report-search" type="text" placeholder="Search reports..." />
+                <input id="report-search" type="text" placeholder="بحث في التقارير..." />
                 <select id="report-filter-type">
-                  <option value="all">All types</option>
+                  <option value="all">كل الأنواع</option>
                   <option value="morning">Morning</option>
                   <option value="midday">Midday</option>
                   <option value="evening">Evening</option>
                 </select>
                 <select id="report-filter-owner">
-                  <option value="all">All visible</option>
-                  <option value="mine">Mine</option>
+                  <option value="all">كل الظاهر</option>
+                  <option value="mine">تقاريري</option>
                 </select>
                 <input id="report-filter-day" type="date" />
               </div>
@@ -689,23 +689,23 @@
         <div class="modal-card report-modal-card">
           <div class="modal-head">
             <div>
-              <div id="report-modal-title" class="modal-title">Report</div>
+              <div id="report-modal-title" class="modal-title">التقرير</div>
               <div id="report-modal-sub" class="modal-subtitle">—</div>
             </div>
             <button id="report-modal-close" class="modal-x" type="button" data-report-close>×</button>
           </div>
           <div class="modal-body report-modal-body">
-            <label>Emergency / urgent issues<textarea id="report-edit-emergencies" rows="3"></textarea></label>
-            <label>Delayed shipments<textarea id="report-edit-delayed" rows="3"></textarea></label>
-            <label>Solved tickets<textarea id="report-edit-solved" rows="3"></textarea></label>
-            <label>Pending tomorrow / next shift<textarea id="report-edit-pending" rows="3"></textarea></label>
-            <label>Returns / exchanges<textarea id="report-edit-returns" rows="3"></textarea></label>
-            <label>Angry or sensitive customers<textarea id="report-edit-angry" rows="3"></textarea></label>
-            <label>Action items<textarea id="report-edit-actions" rows="3"></textarea></label>
-            <label>General notes<textarea id="report-edit-notes" rows="3"></textarea></label>
+            <label>طارئ / urgent issues<textarea id="report-edit-emergencies" rows="3"></textarea></label>
+            <label>الشحنات المتأخرة<textarea id="report-edit-delayed" rows="3"></textarea></label>
+            <label>التذاكر المحلولة<textarea id="report-edit-solved" rows="3"></textarea></label>
+            <label>مؤجل للغد / للشفت التالي<textarea id="report-edit-pending" rows="3"></textarea></label>
+            <label>الإرجاع / الاستبدال<textarea id="report-edit-returns" rows="3"></textarea></label>
+            <label>عملاء غاضبون أو حالات حساسة<textarea id="report-edit-angry" rows="3"></textarea></label>
+            <label>المهام المطلوبة<textarea id="report-edit-actions" rows="3"></textarea></label>
+            <label>ملاحظات عامة<textarea id="report-edit-notes" rows="3"></textarea></label>
             <div class="modal-actions">
-              <button type="button" class="btn-secondary" data-report-close>Close</button>
-              <button type="button" id="report-save-edit" class="btn-primary" style="width:auto">Save Report Changes</button>
+              <button type="button" class="btn-secondary" data-report-close>إغلاق</button>
+              <button type="button" id="report-save-edit" class="btn-primary" style="width:auto">حفظ تعديلات التقرير</button>
             </div>
           </div>
         </div>
@@ -719,7 +719,7 @@
             <!-- SIDEBAR -->
             <aside class="messages-sidebar glass">
               <div class="ms-top">
-                <div class="ms-title">Messages</div>
+                <div class="ms-title">الرسائل</div>
 
                 <button
                   id="group-open-modal"
@@ -727,13 +727,13 @@
                   class="btn-secondary"
                   style="width:100%; margin:10px 0; display:none;"
                 >
-                  + Create Group
+                  + إنشاء Group
                 </button>
 
                 <!-- ✅ FIXED IDs to match messages.js hookSearch() -->
                 <div class="ms-search">
-                  <input id="messages-search" type="text" placeholder="Search name / room…" autocomplete="off" />
-                  <button type="button" class="ms-search-x" title="Clear">×</button>
+                  <input id="messages-search" type="text" placeholder="البحث باسم أو غرفة…" autocomplete="off" />
+                  <button type="button" class="ms-search-x" title="مسح">×</button>
                 </div>
               </div>
 
@@ -744,7 +744,7 @@
                   <div class="chat-row">
                     <div class="chat-avatar role-room">#</div>
                     <div class="chat-row-text">
-                      <div class="chat-room-title">General chat</div>
+                      <div class="chat-room-title">الدردشة العامة</div>
                       <div class="chat-room-sub">All agents &amp; supervisors</div>
                     </div>
                   </div>
@@ -755,9 +755,9 @@
                     <div class="chat-avatar role-supervisor">S</div>
                     <div class="chat-row-text">
                       <div class="chat-room-title">
-                        Supervisors <span class="room-badge">Supervisor only</span>
+                        المشرفون <span class="room-badge">للمشرفين فقط</span>
                       </div>
-                      <div class="chat-room-sub">Internal notes</div>
+                      <div class="chat-room-sub">ملاحظات داخلية</div>
                     </div>
                   </div>
                 </button>
@@ -767,9 +767,9 @@
                     <div class="chat-avatar role-ai">AI</div>
                     <div class="chat-row-text">
                       <div class="chat-room-title">
-                        ChatGPT 5 <span class="room-badge">Coming soon</span>
+                        ChatGPT 5 <span class="room-badge">قريباً</span>
                       </div>
-                      <div class="chat-room-sub">AI assistant room</div>
+                      <div class="chat-room-sub">غرفة المساعد الذكي</div>
                     </div>
                   </div>
                 </button>
@@ -778,13 +778,13 @@
               <!-- GROUPS -->
               <div class="messages-sidebar-header small">Groups</div>
               <div id="groups-list" class="ms-list" data-list="groups">
-                <div class="ms-empty" id="groups-empty">No groups yet</div>
+                <div class="ms-empty" id="groups-empty">لا توجد مجموعات بعد</div>
               </div>
 
               <!-- RECENT -->
               <div class="messages-sidebar-header small">Recent</div>
               <div id="recent-list" class="ms-list" data-list="recent">
-                <div class="ms-empty" id="recent-empty">No recent chats yet</div>
+                <div class="ms-empty" id="recent-empty">لا توجد محادثات حديثة</div>
               </div>
 
               <!-- DIRECT MESSAGES -->
@@ -799,7 +799,7 @@
                     </div>
                     <div class="chat-row-text">
                       <div class="chat-room-title" data-name="0001">Raghad Mousa</div>
-                      <div class="chat-room-sub" data-sub="0001">Direct chat</div>
+                      <div class="chat-room-sub" data-sub="0001">محادثة مباشرة</div>
                     </div>
                   </div>
                 </button>
@@ -812,7 +812,7 @@
                     </div>
                     <div class="chat-row-text">
                       <div class="chat-room-title" data-name="0002">Qamar Mousa</div>
-                      <div class="chat-room-sub" data-sub="0002">Direct chat</div>
+                      <div class="chat-room-sub" data-sub="0002">محادثة مباشرة</div>
                     </div>
                   </div>
                 </button>
@@ -825,7 +825,7 @@
                     </div>
                     <div class="chat-row-text">
                       <div class="chat-room-title" data-name="0003">USER Deleted</div>
-                      <div class="chat-room-sub" data-sub="0003">Direct chat</div>
+                      <div class="chat-room-sub" data-sub="0003">محادثة مباشرة</div>
                     </div>
                   </div>
                 </button>
@@ -838,7 +838,7 @@
                     </div>
                     <div class="chat-row-text">
                       <div class="chat-room-title" data-name="1001">Supervisor Dema</div>
-                      <div class="chat-room-sub" data-sub="1001">Direct chat</div>
+                      <div class="chat-room-sub" data-sub="1001">محادثة مباشرة</div>
                     </div>
                   </div>
                 </button>
@@ -851,7 +851,7 @@
                     </div>
                     <div class="chat-row-text">
                       <div class="chat-room-title" data-name="2001">Manager Mohammad</div>
-                      <div class="chat-room-sub" data-sub="2001">Direct chat</div>
+                      <div class="chat-room-sub" data-sub="2001">محادثة مباشرة</div>
                     </div>
                   </div>
                 </button>
@@ -862,9 +862,9 @@
             <!-- MAIN CHAT -->
             <div class="messages-main">
               <header class="chat-header">
-                <button id="chat-back" class="chat-back-btn" type="button">← Back</button>
+                <button id="chat-back" class="chat-back-btn" type="button">رجوع ←</button>
                 <div>
-                  <div class="chat-room-name" id="chat-room-name">Messages</div>
+                  <div class="chat-room-name" id="chat-room-name">الرسائل</div>
                   <div class="chat-room-desc" id="chat-room-desc">Start chatting…</div>
                 </div>
               </header>
@@ -880,11 +880,11 @@
                   id="chat-input"
                   type="text"
                   autocomplete="off"
-                  placeholder="Type a message…"
+                  placeholder="اكتب رسالة…"
                   class="chat-input"
                   disabled
                 />
-                <button type="submit" class="chat-send-btn" disabled>Send</button>
+                <button type="submit" class="chat-send-btn" disabled>إرسال</button>
               </form>
             </div>
 
@@ -896,7 +896,7 @@
 <div id="group-modal" class="modal hidden">
   <div class="modal-card">
     <div class="modal-head">
-      <div class="modal-title">Create Group</div>
+      <div class="modal-title">إنشاء Group</div>
       <button id="group-modal-close" type="button" class="modal-x">×</button>
     </div>
 
@@ -933,8 +933,8 @@
         </div>
 
         <div class="modal-actions">
-          <button type="button" id="group-cancel" class="btn-secondary">Cancel</button>
-          <button id="group-create-btn" type="submit" class="btn-primary">Create</button>
+          <button type="button" id="group-cancel" class="btn-secondary">إلغاء</button>
+          <button id="group-create-btn" type="submit" class="btn-primary">إنشاء</button>
         </div>
       </form>
     </div>
@@ -948,23 +948,23 @@
       <!-- LEFT SIDEBAR -->
       <aside class="meetings-sidebar glass">
         <div class="ms-top">
-          <div class="ms-title">Meetings</div>
+          <div class="ms-title">الاجتماعات</div>
 
           <div class="ms-search">
-            <input id="meeting-search" type="text" placeholder="Search meeting ID / title / host…" autocomplete="off" />
-            <button type="button" id="meeting-search-clear" class="ms-search-x" title="Clear">×</button>
+            <input id="meeting-search" type="text" placeholder="البحث برقم الاجتماع / العنوان / المضيف…" autocomplete="off" />
+            <button type="button" id="meeting-search-clear" class="ms-search-x" title="مسح">×</button>
           </div>
         </div>
 
-        <!-- Create (Supervisor only) -->
+        <!-- إنشاء (للمشرفين فقط) -->
         <div id="create-meeting-box" class="create-meeting hidden">
-          <div class="meetings-sidebar-header small">Create</div>
+          <div class="meetings-sidebar-header small">إنشاء</div>
 
           <div class="create-row">
-            <input id="create-title" type="text" placeholder="Title (e.g. Daily briefing)" autocomplete="off" />
+            <input id="create-title" type="text" placeholder="العنوان (مثلاً: اجتماع يومي)" autocomplete="off" />
           </div>
           <div class="create-row">
-            <input id="create-link" type="url" placeholder="Paste Google Meet / Zoom / Teams link" autocomplete="off" />
+            <input id="create-link" type="url" placeholder="ضع رابط Google Meet / Zoom / Teams" autocomplete="off" />
           </div>
 
           <div class="create-row two">
@@ -973,37 +973,37 @@
           </div>
 
           <div class="create-row two">
-            <input id="create-id" type="text" placeholder="Meeting ID" autocomplete="off" readonly />
-            <input id="create-pass" type="text" placeholder="Access code" autocomplete="off" readonly />
+            <input id="create-id" type="text" placeholder="رقم الاجتماع" autocomplete="off" readonly />
+            <input id="create-pass" type="text" placeholder="كود الدخول" autocomplete="off" readonly />
           </div>
 
           <div class="create-actions">
-            <button id="btn-new-pass" class="btn-secondary" type="button">New password</button>
-            <button id="create-meeting-btn" class="btn-primary" type="button">Create</button>
+            <button id="btn-new-pass" class="btn-secondary" type="button">كود جديد</button>
+            <button id="create-meeting-btn" class="btn-primary" type="button">إنشاء</button>
           </div>
 
           <div class="create-hint">Paste the meeting link. The meeting expires 1 hour after start. Missing staff can be reviewed.</div>
         </div>
 
-        <div class="meetings-sidebar-header small">Upcoming</div>
+        <div class="meetings-sidebar-header small">الاجتماعات القادمة</div>
         <div id="meetings-list" class="ms-list"></div>
-        <div class="ms-empty" id="meetings-empty">No upcoming meetings</div>
+        <div class="ms-empty" id="meetings-empty">لا توجد اجتماعات قادمة</div>
       </aside>
 
       <!-- RIGHT MAIN -->
       <div class="meetings-main">
         <header class="chat-header">
           <div>
-            <div class="chat-room-name">Meeting link</div>
-            <div class="chat-room-desc">Enter Meeting ID and click Join. The system records attendance.</div>
+            <div class="chat-room-name">رابط الاجتماع</div>
+            <div class="chat-room-desc">أدخل رقم الاجتماع واضغط فتح الرابط. سيتم تسجيل الحضور تلقائياً.</div>
           </div>
         </header>
 
         <div class="meeting-join">
           <div class="meeting-join-row">
-            <input id="join-meeting-id" type="text" placeholder="Meeting ID" autocomplete="off" />
-            <input id="join-meeting-pass" type="password" placeholder="Access code" autocomplete="off" />
-            <button id="join-meeting-btn" class="btn-primary" type="button">Open Link</button>
+            <input id="join-meeting-id" type="text" placeholder="رقم الاجتماع" autocomplete="off" />
+            <input id="join-meeting-pass" type="password" placeholder="كود الدخول" autocomplete="off" />
+            <button id="join-meeting-btn" class="btn-primary" type="button">مفتوحة Link</button>
           </div>
 
           <!-- STAGE -->
@@ -1026,7 +1026,7 @@
           </div>
 
           <div class="meeting-note">
-            Manager/Supervisor can paste a Google Meet or Zoom link. Clicking Open Link records attendance. After 1 hour, non-clicked staff can be treated as missing.
+            Manager/Supervisor can paste a Google Meet or Zoom link. Clicking مفتوحة Link records attendance. After 1 hour, non-clicked staff can be treated as missing.
           </div>
         </div>
       </div>
@@ -1040,8 +1040,8 @@
         <section class="card payroll-card">
           <div class="payroll-top">
             <div>
-              <h2 style="margin:0">Hours & Payroll</h2>
-              <p class="subtitle" style="margin:6px 0 0">Track worked time, 45-minute breaks, late breaks, and estimated pay.</p>
+              <h2 style="margin:0">الساعات والرواتب</h2>
+              <p class="subtitle" style="margin:6px 0 0">متابعة ساعات العمل، الاستراحة 45 دقيقة، التأخير، والأجر المتوقع.</p>
             </div>
           </div>
 
@@ -1049,52 +1049,52 @@
 
           <div class="payroll-filters">
             <label>
-              From
+              من
               <input id="payroll-from" type="date" />
             </label>
             <label>
-              To
+              إلى
               <input id="payroll-to" type="date" />
             </label>
             <label>
-              Staff
+              الموظف
               <select id="payroll-staff-filter">
-                <option value="all">All visible staff</option>
+                <option value="all">كل الظاهر staff</option>
               </select>
             </label>
-            <button id="payroll-this-week" type="button" class="btn-secondary">This Week</button>
-            <button id="payroll-refresh" type="button" class="btn-primary" style="width:auto">Refresh</button>
+            <button id="payroll-this-week" type="button" class="btn-secondary">هذا الأسبوع</button>
+            <button id="payroll-refresh" type="button" class="btn-primary" style="width:auto">تحديث</button>
           </div>
 
           <div class="payroll-summary-grid">
-            <div class="payroll-snap"><span>Total worked</span><strong id="payroll-sum-worked">0 min</strong></div>
+            <div class="payroll-snap"><span>إلىtal worked</span><strong id="payroll-sum-worked">0 min</strong></div>
             <div class="payroll-snap"><span>Operation</span><strong id="payroll-sum-operation">0 min</strong></div>
-            <div class="payroll-snap"><span>Break used</span><strong id="payroll-sum-break">0 min</strong></div>
-            <div class="payroll-snap warning"><span>Late breaks</span><strong id="payroll-sum-late">0</strong></div>
-            <div class="payroll-snap"><span>Estimated pay</span><strong id="payroll-sum-pay">—</strong></div>
+            <div class="payroll-snap"><span>الاستراحة المستخدمة</span><strong id="payroll-sum-break">0 min</strong></div>
+            <div class="payroll-snap warning"><span>الاستراحات المتأخرة</span><strong id="payroll-sum-late">0</strong></div>
+            <div class="payroll-snap"><span>الأجر المتوقع</span><strong id="payroll-sum-pay">—</strong></div>
           </div>
 
           <div id="payroll-rate-panel" class="payroll-rate-panel hidden">
-            <h3>Manager Rate Settings</h3>
-            <p class="subtitle">Manager/Admin can set hourly rate and currency. New calculations use these values.</p>
+            <h3>إعدادات أجر الساعة</h3>
+            <p class="subtitle">يمكن للمدير/الأدمن تحديد أجر الساعة والعملة. الحسابات الجديدة تستخدم هذه القيم.</p>
             <div class="payroll-rate-grid">
               <label>
-                Staff member
+                الموظف member
                 <select id="payroll-rate-staff"></select>
               </label>
               <label>
-                Hourly rate
+                أجر الساعة
                 <input id="payroll-rate-value" type="number" min="0" step="0.01" placeholder="1.25" />
               </label>
               <label>
-                Currency
+                العملة
                 <select id="payroll-rate-currency">
                   <option value="USD">USD</option>
                   <option value="GBP">GBP</option>
                 </select>
               </label>
-              <button id="payroll-save-rate" type="button" class="btn-primary" style="width:auto">Save Rate</button>
-              <div id="payroll-rate-status" class="payroll-rate-status">Select staff to view current rate.</div>
+              <button id="payroll-save-rate" type="button" class="btn-primary" style="width:auto">حفظ الأجر</button>
+              <div id="payroll-rate-status" class="payroll-rate-status">اختر موظفاً لعرض الأجر الحالي.</div>
             </div>
           </div>
 
@@ -1102,24 +1102,24 @@
             <table class="payroll-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Staff</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Operation</th>
-                  <th>Meeting</th>
-                  <th>Handling</th>
-                  <th>Break</th>
-                  <th>Unavailable</th>
-                  <th>Worked</th>
-                  <th>Rate</th>
-                  <th>Est. pay</th>
-                  <th>Break note</th>
+                  <th>التاريخ</th>
+                  <th>الموظف</th>
+                  <th>الدور</th>
+                  <th>الحالة</th>
+                  <th>تشغيل</th>
+                  <th>اجتماع</th>
+                  <th>متابعة حالة</th>
+                  <th>استراحة</th>
+                  <th>غير متاح</th>
+                  <th>العمل</th>
+                  <th>الأجر</th>
+                  <th>الأجر المتوقع</th>
+                  <th>ملاحظة الاستراحة</th>
                 </tr>
               </thead>
               <tbody id="payroll-table-body"></tbody>
             </table>
-            <div id="payroll-empty" class="ms-empty hidden">No payroll records found for this period.</div>
+            <div id="payroll-empty" class="ms-empty hidden">لا توجد سجلات رواتب لهذه الفترة.</div>
           </div>
         </section>
       </section>
@@ -1127,58 +1127,58 @@
       <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
         <div class="card">
-          <h2>Settings</h2>
-          <p class="subtitle">Update personal info</p>
+          <h2>الإعدادات</h2>
+          <p class="subtitle">تحديث المعلومات الشخصية</p>
 
           <div id="settings-alert" class="alert hidden"></div>
           <form id="settings-form">
             <label>
-              Full Name
-              <input type="text" id="set-name" placeholder="Your display name" />
-              <small class="hint">Code: <span id="set-staff-code">—</span> • Role: <span id="set-role">—</span></small>
+              الاسم الكامل
+              <input type="text" id="set-name" placeholder="الاسم الظاهر" />
+              <small class="hint">الكود: <span id="set-staff-code">—</span> • الدور: <span id="set-role">—</span></small>
             </label>
 
             <label>
-              Theme colour
+              لون الواجهة
               <select id="set-gender">
-                <option value="">Default Pink</option>
-                <option value="female">Pink</option>
-                <option value="male">Blue</option>
-                <option value="orange">Orange</option>
-                <option value="green">Green</option>
-                <option value="navy">Navy Blue</option>
-                <option value="red">Red</option>
+                <option value="">وردي افتراضي</option>
+                <option value="female">وردي</option>
+                <option value="male">أزرق</option>
+                <option value="orange">برتقالي</option>
+                <option value="green">أخضر</option>
+                <option value="navy">كحلي</option>
+                <option value="red">أحمر</option>
               </select>
             </label>
 
             <label>
-              Background
+              الخلفية
               <select id="set-background">
-                <option value="default">Default gradient</option>
-                <option value="soft">Soft glass</option>
-                <option value="night">Night focus</option>
-                <option value="grid">Light grid</option>
-                <option value="custom">Uploaded image</option>
+                <option value="default">تدرج افتراضي</option>
+                <option value="soft">زجاج ناعم</option>
+                <option value="night">تركيز ليلي</option>
+                <option value="grid">شبكة فاتحة</option>
+                <option value="custom">صورة مرفوعة</option>
               </select>
             </label>
 
             <label>
-              Upload background image (optional)
+              رفع صورة خلفية (اختياري)
               <input type="file" id="set-bg-upload" accept="image/*" />
-              <small class="hint">For testing it saves locally first. Firestore sync works after the database is created.</small>
+              <small class="hint">للتجربة يتم الحفظ محلياً أولاً. المزامنة مع Firestore تعمل بعد إنشاء قاعدة البيانات.</small>
             </label>
 
             <label>
-              Birthday
+              تاريخ الميلاد
               <input type="date" id="set-birthday" />
             </label>
 
             <label>
-              Notes
-              <textarea id="set-notes" placeholder="Report any issue..."></textarea>
+              الملاحظات
+              <textarea id="set-notes" placeholder="اكتب أي ملاحظة أو مشكلة..."></textarea>
             </label>
 
-            <button type="submit" class="btn-primary">Save</button>
+            <button type="submit" class="btn-primary">حفظ</button>
           </form>
         </div>
       </section>
@@ -1192,7 +1192,7 @@
   <!-- FLOATING CHAT PANEL -->
   <div id="float-chat-panel" class="floating-chat-panel hidden">
     <div class="floating-chat-header">
-      <div class="floating-chat-title">TeleSyriana chat</div>
+      <div class="floating-chat-title">دردشة TeleSyriana</div>
       <button id="float-chat-close" class="floating-chat-close" type="button">×</button>
     </div>
     <!-- messages.js will inject the body UI here -->
