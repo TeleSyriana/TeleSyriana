@@ -694,17 +694,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     updatePresence(false).catch(() => {});
   });
 
-  const savedUser = localStorage.getItem(USER_KEY);
-  if (savedUser) {
-    const u = JSON.parse(savedUser);
-    if (USERS[u.id]) {
-      // Refresh saved sessions from the current role map, so role changes apply after updates.
-      currentUser = safeUserPayload(u.id);
-      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
-      await initStateForUser();
-      showDashboard();
-      return;
+  try {
+    const savedUser = localStorage.getItem(USER_KEY);
+    if (savedUser) {
+      const u = JSON.parse(savedUser);
+      if (USERS[u.id]) {
+        // Refresh saved sessions from the current role map, so role changes apply after updates.
+        currentUser = safeUserPayload(u.id);
+        localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+        await initStateForUser();
+        showDashboard();
+        return;
+      }
     }
+  } catch (err) {
+    console.warn("Saved session ignored:", err);
+    localStorage.removeItem(USER_KEY);
   }
 
   showLogin();
@@ -747,23 +752,40 @@ async function handleLogin(e) {
 
   const id = document.getElementById("ccmsId")?.value?.trim() || "";
   const pw = document.getElementById("password")?.value || "";
+  const submitBtn = e?.target?.querySelector('button[type="submit"]');
 
-  if (!USERS[id]) return showError("User not found.");
+  if (!USERS[id]) return showError("User not found. Try 0001, 0002, 1001, 2001 or 9001.");
   if (USERS[id].password !== pw) return showError("Incorrect password.");
 
-  currentUser = safeUserPayload(id);
-  localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+  try {
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.dataset.originalText = submitBtn.textContent;
+      submitBtn.textContent = "Logging in...";
+    }
 
-  // reset throttling for new session
-  lastSyncMs = 0;
-  lastSyncStatus = null;
-  lastSyncPayloadHash = "";
+    currentUser = safeUserPayload(id);
+    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
-  window.dispatchEvent(new Event("telesyriana:user-changed"));
-  document.getElementById("login-error")?.classList.add("hidden");
+    // reset throttling for new session
+    lastSyncMs = 0;
+    lastSyncStatus = null;
+    lastSyncPayloadHash = "";
 
-  await initStateForUser();
-  showDashboard();
+    document.getElementById("login-error")?.classList.add("hidden");
+
+    await initStateForUser();
+    showDashboard();
+    window.dispatchEvent(new Event("telesyriana:user-changed"));
+  } catch (err) {
+    console.error("Login failed:", err);
+    showError(`Login failed: ${err?.message || err}`);
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = submitBtn.dataset.originalText || "Login";
+    }
+  }
 }
 
 async function handleLogout() {
@@ -849,48 +871,58 @@ async function handleStatusChange(e) {
 
 /* ---------------------------- Init Session ------------------------------ */
 
+function buildDefaultDayState(now = Date.now()) {
+  return {
+    userId: currentUser?.id || "",
+    day: getTodayKey(),
+    status: "in_operation",
+    lastStatusChange: now,
+    breakUsedMinutes: 0,
+    operationMinutes: 0,
+    meetingMinutes: 0,
+    handlingMinutes: 0,
+    unavailableMinutes: 0,
+    loginTime: now,
+  };
+}
+
 async function initStateForUser() {
   const today = getTodayKey();
   const now = Date.now();
 
-  const local = loadStateForToday(currentUser.id);
-  if (local) {
-    state = local;
-    finishInit(now);
-    return;
-  }
+  try {
+    const local = loadStateForToday(currentUser.id);
+    if (local) {
+      state = local;
+      finishInit(now);
+      return;
+    }
 
-  const docId = `${today}_${currentUser.id}`;
-  const ref = doc(collection(db, AGENT_DAYS_COL), docId);
-  const snap = await getDoc(ref);
+    const docId = `${today}_${currentUser.id}`;
+    const ref = doc(collection(db, AGENT_DAYS_COL), docId);
+    const snap = await getDoc(ref);
 
-  if (snap.exists()) {
-    const d = snap.data();
-    state = {
-      userId: currentUser.id,
-      day: today,
-      status: d.status || "in_operation",
-      lastStatusChange: now,
-      breakUsedMinutes: d.breakUsedMinutes || 0,
-      operationMinutes: d.operationMinutes || 0,
-      meetingMinutes: d.meetingMinutes || 0,
-      handlingMinutes: d.handlingMinutes || 0,
-      unavailableMinutes: d.unavailableMinutes || 0,
-      loginTime: d.loginTime || now,
-    };
-  } else {
-    state = {
-      userId: currentUser.id,
-      day: today,
-      status: "in_operation",
-      lastStatusChange: now,
-      breakUsedMinutes: 0,
-      operationMinutes: 0,
-      meetingMinutes: 0,
-      handlingMinutes: 0,
-      unavailableMinutes: 0,
-      loginTime: now,
-    };
+    if (snap.exists()) {
+      const d = snap.data();
+      state = {
+        userId: currentUser.id,
+        day: today,
+        status: d.status || "in_operation",
+        lastStatusChange: now,
+        breakUsedMinutes: d.breakUsedMinutes || 0,
+        operationMinutes: d.operationMinutes || 0,
+        meetingMinutes: d.meetingMinutes || 0,
+        handlingMinutes: d.handlingMinutes || 0,
+        unavailableMinutes: d.unavailableMinutes || 0,
+        loginTime: d.loginTime || now,
+      };
+    } else {
+      state = buildDefaultDayState(now);
+    }
+  } catch (err) {
+    console.error("Login state init failed. Starting local session instead:", err);
+    state = buildDefaultDayState(now);
+    showToast?.("Logged in locally. Firebase read failed; check rules/network.", "warning");
   }
 
   saveState();
