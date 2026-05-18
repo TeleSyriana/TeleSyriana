@@ -3070,6 +3070,7 @@ html[dir="rtl"] .hint {
 
   html[dir="rtl"] body.menu-open #main-nav.main-nav {
     transform: translateX(0) !important;
+    padding-top: 80px !important;
   }
 
   html[dir="rtl"] .main-nav .nav-link,
