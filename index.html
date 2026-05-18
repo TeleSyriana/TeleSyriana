@@ -16,6 +16,7 @@
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
         <button class="nav-link" data-page="tickets">Tickets</button>
+        <button class="nav-link" data-page="reports">Reports</button>
 
         <!-- ✅ UPDATED: Messages nav badge holder -->
         <button class="nav-link" data-page="messages" id="nav-messages">
@@ -535,6 +536,131 @@
         </section>
       </section>
 
+
+
+      <!-- REPORTS PAGE -->
+      <section id="page-reports" class="page-section hidden">
+        <section class="card reports-card">
+          <div class="reports-top">
+            <div>
+              <h2 style="margin:0">Daily Reports</h2>
+              <p class="subtitle" style="margin:6px 0 0">Morning • Midday • End of shift — support handover and emergency visibility</p>
+            </div>
+          </div>
+
+          <div id="report-alert" class="alert hidden"></div>
+
+          <div class="report-snapshot-grid">
+            <div class="report-snap"><span>Open tickets</span><strong id="report-snap-open">0</strong></div>
+            <div class="report-snap emergency"><span>Emergency</span><strong id="report-snap-emergency">0</strong></div>
+            <div class="report-snap"><span>Escalated</span><strong id="report-snap-escalated">0</strong></div>
+            <div class="report-snap"><span>Delayed</span><strong id="report-snap-delayed">0</strong></div>
+            <div class="report-snap"><span>Returns/Exchange</span><strong id="report-snap-returns">0</strong></div>
+          </div>
+
+          <div class="reports-layout">
+            <form id="report-form" class="report-form">
+              <div class="report-form-head">
+                <h3>Create Report</h3>
+                <span id="report-type-hint" class="report-form-note">Daily support summary.</span>
+              </div>
+
+              <div class="report-form-grid">
+                <label>
+                  Report type
+                  <select id="report-type">
+                    <option value="morning">Morning Report</option>
+                    <option value="midday">Midday Report</option>
+                    <option value="evening">End of Shift Report</option>
+                  </select>
+                </label>
+
+                <label>
+                  Date
+                  <input id="report-day" type="date" />
+                </label>
+
+                <label>
+                  Title
+                  <input id="report-title" type="text" placeholder="Morning Report" />
+                </label>
+              </div>
+
+              <label>
+                Emergency / urgent issues
+                <textarea id="report-emergencies" rows="3" placeholder="Fake claims, address changes, angry customers, chargeback risks..."></textarea>
+              </label>
+
+              <label>
+                Delayed shipments
+                <textarea id="report-delayed" rows="3" placeholder="Orders with tracking not moving, late parcels, courier issues..."></textarea>
+              </label>
+
+              <label>
+                Solved tickets
+                <textarea id="report-solved" rows="3" placeholder="Tickets solved during this shift..."></textarea>
+              </label>
+
+              <label>
+                Pending tomorrow / next shift
+                <textarea id="report-pending" rows="3" placeholder="Cases that need follow-up next shift..."></textarea>
+              </label>
+
+              <label>
+                Returns / exchanges
+                <textarea id="report-returns" rows="3" placeholder="Return requests, exchange requests, wrong model/colour..."></textarea>
+              </label>
+
+              <label>
+                Angry or sensitive customers
+                <textarea id="report-angry" rows="3" placeholder="High-risk customers, public review threats, legal/bank mentions..."></textarea>
+              </label>
+
+              <label>
+                Action items
+                <textarea id="report-actions" rows="3" placeholder="What needs to be done, by who, and when..."></textarea>
+              </label>
+
+              <label>
+                General notes
+                <textarea id="report-notes" rows="3" placeholder="Any issue between staff, system problems, Shopify app issues, laptop/internet problems..."></textarea>
+              </label>
+
+              <div class="report-form-footer">
+                <button type="button" id="report-template-btn" class="btn-secondary">Use Template</button>
+                <button type="button" id="report-clear-form" class="btn-secondary">Clear</button>
+                <button type="submit" class="btn-primary" style="width:auto">Save Report</button>
+              </div>
+            </form>
+
+            <aside class="reports-history">
+              <div class="reports-history-head">
+                <h3>Report History</h3>
+                <p class="subtitle" style="margin:4px 0 0">Manager sees all. Supervisor sees team. Agent sees own reports.</p>
+              </div>
+
+              <div class="report-filters">
+                <input id="report-search" type="text" placeholder="Search reports..." />
+                <select id="report-filter-type">
+                  <option value="all">All types</option>
+                  <option value="morning">Morning</option>
+                  <option value="midday">Midday</option>
+                  <option value="evening">Evening</option>
+                </select>
+                <select id="report-filter-owner">
+                  <option value="all">All visible</option>
+                  <option value="mine">Mine</option>
+                </select>
+                <input id="report-filter-day" type="date" />
+              </div>
+
+              <div id="reports-list" class="reports-list"></div>
+              <div id="reports-empty" class="ms-empty hidden">No reports found</div>
+            </aside>
+          </div>
+        </section>
+      </section>
+
       <!-- MESSAGES PAGE -->
       <section id="page-messages" class="page-section hidden">
         <section class="card messages-card">
@@ -911,6 +1037,7 @@
   <script type="module" src="app.js"></script>
   <script type="module" src="tasks.js"></script>
   <script type="module" src="tickets.js"></script>
+  <script type="module" src="reports.js"></script>
   <script type="module" src="messages.js"></script>
   <script type="module" src="groups.js"></script>
   <script type="module" src="meetings.js"></script>
