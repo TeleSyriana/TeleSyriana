@@ -3158,9 +3158,9 @@ body[data-language="ar"] input[id*="tracking" i] { direction: ltr; text-align: l
     box-shadow:0 14px 34px rgba(15,23,42,.18) !important;
   }
   body[data-language="ar"] #mobile-menu-toggle.mobile-menu-toggle,
-  html[dir="rtl"] #mobile-menu-toggle.mobile-menu-toggle{ right:22px !important; left:auto !important; }
+  html[dir="rtl"] #mobile-menu-toggle.mobile-menu-toggle{  left:auto !important; }
   body[data-language="en"] #mobile-menu-toggle.mobile-menu-toggle,
-  html[dir="ltr"] #mobile-menu-toggle.mobile-menu-toggle{ left:22px !important; right:auto !important; }
+  html[dir="ltr"] #mobile-menu-toggle.mobile-menu-toggle{  right:auto !important; }
 
   #main-nav.main-nav{
     padding-top:104px !important;
