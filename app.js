@@ -159,20 +159,11 @@ function getTodayKey() {
 }
 
 function statusLabel(code) {
-  switch (code) {
-    case "in_operation":
-      return "Operating";
-    case "break":
-      return "Break";
-    case "meeting":
-      return "Meeting";
-    case "handling":
-      return "Handling";
-    case "unavailable":
-      return "Unavailable";
-    default:
-      return code;
-  }
+  const ar = getLanguage && getLanguage() === "ar";
+  const labels = ar
+    ? { in_operation: "قيد التشغيل", break: "استراحة", meeting: "في اجتماع", handling: "متابعة حالة", unavailable: "غير متاح" }
+    : { in_operation: "Operating", break: "Break", meeting: "Meeting", handling: "Handling", unavailable: "Unavailable" };
+  return labels[code] || code;
 }
 
 /**
@@ -708,7 +699,8 @@ function subscribeIssueCalendar() {
 /* --------------------------- UI init ------------------------------------ */
 
 document.addEventListener("DOMContentLoaded", async () => {
-  applyLanguage(localStorage.getItem(LANGUAGE_KEY) || "ar");
+  ensureBackgroundRemoveControl();
+  applyLanguage(localStorage.getItem(LANGUAGE_KEY) || "en");
   // ✅ menu navigation
   document.querySelectorAll(".nav-link").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -1077,7 +1069,7 @@ function updateDashboardUI() {
   const statusValue = document.getElementById("status-value");
   const statusSelect = document.getElementById("status-select");
 
-  if (welcomeTitle) welcomeTitle.textContent = `مرحباً، ${currentUser.name}`;
+  if (welcomeTitle) welcomeTitle.textContent = getLanguage() === "ar" ? `مرحباً، ${currentUser.name}` : `Welcome, ${currentUser.name}`;
   if (welcomeSubtitle) {
     welcomeSubtitle.textContent = `Logged in as ${currentUser.role.toUpperCase()} (CCMS: ${currentUser.id})`;
   }
@@ -1316,6 +1308,8 @@ const UI_TEXT = {
     notes: "الملاحظات",
     save: "حفظ",
     menu: "القائمة",
+    removeBg: "حذف الخلفية المرفوعة",
+    bgHint: "يتم الحفظ محلياً أولاً للتجربة. المزامنة مع Firestore تعمل بعد إنشاء قاعدة البيانات.",
   },
   en: {
     nav: {
@@ -1342,6 +1336,8 @@ const UI_TEXT = {
     notes: "Notes",
     save: "Save",
     menu: "Menu",
+    removeBg: "Remove uploaded background",
+    bgHint: "Saved locally first for testing. Firestore sync works after the database is created.",
   }
 };
 
@@ -1353,7 +1349,7 @@ function getLanguage() {
     }
   } catch {}
   const stored = localStorage.getItem(LANGUAGE_KEY);
-  return stored === "en" ? "en" : "ar";
+  return stored === "ar" ? "ar" : "en";
 }
 
 function setText(selector, value) {
@@ -1425,12 +1421,16 @@ function applyLanguage(language = "ar") {
   setLabelFor("set-language", dict.language, dict.languageHint);
   setLabelFor("set-gender", dict.theme);
   setLabelFor("set-background", dict.background);
-  setLabelFor("set-bg-upload", dict.uploadBg);
+  setLabelFor("set-bg-upload", dict.uploadBg, dict.bgHint);
+  setText("#remove-bg-btn", dict.removeBg);
   setLabelFor("set-birthday", dict.birthday);
   setLabelFor("set-notes", dict.notes);
   setText('#settings-form button[type="submit"]', dict.save);
   const menuTitle = document.querySelector(".mobile-drawer-title");
   if (menuTitle) menuTitle.textContent = dict.menu;
+  const mainNav = document.getElementById("main-nav");
+  if (mainNav) mainNav.dataset.menuTitle = dict.menu;
+  translateStaticUI(lang);
 
   // Let feature modules translate their own static UI.
   try { window.dispatchEvent(new CustomEvent("telesyriana:language-changed", { detail: { language: lang } })); } catch {}
@@ -1549,7 +1549,7 @@ async function handleSettingsSave(e) {
       },
       { merge: true }
     );
-    showSettingsAlert("تم حفظ الإعدادات بنجاح.");
+    showSettingsAlert(getLanguage() === "ar" ? "تم حفظ الإعدادات بنجاح." : "Settings saved successfully.");
   } catch (err) {
     console.error("settings save failed", err);
     showSettingsAlert(`تم الحفظ محلياً، لكن فشل حفظ Firestore: ${err?.code || err?.message || "تحقق من الصلاحيات أو الاتصال"}`, true);
@@ -1580,11 +1580,39 @@ document.addEventListener("change", (e) => {
       const bgEl = document.getElementById("set-background");
       if (bgEl) bgEl.value = "custom";
       applyBackground("custom", img);
-      showSettingsAlert("تم تحميل الخلفية محلياً. اضغط حفظ للمزامنة عندما تكون Firestore جاهزة.");
+      showSettingsAlert(getLanguage() === "ar" ? "تم تحميل الخلفية محلياً. اضغط حفظ للمزامنة عندما تكون Firestore جاهزة." : "Background uploaded locally. Press Save to sync when Firestore is ready.");
     };
     reader.readAsDataURL(file);
   }
 });
+
+async function removeUploadedBackground() {
+  if (!currentUser) return;
+  let cached = {};
+  try { cached = JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}"); } catch {}
+  delete cached.backgroundImage;
+  cached.background = "default";
+  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify(cached));
+  const bgEl = document.getElementById("set-background");
+  const uploadEl = document.getElementById("set-bg-upload");
+  if (bgEl) bgEl.value = "default";
+  if (uploadEl) uploadEl.value = "";
+  applyBackground("default", "");
+  try {
+    await setDoc(doc(collection(db, USER_PROFILE_COL), currentUser.id), { background: "default", backgroundImage: "", updatedAt: serverTimestamp() }, { merge: true });
+    showSettingsAlert(getLanguage() === "ar" ? "تم حذف الخلفية المرفوعة." : "Uploaded background removed.");
+  } catch (err) {
+    console.warn("remove background saved locally only", err);
+    showSettingsAlert(getLanguage() === "ar" ? "تم حذف الخلفية محلياً. المزامنة تحتاج Firestore." : "Background removed locally. Firestore sync needs the database.", true);
+  }
+}
+
+function ensureBackgroundRemoveControl() {
+  const btn = document.getElementById("remove-bg-btn");
+  if (!btn || btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", () => removeUploadedBackground());
+}
 
 /* --------------------------- View switching ----------------------------- */
 
