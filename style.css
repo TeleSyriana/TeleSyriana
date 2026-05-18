@@ -2828,7 +2828,7 @@ body[data-bg="custom"]{
   .actions{ display:block; }
   .login-layout{ flex-direction:column; }
   .login-banner{ display:none; }
-  .card{ padding:22px 18px; border-radius:24px; }
+  .card{ border-radius:24px; }
   .dashboard-layout{ display:block; }
   .dashboard-main,.dashboard-side{ margin-bottom:18px; }
   .quick-status-row{ grid-template-columns:1fr 1fr; }
