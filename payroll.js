@@ -123,6 +123,12 @@ function canViewRow(row) {
   return row.userId === currentUser.id;
 }
 
+function staffLabel(id) {
+  const s = getStaffBase(id);
+  const rate = getStaffRate(id);
+  return `${s.name} (${id}) — ${rate.currency} ${Number(rate.hourlyRate || 0).toFixed(2)}/hr`;
+}
+
 function populateStaffFilters() {
   const filter = el("payroll-staff-filter");
   const rateStaff = el("payroll-rate-staff");
@@ -131,18 +137,16 @@ function populateStaffFilters() {
   if (filter) {
     const existing = filter.value || "all";
     filter.innerHTML = `<option value="all">All visible staff</option>` + visibleIds.map((id) => {
-      const s = getStaffBase(id);
-      return `<option value="${id}">${s.name} (${id})</option>`;
+      return `<option value="${id}">${staffLabel(id)}</option>`;
     }).join("");
     filter.value = visibleIds.includes(existing) ? existing : "all";
   }
 
   if (rateStaff) {
+    const existing = rateStaff.value || "";
     const allIds = Object.keys(STAFF);
-    rateStaff.innerHTML = allIds.map((id) => {
-      const s = getStaffBase(id);
-      return `<option value="${id}">${s.name} (${id})</option>`;
-    }).join("");
+    rateStaff.innerHTML = allIds.map((id) => `<option value="${id}">${staffLabel(id)}</option>`).join("");
+    if (allIds.includes(existing)) rateStaff.value = existing;
     syncRateEditor();
   }
 }
@@ -242,7 +246,10 @@ function syncRateEditor() {
   const rate = getStaffRate(id);
   if (el("payroll-rate-value")) el("payroll-rate-value").value = String(rate.hourlyRate || 0);
   if (el("payroll-rate-currency")) el("payroll-rate-currency").value = rate.currency || "USD";
+  const status = el("payroll-rate-status");
+  if (status) status.textContent = `Current saved rate: ${rate.currency || "USD"} ${Number(rate.hourlyRate || 0).toFixed(2)} / hour`;
 }
+
 
 function showAlert(message, danger = false) {
   const box = el("payroll-alert");
@@ -261,16 +268,25 @@ async function saveRate() {
   if (!id) return showAlert("Select staff member first.", true);
   if (Number.isNaN(hourlyRate) || hourlyRate < 0) return showAlert("Hourly rate must be 0 or higher.", true);
 
-  await setDoc(doc(collection(db, STAFF_SETTINGS_COL), id), {
-    userId: id,
-    hourlyRate,
-    currency,
-    updatedBy: currentUser.id,
-    updatedByName: currentUser.name,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  try {
+    await setDoc(doc(collection(db, STAFF_SETTINGS_COL), id), {
+      userId: id,
+      hourlyRate,
+      currency,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
 
-  showAlert("Rate saved.");
+    staffSettings[id] = { ...(staffSettings[id] || {}), hourlyRate, currency };
+    populateStaffFilters();
+    renderPayroll();
+    syncRateEditor();
+    showAlert(`Rate saved: ${currency} ${hourlyRate.toFixed(2)} / hour.`);
+  } catch (err) {
+    console.error("saveRate failed", err);
+    showAlert("Rate was not saved. Check Firestore permissions or internet.", true);
+  }
 }
 
 function subscribePayroll() {

@@ -64,6 +64,7 @@ function safeUserPayload(id) {
 }
 
 const USER_KEY = "telesyrianaUser";
+const PROFILE_CACHE_PREFIX = "telesyrianaProfile";
 const STATE_KEY = "telesyrianaState";
 const BREAK_LIMIT_MIN = 45;
 
@@ -897,6 +898,22 @@ function buildSupervisorTableFromFirestore(rows) {
 
 /* ----------------------------- Settings --------------------------------- */
 
+function profileCacheKey(userId) {
+  return `${PROFILE_CACHE_PREFIX}:${userId}`;
+}
+
+function showSettingsAlert(message, danger = false) {
+  const box = document.getElementById("settings-alert");
+  if (!box) {
+    if (message) alert(message);
+    return;
+  }
+  box.textContent = message;
+  box.classList.remove("hidden");
+  box.classList.toggle("danger", Boolean(danger));
+  setTimeout(() => box.classList.add("hidden"), 3500);
+}
+
 function applyTheme(gender) {
   const g = String(gender || "").toLowerCase().trim();
   document.body.removeAttribute("data-theme");
@@ -908,27 +925,40 @@ function applyTheme(gender) {
 async function loadUserProfile() {
   if (!currentUser) return;
 
-  const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
-  const snap = await getDoc(ref);
-
   const nameEl = document.getElementById("set-name");
-  if (nameEl) nameEl.value = currentUser.name;
-
   const bdayEl = document.getElementById("set-birthday");
   const notesEl = document.getElementById("set-notes");
   const genderEl = document.getElementById("set-gender");
 
-  if (snap.exists()) {
-    const d = snap.data();
+  if (nameEl) nameEl.value = currentUser.name || currentUser.id;
 
-    if (bdayEl) bdayEl.value = d.birthday || "";
-    if (notesEl) notesEl.value = d.notes || "";
-    if (genderEl) genderEl.value = d.gender || "";
+  let cached = {};
+  try {
+    cached = JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}");
+  } catch {}
 
-    applyTheme(d.gender);
-  } else {
-    if (genderEl) genderEl.value = "";
-    applyTheme("");
+  if (bdayEl) bdayEl.value = cached.birthday || "";
+  if (notesEl) notesEl.value = cached.notes || "";
+  if (genderEl) genderEl.value = cached.gender || "";
+  applyTheme(cached.gender || "");
+
+  try {
+    const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const d = snap.data();
+      if (bdayEl) bdayEl.value = d.birthday || "";
+      if (notesEl) notesEl.value = d.notes || "";
+      if (genderEl) genderEl.value = d.gender || "";
+      applyTheme(d.gender || "");
+      localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({
+        birthday: d.birthday || "",
+        notes: d.notes || "",
+        gender: d.gender || "",
+      }));
+    }
+  } catch (err) {
+    console.warn("Could not load profile from Firestore, using local profile cache.", err);
   }
 }
 
@@ -940,24 +970,35 @@ async function handleSettingsSave(e) {
   const notes = document.getElementById("set-notes")?.value || "";
   const gender = document.getElementById("set-gender")?.value || "";
 
+  applyTheme(gender);
+  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ birthday, notes, gender }));
+
   const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
 
-  await setDoc(
-    ref,
-    {
-      userId: currentUser.id,
-      name: currentUser.name,
-      birthday,
-      notes,
-      gender,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  applyTheme(gender);
-  alert("Settings saved successfully.");
+  try {
+    await setDoc(
+      ref,
+      {
+        userId: currentUser.id,
+        name: currentUser.name,
+        birthday,
+        notes,
+        gender,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    showSettingsAlert("Settings saved successfully.");
+  } catch (err) {
+    console.error("settings save failed", err);
+    showSettingsAlert("Saved locally, but Firestore save failed. Check permissions/internet.", true);
+  }
 }
+
+// Apply colour immediately when the user changes theme, even before saving.
+document.addEventListener("change", (e) => {
+  if (e.target?.id === "set-gender") applyTheme(e.target.value || "");
+});
 
 /* --------------------------- View switching ----------------------------- */
 

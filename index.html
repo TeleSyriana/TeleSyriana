@@ -14,7 +14,7 @@
     <header class="app-header">
       <nav id="main-nav" class="main-nav hidden">
         <button class="nav-link" data-page="home">Home</button>
-        <button class="nav-link" data-page="tasks">Tasks</button>
+        <button class="nav-link" data-page="tasks">Notes</button>
         <button class="nav-link" data-page="tickets">Tickets</button>
         <button class="nav-link" data-page="reports">Reports</button>
         <button class="nav-link" data-page="payroll">Payroll</button>
@@ -260,12 +260,12 @@
         <section class="card">
           <div class="tasks-top">
             <div>
-              <h2 style="margin:0">Tasks</h2>
-              <p class="subtitle" style="margin:6px 0 0">Trello-style board (drag • drop • delete)</p>
+              <h2 style="margin:0">Personal Notepad</h2>
+              <p class="subtitle" style="margin:6px 0 0">Private notes and small follow-up reminders. Main customer work stays inside Tickets.</p>
             </div>
 
             <form id="task-add-form" class="task-add">
-              <input id="task-title" type="text" placeholder="New task title…" required />
+              <input id="task-title" type="text" placeholder="New note title…" required />
               <select id="task-col">
                 <option value="todo">To do</option>
                 <option value="doing">Doing</option>
@@ -299,14 +299,14 @@
 
           <div class="modal-card">
             <div class="modal-head">
-              <div class="modal-title">Add new task</div>
+              <div class="modal-title">Add new note</div>
               <button class="modal-x" type="button" data-modal-close>×</button>
             </div>
 
             <form id="task-modal-form" class="modal-body">
               <label>
                 Title
-                <input id="task-modal-title" type="text" placeholder="Task title…" required />
+                <input id="task-modal-title" type="text" placeholder="Note title…" required />
               </label>
 
               <label>
@@ -416,8 +416,11 @@
 
           <form id="ticket-form" class="ticket-form hidden">
             <div class="ticket-form-head">
-              <h3>Create Ticket</h3>
-              <span class="ticket-form-note">Only order number is required. Fill the rest if available.</span>
+              <div>
+                <h3>Create Ticket</h3>
+                <span class="ticket-form-note">Only order number is required. Fill the rest if available.</span>
+              </div>
+              <button id="ticket-form-close" type="button" class="modal-x" aria-label="Close ticket form">×</button>
             </div>
 
             <div class="ticket-form-grid">
@@ -1099,6 +1102,7 @@
                 </select>
               </label>
               <button id="payroll-save-rate" type="button" class="btn-primary" style="width:auto">Save Rate</button>
+              <div id="payroll-rate-status" class="payroll-rate-status">Select staff to view current rate.</div>
             </div>
           </div>
 
@@ -1134,6 +1138,7 @@
           <h2>Settings</h2>
           <p class="subtitle">Update personal info</p>
 
+          <div id="settings-alert" class="alert hidden"></div>
           <form id="settings-form">
             <label>
               Full Name

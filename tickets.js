@@ -260,6 +260,17 @@ function showTicketAlert(message, danger = false) {
   setTimeout(() => box.classList.add("hidden"), 3500);
 }
 
+function setTicketFormOpen(open) {
+  const form = el("ticket-form");
+  if (!form) return;
+  form.classList.toggle("hidden", !open);
+  document.body.classList.toggle("ticket-modal-open", Boolean(open));
+  if (open) {
+    setTimeout(() => el("ticket-order")?.focus(), 50);
+  }
+}
+
+
 function fillAssigneeSelect(selectEl, includeUnassigned = true) {
   if (!selectEl || !currentUser) return;
   const previous = selectEl.value;
@@ -431,9 +442,12 @@ function hookUI() {
   if (isHooked) return;
   isHooked = true;
 
-  el("ticket-new-toggle")?.addEventListener("click", () => {
-    const form = el("ticket-form");
-    if (form) form.classList.toggle("hidden");
+  el("ticket-new-toggle")?.addEventListener("click", () => setTicketFormOpen(true));
+
+  el("ticket-form-close")?.addEventListener("click", () => setTicketFormOpen(false));
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el("ticket-form")?.classList.contains("hidden")) setTicketFormOpen(false);
   });
 
   el("ticket-refresh-btn")?.addEventListener("click", () => {
@@ -557,10 +571,18 @@ async function createTicket() {
     updatedAt: serverTimestamp(),
   };
 
-  await addDoc(collection(db, TICKETS_COL), payload);
-  el("ticket-form")?.reset();
-  fillAssigneeSelect(el("ticket-assigned"), true);
-  showTicketAlert("Ticket created successfully.");
+  try {
+    const created = await addDoc(collection(db, TICKETS_COL), payload);
+    selectedTicketId = created.id;
+    el("ticket-form")?.reset();
+    renderOrderPreview(null);
+    fillAssigneeSelect(el("ticket-assigned"), true);
+    setTicketFormOpen(false);
+    showTicketAlert("Ticket created successfully.");
+  } catch (err) {
+    console.error("createTicket failed", err);
+    showTicketAlert("Ticket could not be created. Check Firestore permissions or internet.", true);
+  }
 }
 
 async function loadOrderCacheForm() {
@@ -631,8 +653,13 @@ async function saveSelectedTicket() {
     update.resolvedBy = currentUser?.id || "";
   }
 
-  await updateDoc(doc(db, TICKETS_COL, selectedTicketId), update);
-  showTicketAlert("Ticket updated.");
+  try {
+    await updateDoc(doc(db, TICKETS_COL, selectedTicketId), update);
+    showTicketAlert("Ticket updated and saved.");
+  } catch (err) {
+    console.error("saveSelectedTicket failed", err);
+    showTicketAlert("Save failed. Check Firestore permissions or internet.", true);
+  }
 }
 
 function subscribeTickets() {

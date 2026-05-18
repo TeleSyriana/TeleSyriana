@@ -2361,3 +2361,171 @@ meetings-sidebar-header{
   .ticket-detail-actions,.ticket-form-footer,.report-form-footer{ flex-direction:column; }
   .ticket-detail-actions button,.ticket-form-footer button,.report-form-footer button{ width:100% !important; }
 }
+
+/* =========================
+   PHASE 7 — Workflow polish fixes
+   - Tickets modal creation
+   - Better scrolling for tickets/reports
+   - Notes instead of heavy task feeling
+   - Payroll/settings feedback visibility
+========================= */
+
+/* Keep internal pages usable on smaller laptop screens */
+#dashboard-screen{ min-height:calc(100vh - 112px); }
+.page-section{ width:100%; }
+
+/* Personal notepad: less dominant than Tickets */
+#page-tasks .tasks-top h2::after{ content:" / Notes"; color:var(--muted); font-weight:700; font-size:.9rem; }
+#page-tasks .kanban{ opacity:.96; }
+#page-tasks .kanban-head{ background:rgba(255,255,255,.72); }
+#page-tasks .task-card{ border-left:4px solid color-mix(in srgb, var(--brand) 45%, white); }
+
+/* Create Ticket as popup */
+#ticket-form.ticket-form{
+  position:fixed;
+  inset:92px 22px 24px;
+  z-index:1500;
+  width:min(980px, calc(100vw - 44px));
+  max-height:calc(100vh - 116px);
+  overflow:auto;
+  margin:0 auto;
+  left:50%;
+  right:auto;
+  transform:translateX(-50%);
+  background:rgba(255,255,255,.98);
+  border:1px solid rgba(15,23,42,.12);
+  border-radius:24px;
+  box-shadow:0 30px 90px rgba(15,23,42,.32);
+  padding:18px;
+}
+body.ticket-modal-open::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:1490;
+  background:rgba(15,23,42,.36);
+  backdrop-filter:blur(6px);
+}
+#ticket-form.hidden{ display:none !important; }
+.ticket-form-head{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:rgba(255,255,255,.96);
+  backdrop-filter:blur(8px);
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  padding-bottom:12px;
+  border-bottom:1px solid rgba(15,23,42,.08);
+  margin-bottom:14px;
+}
+
+/* Tickets: fixed-height working area with internal scroll */
+.tickets-card{ min-height:calc(100vh - 145px); }
+.tickets-layout{
+  height:clamp(560px, calc(100vh - 420px), 840px);
+  min-height:560px;
+  overflow:hidden;
+}
+.tickets-list-panel,
+.ticket-detail-panel{
+  min-height:0;
+  overflow:hidden;
+}
+.tickets-list{
+  max-height:none !important;
+  height:calc(100% - 46px);
+  overflow:auto;
+}
+.ticket-detail-panel{
+  overflow:auto;
+  max-height:100%;
+}
+#ticket-detail{ padding-bottom:20px; }
+.ticket-detail-actions{
+  position:sticky;
+  bottom:0;
+  background:linear-gradient(180deg, rgba(255,255,255,.66), rgba(255,255,255,.98) 32%);
+  padding-top:12px;
+  margin-top:14px;
+  border-top:1px solid rgba(15,23,42,.07);
+}
+
+/* Reports: scroll history separately instead of stretching the page forever */
+.reports-layout{
+  align-items:start;
+}
+.reports-history{
+  max-height:calc(100vh - 250px);
+  min-height:520px;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+.reports-list{
+  flex:1;
+  max-height:none !important;
+  overflow:auto;
+  padding-right:6px;
+}
+
+/* Visible save feedback */
+#settings-alert,
+#payroll-alert,
+#ticket-alert{
+  border-radius:16px;
+  padding:12px 14px;
+  margin:10px 0 14px;
+  background:rgba(16,185,129,.10);
+  color:#047857;
+  border:1px solid rgba(16,185,129,.20);
+  font-weight:800;
+}
+#settings-alert.danger,
+#payroll-alert.danger,
+#ticket-alert.danger{
+  background:rgba(239,68,68,.10);
+  color:#b91c1c;
+  border-color:rgba(239,68,68,.20);
+}
+.payroll-rate-status{
+  grid-column:1 / -1;
+  padding:10px 12px;
+  border-radius:14px;
+  background:rgba(59,130,246,.08);
+  color:#1d4ed8;
+  font-weight:800;
+  font-size:.86rem;
+}
+
+/* Make blue theme visibly blue across modern cards too */
+body[data-theme="male"] .tickets-card,
+body[data-theme="male"] .reports-card,
+body[data-theme="male"] .payroll-card,
+body[data-theme="male"] .card{
+  border-color:rgba(31,109,255,.16);
+}
+body[data-theme="male"] .btn-primary,
+body[data-theme="male"] button.btn-primary{
+  background:linear-gradient(135deg,#1f6dff,#36b5ff);
+}
+
+@media (max-width: 820px){
+  #ticket-form.ticket-form{
+    inset:76px 10px 12px;
+    width:calc(100vw - 20px);
+    max-height:calc(100vh - 88px);
+    border-radius:20px;
+  }
+  .tickets-card{ min-height:auto; }
+  .tickets-layout{
+    height:auto;
+    min-height:auto;
+    overflow:visible;
+  }
+  .tickets-list{ height:auto; max-height:360px !important; }
+  .ticket-detail-panel{ max-height:none; overflow:visible; }
+  .reports-history{ max-height:none; min-height:0; }
+}
