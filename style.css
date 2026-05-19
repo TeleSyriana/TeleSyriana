@@ -5379,3 +5379,156 @@ body[data-language="en"] #page-payroll .payroll-rate-status{
     min-width:1120px !important;
   }
 }
+
+/* =========================
+   Phase 3 fix 2 — Payroll compact readable typography
+   Reduces oversized payroll text in Arabic and English while preserving layout.
+========================= */
+#page-payroll .payroll-card{
+  max-width:1280px !important;
+  padding:34px !important;
+}
+#page-payroll .payroll-top{
+  gap:10px !important;
+  margin-bottom:4px !important;
+}
+#page-payroll .payroll-top h2{
+  font-size:clamp(28px,2.55vw,38px) !important;
+  line-height:1.12 !important;
+  letter-spacing:-.02em !important;
+  margin:0 0 6px !important;
+}
+#page-payroll .payroll-top .subtitle{
+  font-size:clamp(14px,1.05vw,16px) !important;
+  line-height:1.45 !important;
+  max-width:760px !important;
+}
+#page-payroll .payroll-filters{
+  gap:12px !important;
+  margin-top:12px !important;
+}
+#page-payroll .payroll-filters label{
+  font-size:14px !important;
+  line-height:1.25 !important;
+  font-weight:700 !important;
+}
+#page-payroll .payroll-filters input,
+#page-payroll .payroll-filters select,
+#page-payroll .payroll-rate-grid input,
+#page-payroll .payroll-rate-grid select{
+  height:48px !important;
+  min-height:48px !important;
+  font-size:15px !important;
+  padding:0 16px !important;
+}
+#page-payroll .payroll-filters button,
+#page-payroll .payroll-rate-grid button{
+  height:48px !important;
+  min-height:48px !important;
+  font-size:15px !important;
+  padding:0 20px !important;
+  white-space:nowrap !important;
+}
+#page-payroll .payroll-summary-grid{
+  gap:12px !important;
+  grid-template-columns:repeat(auto-fit,minmax(136px,1fr)) !important;
+}
+#page-payroll .payroll-snap{
+  min-height:78px !important;
+  padding:14px 16px !important;
+  border-radius:18px !important;
+}
+#page-payroll .payroll-snap span{
+  font-size:13px !important;
+  line-height:1.25 !important;
+  margin-bottom:5px !important;
+}
+#page-payroll .payroll-snap strong{
+  font-size:clamp(18px,1.35vw,22px) !important;
+  line-height:1.15 !important;
+}
+#page-payroll .payroll-rate-panel{
+  padding:16px !important;
+  border-radius:20px !important;
+}
+#page-payroll .payroll-rate-panel h3{
+  font-size:clamp(20px,1.55vw,24px) !important;
+  line-height:1.15 !important;
+}
+#page-payroll .payroll-rate-panel .subtitle,
+#page-payroll .payroll-rate-status{
+  font-size:14px !important;
+  line-height:1.35 !important;
+}
+#page-payroll .payroll-rate-grid label{
+  font-size:13px !important;
+  line-height:1.25 !important;
+}
+#page-payroll .payroll-table-wrapper{
+  border-radius:18px !important;
+  overflow:auto !important;
+}
+#page-payroll .payroll-table{
+  min-width:1120px !important;
+}
+#page-payroll .payroll-table th,
+#page-payroll .payroll-table td{
+  padding:11px 12px !important;
+  font-size:14px !important;
+  line-height:1.22 !important;
+}
+#page-payroll .payroll-table th{
+  font-size:14px !important;
+  font-weight:800 !important;
+}
+#page-payroll .payroll-sub{
+  font-size:12px !important;
+}
+#page-payroll .payroll-pill{
+  min-width:58px !important;
+  padding:4px 8px !important;
+  font-size:12px !important;
+}
+body[data-language="ar"] #page-payroll .payroll-filters input,
+body[data-language="ar"] #page-payroll .payroll-filters select,
+body[data-language="ar"] #page-payroll .payroll-table th,
+body[data-language="ar"] #page-payroll .payroll-table td{
+  letter-spacing:0 !important;
+}
+@media(max-width:980px){
+  #page-payroll .payroll-card{ padding:24px !important; }
+  #page-payroll .payroll-top h2{ font-size:32px !important; }
+  #page-payroll .payroll-summary-grid{ grid-template-columns:1fr 1fr !important; }
+  #page-payroll .payroll-table{ min-width:1040px !important; }
+}
+@media(max-width:620px){
+  #page-payroll .payroll-card{
+    padding:18px !important;
+    border-radius:22px !important;
+  }
+  #page-payroll .payroll-top h2{
+    font-size:30px !important;
+  }
+  #page-payroll .payroll-top .subtitle{
+    font-size:14px !important;
+  }
+  #page-payroll .payroll-filters,
+  #page-payroll .payroll-summary-grid,
+  #page-payroll .payroll-rate-grid{
+    grid-template-columns:1fr !important;
+  }
+  #page-payroll .payroll-snap{
+    min-height:72px !important;
+  }
+  #page-payroll .payroll-snap strong{
+    font-size:20px !important;
+  }
+  #page-payroll .payroll-table{
+    min-width:960px !important;
+  }
+  #page-payroll .payroll-table th,
+  #page-payroll .payroll-table td{
+    font-size:13px !important;
+    padding:10px 11px !important;
+  }
+}

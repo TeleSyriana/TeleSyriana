@@ -419,8 +419,8 @@ function renderPayroll() {
       ? `<span class="payroll-pill danger">${tr("overBy")} ${formatDuration(br - BREAK_LIMIT_MIN)}</span>`
       : `<span class="payroll-pill ok">${tr("ok")}</span>`;
 
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+    const rowEl = document.createElement("tr");
+    rowEl.innerHTML = `
       <td>${row.day || "—"}</td>
       <td>${row.name || staff.name}<div class="payroll-sub">${row.userId || "—"}</div></td>
       <td>${String(row.role || staff.role || "agent").toUpperCase()}</td>
@@ -437,7 +437,7 @@ function renderPayroll() {
       <td><strong>${money(rate.currency, pay)}</strong></td>
       <td>${breakNote}</td>
     `;
-    body.appendChild(tr);
+    body.appendChild(rowEl);
   });
 
   if (el("payroll-sum-worked")) el("payroll-sum-worked").textContent = formatDuration(totalWorked);
