@@ -4102,3 +4102,220 @@ body::before{
   .ticket-info-structured > div:last-child{ grid-template-columns:1fr; }
   .shopify-live-search-row{ grid-template-columns:1fr !important; }
 }
+
+/* =========================
+   v1.6 — Ticket detail readability + clean loading states
+========================= */
+/* Do not let buttons collapse into a single vertical spinner/text column */
+button,
+.btn-primary,
+.btn-secondary{
+  writing-mode:horizontal-tb !important;
+  text-orientation:mixed !important;
+  white-space:nowrap !important;
+}
+.btn-primary.is-saving,
+.btn-secondary.is-saving{
+  min-width:112px !important;
+  min-height:42px !important;
+  gap:9px !important;
+  overflow:hidden !important;
+}
+.btn-primary.is-saving span,
+.btn-secondary.is-saving span{
+  writing-mode:horizontal-tb !important;
+  white-space:nowrap !important;
+}
+.btn-spinner{
+  width:15px !important;
+  height:15px !important;
+  flex:0 0 15px !important;
+  border-width:2px !important;
+}
+
+/* More space for the ticket details. The old right-side order card was too narrow. */
+.tickets-layout{
+  grid-template-columns:minmax(300px, 390px) minmax(0, 1fr) !important;
+  gap:18px !important;
+}
+.ticket-detail-panel,
+#ticket-detail{
+  min-width:0 !important;
+}
+.ticket-info-box{
+  display:block !important;
+  width:100% !important;
+  max-width:100% !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+}
+.ticket-info-box > div{
+  background:transparent !important;
+  border:0 !important;
+  padding:0 !important;
+}
+.ticket-shopify-card{
+  width:100%;
+  box-sizing:border-box;
+  border:1px solid rgba(37,99,235,.14);
+  background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(248,251,255,.92));
+  border-radius:24px;
+  padding:16px;
+  box-shadow:0 18px 44px rgba(15,23,42,.08);
+  direction:ltr;
+  text-align:left;
+  overflow:hidden;
+}
+.ticket-shopify-head{
+  display:grid;
+  grid-template-columns:86px minmax(0,1fr);
+  gap:14px;
+  align-items:center;
+  padding-bottom:14px;
+  border-bottom:1px solid rgba(15,23,42,.08);
+  margin-bottom:14px;
+}
+.ticket-detail-img{
+  width:82px !important;
+  height:82px !important;
+  border-radius:18px !important;
+  object-fit:contain;
+  background:#fff;
+}
+.ticket-shopify-title-block{ min-width:0; }
+.ticket-shopify-label{
+  color:#64748b;
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+.ticket-shopify-title-block h3{
+  margin:2px 0 2px;
+  color:#0f1b3d;
+  font-size:24px;
+  line-height:1.1;
+}
+.ticket-shopify-title-block p{
+  margin:0 0 8px;
+  color:#64748b;
+  font-size:13px;
+  font-weight:800;
+}
+.ticket-shopify-fields{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+}
+.field-card{
+  min-width:0;
+  background:#fff;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:16px;
+  padding:10px 12px;
+  box-shadow:0 8px 18px rgba(15,23,42,.035);
+}
+.field-card span{
+  display:block;
+  color:#64748b;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  margin-bottom:4px;
+}
+.field-card strong,
+.field-card pre{
+  display:block;
+  margin:0;
+  color:#13213f;
+  font-family:inherit;
+  font-size:14px;
+  line-height:1.35;
+  font-weight:900;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.field-card.wide{ grid-column:span 2; }
+.items-card{ grid-column:1 / -1 !important; }
+.items-card pre{
+  max-height:120px;
+  overflow:auto;
+  font-weight:800;
+}
+.ticket-shopify-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:14px;
+  padding-top:14px;
+  border-top:1px solid rgba(15,23,42,.08);
+}
+.ticket-shopify-actions .btn-secondary{
+  width:auto !important;
+  min-width:128px;
+  padding:10px 13px !important;
+  border-radius:14px !important;
+}
+.ticket-shopify-actions .disabled{
+  opacity:.45;
+  pointer-events:none;
+}
+.ticket-shopify-empty{
+  border:1px dashed rgba(15,23,42,.18);
+  background:#f8fafc;
+  color:#64748b;
+  border-radius:18px;
+  padding:18px;
+  font-weight:900;
+}
+.ticket-history-box{
+  max-height:260px;
+  overflow:auto;
+}
+.ticket-detail-actions{
+  display:flex !important;
+  flex-wrap:wrap !important;
+  gap:10px !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+}
+.ticket-detail-actions .btn-primary,
+.ticket-detail-actions .btn-secondary{
+  width:auto !important;
+  min-width:140px !important;
+}
+
+/* Clean the live Shopify card on top too */
+.shopify-live-search-row{
+  grid-template-columns:minmax(220px,1fr) auto auto !important;
+  align-items:center !important;
+}
+.shopify-order-card{
+  background:rgba(255,255,255,.92) !important;
+  border:1px solid rgba(37,99,235,.12) !important;
+}
+.shopify-live-actions .btn-secondary{
+  min-width:128px;
+  white-space:nowrap !important;
+}
+
+@media(max-width:1100px){
+  .ticket-shopify-fields{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:900px){
+  .tickets-layout{ grid-template-columns:1fr !important; height:auto !important; min-height:0 !important; max-height:none !important; }
+  .ticket-detail-panel{ overflow:visible !important; }
+  #ticket-detail{ overflow:visible !important; }
+}
+@media(max-width:620px){
+  .ticket-shopify-head{ grid-template-columns:1fr; }
+  .ticket-shopify-fields{ grid-template-columns:1fr; }
+  .field-card.wide{ grid-column:auto; }
+  .ticket-shopify-actions .btn-secondary,
+  .ticket-detail-actions .btn-primary,
+  .ticket-detail-actions .btn-secondary{ width:100% !important; }
+  .shopify-live-search-row{ grid-template-columns:1fr !important; }
+}

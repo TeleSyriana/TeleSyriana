@@ -736,33 +736,51 @@ function renderTicketDetail() {
   const info = el("ticket-info-box");
   if (info) {
     const orderData = t.orderData || {};
-    const img = orderData.imageUrl ? `<img class="shopify-product-thumb small" src="${escapeHtml(orderData.imageUrl)}" alt="Product image" loading="lazy" />` : "";
-    info.innerHTML = `
-      <div class="ticket-info-structured">
-        ${img}
-        <div>
-          <div><strong>العميل:</strong> ${escapeHtml(t.customerName || orderData.customerName || "—")}</div>
-          <div><strong>Email:</strong> ${escapeHtml(t.email || orderData.email || "—")}</div>
-          <div><strong>Phone:</strong> ${escapeHtml(orderData.phone || "—")}</div>
-          <div><strong>Postcode:</strong> ${escapeHtml(orderData.postcode || "—")}</div>
-          <div><strong>Items:</strong><pre>${escapeHtml(orderData.items || "—")}</pre></div>
-          <div><strong>Total:</strong> ${escapeHtml(orderData.totalPaid || "—")}</div>
-          <div><strong>Payment:</strong> ${escapeHtml(orderData.paymentStatus || "—")}</div>
-          <div><strong>Fulfilment:</strong> ${escapeHtml(orderData.orderالحالة || "—")}</div>
-          <div><strong>Courier:</strong> ${escapeHtml(orderData.courier || "—")}</div>
-          <div><strong>Tracking:</strong> ${escapeHtml(orderData.trackingNumber || "—")}</div>
-          <div class="shopify-live-actions">
-            <button type="button" class="btn-secondary" data-detail-copy-postcode>Copy postcode</button>
-            <button type="button" class="btn-secondary" data-detail-copy-tracking>Copy tracking</button>
-            <button type="button" class="btn-secondary" data-detail-copy-url>Copy tracking URL</button>
+    const hasShopifyData = Boolean(orderData.orderNumber || orderData.customerName || orderData.items || orderData.adminUrl || t.shopifyStatus);
+    const img = orderData.imageUrl
+      ? `<img class="shopify-product-thumb ticket-detail-img" src="${escapeHtml(orderData.imageUrl)}" alt="Product image" loading="lazy" />`
+      : `<div class="shopify-product-thumb ticket-detail-img placeholder">No image</div>`;
+
+    if (!hasShopifyData) {
+      info.innerHTML = `<div class="ticket-shopify-empty">No linked Shopify order yet.</div>`;
+    } else {
+      info.innerHTML = `
+        <section class="ticket-shopify-card">
+          <div class="ticket-shopify-head">
+            ${img}
+            <div class="ticket-shopify-title-block">
+              <div class="ticket-shopify-label">Linked Shopify Order</div>
+              <h3>#${escapeHtml(t.orderNumber || orderData.orderNumber || "—")}</h3>
+              <p>${escapeHtml(t.type ? (TYPE_LABELS[t.type] || t.type) : "Support ticket")}</p>
+              ${shopifyStatusPill(t)}
+            </div>
+          </div>
+
+          <div class="ticket-shopify-fields">
+            <div class="field-card wide"><span>Customer</span><strong>${escapeHtml(t.customerName || orderData.customerName || "—")}</strong></div>
+            <div class="field-card"><span>Email</span><strong>${escapeHtml(t.email || orderData.email || "—")}</strong></div>
+            <div class="field-card"><span>Phone</span><strong>${escapeHtml(orderData.phone || "—")}</strong></div>
+            <div class="field-card"><span>Postcode</span><strong>${escapeHtml(orderData.postcode || "—")}</strong></div>
+            <div class="field-card"><span>Total</span><strong>${escapeHtml(orderData.totalPaid || "—")}</strong></div>
+            <div class="field-card"><span>Payment</span><strong>${escapeHtml(orderData.paymentStatus || "—")}</strong></div>
+            <div class="field-card"><span>Fulfilment</span><strong>${escapeHtml(orderData.orderالحالة || "—")}</strong></div>
+            <div class="field-card"><span>Courier</span><strong>${escapeHtml(orderData.courier || "—")}</strong></div>
+            <div class="field-card"><span>Tracking</span><strong>${escapeHtml(orderData.trackingNumber || "—")}</strong></div>
+            <div class="field-card"><span>Risk</span><strong>${escapeHtml(t.risk || "normal")}</strong></div>
+            <div class="field-card"><span>Updated</span><strong>${escapeHtml(fmtDate(t.updatedAt))}</strong></div>
+            <div class="field-card wide items-card"><span>Items</span><pre>${escapeHtml(orderData.items || "—")}</pre></div>
+          </div>
+
+          <div class="ticket-shopify-actions">
+            <button type="button" class="btn-secondary" data-detail-copy-postcode ${orderData.postcode ? "" : "disabled"}>Copy postcode</button>
+            <button type="button" class="btn-secondary" data-detail-copy-tracking ${orderData.trackingNumber ? "" : "disabled"}>Copy tracking</button>
+            <button type="button" class="btn-secondary" data-detail-copy-url ${orderData.trackingUrl ? "" : "disabled"}>Copy tracking URL</button>
             ${orderData.trackingUrl ? `<button type="button" class="btn-secondary" data-detail-open-tracking>Open tracking</button>` : ""}
             ${orderData.adminUrl ? `<button type="button" class="btn-secondary" data-detail-open-shopify>Open Shopify</button>` : ""}
           </div>
-          <div><strong>Shopify:</strong> ${shopifyStatusPill(t)}</div>
-          <div><strong>Risk:</strong> ${escapeHtml(t.risk || "normal")}</div>
-          <div><strong>Updated:</strong> ${escapeHtml(fmtDate(t.updatedAt))}</div>
-        </div>
-      </div>`;
+        </section>`;
+    }
+
     info.querySelector("[data-detail-copy-postcode]")?.addEventListener("click", () => copyText(orderData.postcode, "Postcode copied."));
     info.querySelector("[data-detail-copy-tracking]")?.addEventListener("click", () => copyText(orderData.trackingNumber, "Tracking number copied."));
     info.querySelector("[data-detail-copy-url]")?.addEventListener("click", () => copyText(orderData.trackingUrl, "Tracking URL copied."));
