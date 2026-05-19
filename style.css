@@ -4375,3 +4375,228 @@ button,
     grid-template-columns:1fr !important;
   }
 }
+
+
+/* =========================
+   v1.9 — desktop no-horizontal-jump ticket board fix
+   Keeps the queue visible on the right while selected ticket details stay contained.
+========================= */
+html,
+body,
+.app-wrapper,
+.page-section,
+.tickets-card{
+  max-width:100% !important;
+  overflow-x:hidden !important;
+}
+#page-tickets,
+#page-tickets *{
+  box-sizing:border-box;
+}
+.tickets-card{
+  width:100% !important;
+}
+.tickets-layout{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  grid-template-columns:clamp(320px,28vw,420px) minmax(0,1fr) !important;
+  gap:18px !important;
+  overflow:hidden !important;
+  align-items:stretch !important;
+}
+.tickets-list-panel,
+.ticket-detail-panel{
+  min-width:0 !important;
+  max-width:100% !important;
+  overflow:hidden !important;
+}
+#ticket-detail{
+  min-width:0 !important;
+  max-width:100% !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+}
+.ticket-shopify-card,
+.ticket-shopify-head,
+.ticket-shopify-fields,
+.ticket-detail-grid,
+.field-card,
+.ticket-history-box,
+.ticket-detail-actions{
+  max-width:100% !important;
+  min-width:0 !important;
+}
+.ticket-shopify-fields{
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr)) !important;
+}
+.field-card.wide,
+.items-card{
+  grid-column:1 / -1 !important;
+}
+.ticket-shopify-actions{
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) !important;
+}
+.ticket-shopify-actions .btn-secondary{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+@media (max-width: 900px){
+  html, body, .app-wrapper, .page-section, .tickets-card{ overflow-x:hidden !important; }
+  .tickets-layout{
+    grid-template-columns:1fr !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+  }
+  .tickets-list-panel,
+  .ticket-detail-panel,
+  #ticket-detail{
+    overflow:visible !important;
+  }
+}
+
+
+/* =========================
+   v2.0 — Messages reliability, read receipts, mobile full chat
+========================= */
+#page-messages .messages-main{
+  min-width:0 !important;
+}
+#chat-back{
+  display:none !important;
+}
+#page-messages .chat-message-list{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+#page-messages .chat-message{
+  max-width:min(78%, 760px) !important;
+}
+#page-messages .chat-message.me{
+  margin-left:auto !important;
+  margin-right:0 !important;
+}
+html[dir="rtl"] #page-messages .chat-message.me,
+body[data-language="ar"] #page-messages .chat-message.me{
+  margin-left:0 !important;
+  margin-right:auto !important;
+}
+#page-messages .msg-body{
+  max-width:none !important;
+}
+#page-messages .chat-message-text{
+  font-size:14px !important;
+  line-height:1.35 !important;
+}
+.msg-read-receipt{
+  font-weight:950;
+  letter-spacing:-3px;
+  margin-inline-start:4px;
+  font-size:14px;
+  line-height:1;
+  display:inline-flex;
+  align-items:center;
+  min-width:20px;
+}
+.msg-read-receipt.sent,
+.msg-read-receipt.delivered{ color:#94a3b8; }
+.msg-read-receipt.seen{ color:#22c55e; }
+
+@media (max-width: 860px){
+  body.chat-open{ overflow:hidden !important; }
+  #page-messages .messages-card{
+    padding:0 !important;
+    min-height:calc(100dvh - 14px) !important;
+    height:calc(100dvh - 14px) !important;
+    border-radius:28px !important;
+    overflow:hidden !important;
+  }
+  #page-messages .messages-layout{
+    height:100% !important;
+    min-height:100% !important;
+    display:block !important;
+  }
+  #page-messages .messages-sidebar{
+    height:100% !important;
+    max-height:100% !important;
+    overflow:auto !important;
+    padding-bottom:28px !important;
+  }
+  #page-messages .messages-main{
+    position:fixed !important;
+    inset:6px !important;
+    width:auto !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    border-radius:28px !important;
+    display:flex !important;
+    flex-direction:column !important;
+    background:rgba(255,255,255,.98) !important;
+    backdrop-filter:blur(16px) saturate(155%) !important;
+    -webkit-backdrop-filter:blur(16px) saturate(155%) !important;
+    z-index:100020 !important;
+    transform:translateX(100%) !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+    overflow:hidden !important;
+  }
+  body.chat-open #page-messages .messages-main,
+  html[dir="rtl"] body.chat-open #page-messages .messages-main,
+  body[data-language="ar"].chat-open #page-messages .messages-main{
+    transform:translateX(0) !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+  }
+  #chat-back{
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    min-width:68px !important;
+    height:42px !important;
+    padding:0 14px !important;
+  }
+  #page-messages .chat-header{
+    flex:0 0 auto !important;
+    min-height:74px !important;
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 12px !important;
+    background:rgba(255,255,255,.96) !important;
+    box-shadow:0 10px 24px rgba(15,23,42,.08) !important;
+    position:relative !important;
+    z-index:3 !important;
+  }
+  #page-messages .chat-room-name{ font-size:22px !important; }
+  #page-messages .chat-room-desc{ font-size:14px !important; }
+  #page-messages .chat-message-list{
+    flex:1 1 auto !important;
+    min-height:0 !important;
+    height:auto !important;
+    padding:16px !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    background:linear-gradient(180deg, rgba(255,255,255,.74), rgba(255,255,255,.92)) !important;
+  }
+  #page-messages .chat-message{
+    max-width:88% !important;
+  }
+  #page-messages .chat-input-row{
+    flex:0 0 auto !important;
+    padding:12px 14px calc(env(safe-area-inset-bottom) + 12px) !important;
+    background:rgba(255,255,255,.98) !important;
+    box-shadow:0 -12px 28px rgba(15,23,42,.08) !important;
+  }
+  #page-messages .chat-input{
+    min-height:52px !important;
+    font-size:16px !important;
+  }
+  #page-messages .chat-send-btn{
+    min-width:76px !important;
+    min-height:52px !important;
+    font-size:15px !important;
+  }
+}

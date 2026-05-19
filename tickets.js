@@ -692,7 +692,12 @@ function selectTicket(id) {
   selectedTicketId = id;
   renderTicketList();
   renderTicketDetail();
-  el("ticket-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  // Desktop had a horizontal jump when a ticket opened because scrollIntoView
+  // tried to bring the detail panel into view inside the RTL grid. Only scroll on mobile.
+  if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) {
+    el("ticket-detail")?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+  }
 }
 
 function renderTicketDetail() {
