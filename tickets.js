@@ -349,8 +349,7 @@ async function searchShopifyLive({ useInTicket = false } = {}) {
   if (!apiKey) apiKey = setShopifyApiKey();
   if (!apiKey) return showTicketAlert("API key is required for Shopify live search.", true);
   const btn = el("shopify-live-search-btn");
-  const old = btn?.textContent || "Search Shopify";
-  if (btn) { btn.disabled = true; btn.textContent = "Searching..."; }
+  const restoreSearchBtn = setButtonSaving(btn, true, "Searching...");
   liveStatus("Searching Shopify...", "loading");
   renderShopifyLiveResult(null);
   try {
@@ -379,7 +378,7 @@ async function searchShopifyLive({ useInTicket = false } = {}) {
     showTicketAlert(`Shopify search failed: ${err.message || err}`, true);
     return null;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = old; }
+    restoreSearchBtn();
   }
 }
 
@@ -513,13 +512,47 @@ function inferMood(type, priority) {
   return "calm";
 }
 
+function toast(message, danger = false) {
+  let wrap = document.getElementById("ts-toast-wrap");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "ts-toast-wrap";
+    wrap.className = "ts-toast-wrap";
+    document.body.appendChild(wrap);
+  }
+  const item = document.createElement("div");
+  item.className = `ts-toast ${danger ? "danger" : "ok"}`;
+  item.textContent = message;
+  wrap.appendChild(item);
+  requestAnimationFrame(() => item.classList.add("show"));
+  setTimeout(() => {
+    item.classList.remove("show");
+    setTimeout(() => item.remove(), 260);
+  }, 2600);
+}
+
 function showTicketAlert(message, danger = false) {
   const box = el("ticket-alert");
-  if (!box) return;
-  box.textContent = message;
-  box.classList.remove("hidden");
-  box.classList.toggle("danger", Boolean(danger));
-  setTimeout(() => box.classList.add("hidden"), 3500);
+  if (box) {
+    box.textContent = message;
+    box.classList.remove("hidden");
+    box.classList.toggle("danger", Boolean(danger));
+    setTimeout(() => box.classList.add("hidden"), 3500);
+  }
+  toast(message, danger);
+}
+
+function setButtonSaving(button, saving, savingText = "Saving...") {
+  if (!button) return () => {};
+  const oldText = button.textContent;
+  button.disabled = Boolean(saving);
+  button.classList.toggle("is-saving", Boolean(saving));
+  if (saving) button.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span><span>${savingText}</span>`;
+  return () => {
+    button.disabled = false;
+    button.classList.remove("is-saving");
+    button.textContent = oldText;
+  };
 }
 
 function setTicketFormمفتوحة(open) {
@@ -832,28 +865,40 @@ function hookUI() {
   el("ticket-save-btn")?.addEventListener("click", saveSelectedTicket);
   el("ticket-escalate-btn")?.addEventListener("click", async () => {
     if (!selectedTicketId) return;
-    await updateDoc(doc(db, TICKETS_COL, selectedTicketId), {
-      status: "escalated",
-      priority: "emergency",
-      risk: "chargeback",
-      updatedAt: serverTimestamp(),
-      escalatedAt: serverTimestamp(),
-      escalatedBy: currentUser?.id || "",
-      history: addHistory(allTickets.find((x) => x.id === selectedTicketId)?.history, "مصعّدة to manager", currentUser?.id || ""),
-    });
-    showTicketAlert("Ticket escalated to manager.");
+    const btn = el("ticket-escalate-btn");
+    const restoreEscalateBtn = setButtonSaving(btn, true, "Escalating...");
+    try {
+      const update = {
+        status: "escalated",
+        priority: "emergency",
+        risk: "chargeback",
+        updatedAt: serverTimestamp(),
+        escalatedAt: serverTimestamp(),
+        escalatedBy: currentUser?.id || "",
+        history: addHistory(allTickets.find((x) => x.id === selectedTicketId)?.history, "مصعّدة to manager", currentUser?.id || ""),
+      };
+      await updateDoc(doc(db, TICKETS_COL, selectedTicketId), update);
+      allTickets = allTickets.map((row) => row.id === selectedTicketId ? { ...row, ...update, updatedAt: Date.now() } : row);
+      renderTicketList();
+      renderTicketDetail();
+      showTicketAlert("Ticket escalated to manager.");
+    } catch (err) {
+      console.error("escalate failed", err);
+      showTicketAlert(`Failed to save: ${err?.code || err?.message || "unknown error"}`, true);
+    } finally {
+      restoreEscalateBtn();
+    }
   });
 }
 
 async function createTicket() {
   if (!currentUser) return;
   const createBtn = document.querySelector('#ticket-form button[type="submit"]');
-  const oldCreateText = createBtn?.textContent || "إنشاء التذكرة";
-  if (createBtn) { createBtn.disabled = true; createBtn.textContent = "جاري الإنشاء..."; }
+  const restoreCreateBtn = setButtonSaving(createBtn, true, "جاري الإنشاء...");
   const orderNumber = normaliseالطلبNumber(el("ticket-order")?.value);
   if (!orderNumber) {
     showTicketAlert("رقم الطلب مطلوب.", true);
-    if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; }
+    restoreCreateBtn();
     return;
   }
 
@@ -922,7 +967,7 @@ async function createTicket() {
     console.error("createTicket failed", err);
     showTicketAlert(`Ticket could not be created: ${err?.code || err?.message || "check Firestore permissions/internet"}`, true);
   } finally {
-    if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; }
+    restoreCreateBtn();
   }
 }
 
@@ -970,16 +1015,22 @@ async function saveالطلبCacheForm() {
   };
   const existing = await getCachedالطلب(orderNumber);
   if (!existing) payload.createdAt = serverTimestamp();
-  await setDoc(orderDocRef(orderNumber), payload, { merge: true });
-  showTicketAlert("الطلب cache saved. Agents can now autofill this order.");
+  try {
+    await setDoc(orderDocRef(orderNumber), payload, { merge: true });
+    showTicketAlert("Saved successfully.");
+  } catch (err) {
+    console.error("save order cache failed", err);
+    showTicketAlert(`Failed to save: ${err?.code || err?.message || "unknown error"}`, true);
+  } finally {
+    restoreCacheBtn();
+  }
 }
 
 async function saveSelectedTicket() {
   const t = allTickets.find((x) => x.id === selectedTicketId);
   if (!t) return showTicketAlert("Select a ticket first.", true);
   const saveBtn = el("ticket-save-btn");
-  const oldText = saveBtn?.textContent || "حفظ التعديلات";
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "جاري الحفظ..."; }
+  const restoreSaveBtn = setButtonSaving(saveBtn, true, "جاري الحفظ...");
 
   const status = el("ticket-detail-status")?.value || "open";
   const update = {
@@ -1000,12 +1051,15 @@ async function saveSelectedTicket() {
 
   try {
     await updateDoc(doc(db, TICKETS_COL, selectedTicketId), update);
-    showTicketAlert("Ticket updated and saved.");
+    allTickets = allTickets.map((row) => row.id === selectedTicketId ? { ...row, ...update, updatedAt: Date.now() } : row);
+    renderTicketList();
+    renderTicketDetail();
+    showTicketAlert("Saved successfully.");
   } catch (err) {
     console.error("saveSelectedTicket failed", err);
     showTicketAlert(`فشل الحفظ: ${err?.code || err?.message || "تحقق من صلاحيات Firestore أو الاتصال"}`, true);
   } finally {
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = oldText; }
+    restoreSaveBtn();
   }
 }
 

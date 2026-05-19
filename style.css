@@ -3962,3 +3962,143 @@ body[data-bg-tone="dark"] .notes-app{
 .shopify-order-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 @media (max-width: 900px) { .shopify-order-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .shopify-order-grid { grid-template-columns: 1fr; } }
+
+/* =========================
+   v1.5 — save feedback, full background, ticket polish
+========================= */
+html{ min-height:100%; background:linear-gradient(135deg,var(--bg1),var(--bg2)) fixed !important; }
+body{
+  min-height:100vh !important;
+  height:auto !important;
+  background:linear-gradient(135deg,var(--bg1),var(--bg2)) fixed !important;
+  background-repeat:no-repeat !important;
+  background-size:cover !important;
+}
+.app-wrapper{ min-height:100vh; }
+.page-section{ min-height:calc(100vh - 120px); }
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255,255,255,.28), transparent 26%),
+    radial-gradient(circle at 82% 18%, rgba(255,255,255,.18), transparent 30%),
+    linear-gradient(135deg,var(--bg1),var(--bg2));
+}
+
+#ticket-new-toggle,
+#shopify-api-key-btn{ display:none !important; }
+
+.ts-toast-wrap{
+  position:fixed;
+  top:92px;
+  right:22px;
+  z-index:99999;
+  display:grid;
+  gap:10px;
+  width:min(360px, calc(100vw - 32px));
+  pointer-events:none;
+}
+.ts-toast{
+  opacity:0;
+  transform:translateY(-10px) scale(.98);
+  transition:opacity .22s ease, transform .22s ease;
+  border-radius:18px;
+  padding:13px 16px;
+  font-weight:900;
+  box-shadow:0 18px 45px rgba(15,23,42,.18);
+  border:1px solid rgba(255,255,255,.7);
+  background:rgba(255,255,255,.92);
+  color:#12213f;
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+}
+.ts-toast.show{ opacity:1; transform:translateY(0) scale(1); }
+.ts-toast.ok{ border-color:#bbf7d0; background:rgba(236,253,245,.95); color:#065f46; }
+.ts-toast.danger{ border-color:#fecaca; background:rgba(254,242,242,.96); color:#991b1b; }
+
+.btn-primary.is-saving,
+.btn-secondary.is-saving{
+  opacity:.82;
+  cursor:wait !important;
+  display:inline-flex !important;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+.btn-spinner{
+  width:16px;
+  height:16px;
+  border-radius:999px;
+  border:2px solid currentColor;
+  border-top-color:transparent;
+  display:inline-block;
+  animation:tsSpin .75s linear infinite;
+}
+@keyframes tsSpin{ to{ transform:rotate(360deg); } }
+
+.ticket-detail-actions,
+#ticket-form .ticket-form-footer{
+  position:static !important;
+  box-shadow:none !important;
+  border-top:1px solid rgba(15,23,42,.08) !important;
+  background:rgba(255,255,255,.62) !important;
+  padding-top:12px;
+  border-radius:0 0 20px 20px;
+}
+.ticket-detail-panel{ overflow:hidden !important; }
+#ticket-detail{ overflow:auto !important; padding-bottom:24px !important; }
+.ticket-history-box{ margin-top:14px; }
+
+.ticket-info-box{
+  display:block !important;
+  padding:14px !important;
+  overflow:visible !important;
+}
+.ticket-info-structured{
+  direction:ltr !important;
+  text-align:left !important;
+  display:grid !important;
+  grid-template-columns:96px 1fr !important;
+  gap:14px !important;
+  width:100%;
+  align-items:start !important;
+}
+.ticket-info-structured > div:last-child{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.ticket-info-structured > div:last-child > div{
+  background:rgba(255,255,255,.72);
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:14px;
+  padding:10px 12px;
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+.ticket-info-structured pre{ max-height:110px; overflow:auto; }
+.ticket-info-structured .shopify-live-actions{
+  grid-column:1 / -1;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  background:transparent !important;
+  border:none !important;
+  padding:0 !important;
+}
+.ticket-info-structured .shopify-live-actions button{ min-width:130px; }
+.shopify-live-actions button[disabled]{ opacity:.45; cursor:not-allowed; }
+
+.shopify-live-search-row{ grid-template-columns:1fr auto auto !important; }
+.shopify-live-box .btn-primary,
+.shopify-live-box .btn-secondary{ white-space:nowrap; }
+
+@media(max-width:760px){
+  .ts-toast-wrap{ top:80px; right:12px; left:12px; width:auto; }
+  .ticket-info-structured{ grid-template-columns:1fr !important; }
+  .ticket-info-structured > div:last-child{ grid-template-columns:1fr; }
+  .shopify-live-search-row{ grid-template-columns:1fr !important; }
+}
