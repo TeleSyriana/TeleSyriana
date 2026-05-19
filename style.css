@@ -3943,3 +3943,64 @@ body[data-bg-tone="dark"] .notes-app{
   #page-messages .chat-message-list{ flex:1 1 auto !important; min-height:0 !important; overflow-y:auto !important; -webkit-overflow-scrolling:touch !important; }
   #page-messages .chat-input-row{ flex:0 0 auto !important; }
 }
+
+/* =========================
+   Shopify Live Order Lookup
+========================= */
+.shopify-live-panel{
+  margin:16px 0;
+  padding:16px;
+  border:1px solid rgba(37,99,235,.18);
+  background:linear-gradient(135deg, rgba(37,99,235,.08), rgba(14,165,233,.05));
+  border-radius:18px;
+  box-shadow:0 10px 30px rgba(15,23,42,.05);
+}
+.shopify-live-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+  margin-bottom:12px;
+}
+.shopify-live-head h3{ margin:0 0 4px; color:var(--ts-navy, #1f2b55); }
+.shopify-live-head p{ margin:0; color:var(--ts-muted, #667085); font-size:.88rem; }
+.shopify-live-row{
+  display:grid;
+  grid-template-columns:minmax(220px, 1fr) auto auto;
+  gap:10px;
+  align-items:center;
+}
+.shopify-live-row input{
+  width:100%;
+  min-height:42px;
+  border-radius:14px;
+}
+.shopify-live-result{
+  margin-top:12px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:16px;
+  padding:12px;
+  background:rgba(255,255,255,.78);
+  color:#1e293b;
+  font-size:.88rem;
+}
+.shopify-live-result.muted{ color:#64748b; }
+.shopify-live-title{ font-weight:900; margin-bottom:8px; color:#0f172a; }
+.shopify-live-grid-result{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:8px 12px;
+}
+.shopify-live-items{ margin-top:8px; }
+.shopify-admin-link{
+  display:inline-flex;
+  margin-top:10px;
+  font-weight:900;
+  text-decoration:none;
+  color:#2563eb;
+}
+@media(max-width:760px){
+  .shopify-live-row{ grid-template-columns:1fr; }
+  .shopify-live-grid-result{ grid-template-columns:1fr; }
+}

@@ -74,6 +74,12 @@ let allTickets = [];
 let selectedTicketId = null;
 let unsubTickets = null;
 let isHooked = false;
+let lastLiveShopifyOrder = null;
+const sessionShopifyOrders = new Map();
+
+const DEFAULT_SHOPIFY_BACKEND_URL = "https://telesyriana-backend.onrender.com";
+const SHOPIFY_BACKEND_URL_KEY = "telesyrianaShopifyBackendUrl";
+const SHOPIFY_API_KEY_STORAGE = "telesyrianaShopifyApiKey";
 
 function el(id) { return document.getElementById(id); }
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
@@ -164,6 +170,188 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function getShopifyBackendUrl() {
+  return (localStorage.getItem(SHOPIFY_BACKEND_URL_KEY) || DEFAULT_SHOPIFY_BACKEND_URL).replace(/\/+$/, "");
+}
+
+function getShopifyApiKey() {
+  return localStorage.getItem(SHOPIFY_API_KEY_STORAGE) || "";
+}
+
+function setShopifyApiKey() {
+  const existing = getShopifyApiKey();
+  const value = window.prompt("Enter TeleSyriana backend API key. It will be saved only in this browser.", existing);
+  if (value === null) return false;
+  const clean = value.trim();
+  if (!clean) {
+    localStorage.removeItem(SHOPIFY_API_KEY_STORAGE);
+    showTicketAlert("Shopify API key cleared.");
+    return false;
+  }
+  localStorage.setItem(SHOPIFY_API_KEY_STORAGE, clean);
+  showTicketAlert("Shopify API key saved in this browser.");
+  return true;
+}
+
+function normaliseShopifyStatus(v) {
+  const s = String(v || "").toLowerCase();
+  if (s.includes("fulfilled") || s === "success") return "fulfilled";
+  if (s.includes("cancel")) return "cancelled";
+  if (s.includes("refund")) return "refunded";
+  if (s.includes("progress") || s.includes("partial")) return "processing";
+  if (s.includes("unfulfilled") || s.includes("open")) return "unfulfilled";
+  return s || "unknown";
+}
+
+function moneyText(money) {
+  if (!money) return "";
+  const amount = money.amount ?? money.total ?? "";
+  const currency = money.currency || money.currencyCode || "";
+  return [amount, currency].filter(Boolean).join(" ").trim();
+}
+
+function addressText(address) {
+  if (!address) return "";
+  return [
+    address.firstName, address.lastName, address.company, address.address1, address.address2,
+    address.city, address.province, address.zip, address.country, address.phone
+  ].filter(Boolean).join(", ");
+}
+
+function firstTracking(order) {
+  const fulfilment = (order.fulfillments || []).find((f) => Array.isArray(f.tracking) && f.tracking.length) || (order.fulfillments || [])[0];
+  const tracking = fulfilment?.tracking?.[0] || {};
+  return {
+    number: tracking.number || "",
+    url: tracking.url || "",
+    company: tracking.company || "",
+  };
+}
+
+function normaliseShopifyOrder(apiOrder) {
+  if (!apiOrder) return null;
+  const order = apiOrder.order || {};
+  const customer = apiOrder.customer || {};
+  const tracking = firstTracking(apiOrder);
+  const items = (apiOrder.items || []).map((item) => {
+    const variant = item.variant && item.variant !== "Default Title" ? ` - ${item.variant}` : "";
+    const qty = item.quantity ? ` x${item.quantity}` : "";
+    return `${item.title || "Item"}${variant}${qty}`;
+  }).join(" | ");
+  const orderNumber = normaliseالطلبNumber(order.number || apiOrder.order_number || "");
+  return {
+    orderNumber,
+    customerName: customer.name || "",
+    email: customer.email || "",
+    phone: customer.phone || apiOrder.shipping_address?.phone || "",
+    totalPaid: moneyText(order.total_paid),
+    orderDate: order.created_at ? String(order.created_at).slice(0, 10) : "",
+    courier: tracking.company || "",
+    trackingNumber: tracking.number || "",
+    trackingUrl: tracking.url || "",
+    orderالحالة: normaliseShopifyStatus(order.fulfillment_status || order.payment_status),
+    deliveryالحالة: tracking.number ? "in_transit" : "unknown",
+    paymentStatus: order.payment_status || "",
+    fulfillmentStatus: order.fulfillment_status || "",
+    items,
+    shippingAddress: addressText(apiOrder.shipping_address),
+    billingAddress: addressText(apiOrder.billing_address),
+    notes: "",
+    adminUrl: apiOrder.admin_url || "",
+    refundsCount: Array.isArray(apiOrder.refunds) ? apiOrder.refunds.length : 0,
+    source: "shopify_live",
+    raw: apiOrder,
+  };
+}
+
+function rememberSessionOrder(order) {
+  if (!order?.orderNumber) return;
+  sessionShopifyOrders.set(normaliseالطلبNumber(order.orderNumber), order);
+  lastLiveShopifyOrder = order;
+}
+
+function getSessionOrder(orderNumber) {
+  return sessionShopifyOrders.get(normaliseالطلبNumber(orderNumber)) || null;
+}
+
+async function getBestOrderData(orderNumber) {
+  return getSessionOrder(orderNumber) || await getCachedالطلب(orderNumber);
+}
+
+async function fetchShopifyOrder(queryValue) {
+  const queryText = cleanText(queryValue);
+  if (!queryText) throw new Error("Enter an order number, email, phone, or customer name.");
+  let apiKey = getShopifyApiKey();
+  if (!apiKey) {
+    const saved = setShopifyApiKey();
+    if (!saved) throw new Error("Backend API key is required for Shopify lookup.");
+    apiKey = getShopifyApiKey();
+  }
+  const url = `${getShopifyBackendUrl()}/api/search-orders?q=${encodeURIComponent(queryText)}`;
+  const res = await fetch(url, { headers: { "x-api-key": apiKey } });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.details || data?.error || `Shopify lookup failed (${res.status})`);
+  }
+  const first = (data.orders || [])[0];
+  return { data, order: normaliseShopifyOrder(first) };
+}
+
+function renderShopifyLiveResult(order, message = "") {
+  const box = el("shopify-live-result");
+  const useBtn = el("shopify-live-use-ticket");
+  if (!box) return;
+  if (!order) {
+    box.className = "shopify-live-result muted";
+    box.textContent = message || "No Shopify order loaded yet.";
+    if (useBtn) useBtn.disabled = true;
+    return;
+  }
+  box.className = "shopify-live-result";
+  box.innerHTML = `
+    <div class="shopify-live-title">#${escapeHtml(order.orderNumber)} • ${escapeHtml(order.customerName || "No customer name")}</div>
+    <div class="shopify-live-grid-result">
+      <span><b>Email:</b> ${escapeHtml(order.email || "—")}</span>
+      <span><b>Phone:</b> ${escapeHtml(order.phone || "—")}</span>
+      <span><b>Total:</b> ${escapeHtml(order.totalPaid || "—")}</span>
+      <span><b>Payment:</b> ${escapeHtml(order.paymentStatus || "—")}</span>
+      <span><b>Fulfilment:</b> ${escapeHtml(order.fulfillmentStatus || "—")}</span>
+      <span><b>Tracking:</b> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</span>
+    </div>
+    <div class="shopify-live-items"><b>Items:</b> ${escapeHtml(order.items || "—")}</div>
+    ${order.adminUrl ? `<a class="shopify-admin-link" href="${escapeHtml(order.adminUrl)}" target="_blank" rel="noopener">Open Shopify order</a>` : ""}
+  `;
+  if (useBtn) useBtn.disabled = false;
+}
+
+function applyOrderToTicketForm(order) {
+  if (!order) return;
+  rememberSessionOrder(order);
+  if (el("ticket-order")) el("ticket-order").value = order.orderNumber || "";
+  if (el("ticket-customer")) el("ticket-customer").value = order.customerName || "";
+  if (el("ticket-email")) el("ticket-email").value = order.email || "";
+  renderالطلبPreview(order);
+  const block = orderNoteBlock(order);
+  const notes = el("ticket-notes");
+  if (notes && !notes.value.includes("Shopify live order loaded:")) {
+    notes.value = `${notes.value ? notes.value + "\n\n" : ""}${block}`;
+  }
+  setTicketFormمفتوحة(true);
+}
+
+async function searchAndApplyShopifyOrder(queryValue, applyToTicket = false) {
+  const { data, order } = await fetchShopifyOrder(queryValue);
+  if (!order) {
+    renderShopifyLiveResult(null, `No Shopify orders found. Query used: ${data?.query_used || queryValue}`);
+    showTicketAlert("No Shopify order found for this search.", true);
+    return null;
+  }
+  rememberSessionOrder(order);
+  renderShopifyLiveResult(order);
+  if (applyToTicket) applyOrderToTicketForm(order);
+  showTicketAlert(`Shopify order #${order.orderNumber} loaded.`);
+  return order;
+}
 
 function orderالحالةLabel(v) {
   const labels = {
@@ -187,22 +375,29 @@ function renderالطلبPreview(order) {
   body.innerHTML = `
     <div><strong>العميل:</strong> ${escapeHtml(order.customerName || "—")}</div>
     <div><strong>Email:</strong> ${escapeHtml(order.email || "—")}</div>
+    <div><strong>Phone:</strong> ${escapeHtml(order.phone || "—")}</div>
+    <div><strong>Total:</strong> ${escapeHtml(order.totalPaid || "—")}</div>
     <div><strong>Items:</strong> ${escapeHtml(order.items || "—")}</div>
     <div><strong>Tracking:</strong> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</div>
-    <div><strong>الحالة:</strong> ${escapeHtml(orderالحالةLabel(order.orderالحالة))} • ${escapeHtml(orderالحالةLabel(order.deliveryالحالة))}</div>
+    <div><strong>الحالة:</strong> ${escapeHtml(order.paymentStatus || orderالحالةLabel(order.orderالحالة))} • ${escapeHtml(order.fulfillmentStatus || orderالحالةLabel(order.deliveryالحالة))}</div>
+    ${order.adminUrl ? `<div><a href="${escapeHtml(order.adminUrl)}" target="_blank" rel="noopener">Open Shopify order</a></div>` : ""}
   `;
 }
 
 function orderNoteBlock(order) {
   if (!order) return "";
   return [
-    `Shopify order cache loaded:`,
+    order.source === "shopify_live" ? `Shopify live order loaded:` : `Shopify order cache loaded:`,
     `العميل: ${order.customerName || "—"}`,
     `Email: ${order.email || "—"}`,
     `Phone: ${order.phone || "—"}`,
     `Items: ${order.items || "—"}`,
     `Total: ${order.totalPaid || "—"}`,
+    `Payment: ${order.paymentStatus || "—"}`,
+    `Fulfilment: ${order.fulfillmentStatus || "—"}`,
     `Tracking: ${order.trackingNumber || "—"} ${order.courier ? `(${order.courier})` : ""}`,
+    order.trackingUrl ? `Tracking URL: ${order.trackingUrl}` : "",
+    order.adminUrl ? `Shopify admin: ${order.adminUrl}` : "",
     `الطلب status: ${orderالحالةLabel(order.orderالحالة)}`,
     `Delivery status: ${orderالحالةLabel(order.deliveryالحالة)}`,
     order.notes ? `الطلب notes: ${order.notes}` : ""
@@ -466,14 +661,19 @@ function renderTicketDetail() {
     info.innerHTML = `
       <div><strong>العميل:</strong> ${escapeHtml(t.customerName || orderData.customerName || "—")}</div>
       <div><strong>Email:</strong> ${escapeHtml(t.email || orderData.email || "—")}</div>
+      <div><strong>Phone:</strong> ${escapeHtml(orderData.phone || "—")}</div>
+      <div><strong>Total:</strong> ${escapeHtml(orderData.totalPaid || "—")}</div>
       <div><strong>Items:</strong> ${escapeHtml(orderData.items || "—")}</div>
       <div><strong>Tracking:</strong> ${escapeHtml(orderData.trackingNumber || "—")} ${orderData.courier ? `(${escapeHtml(orderData.courier)})` : ""}</div>
+      <div><strong>Payment:</strong> ${escapeHtml(orderData.paymentStatus || "—")}</div>
+      <div><strong>Fulfilment:</strong> ${escapeHtml(orderData.fulfillmentStatus || "—")}</div>
       <div><strong>الطلب status:</strong> ${escapeHtml(orderالحالةLabel(orderData.orderالحالة))}</div>
       <div><strong>Delivery:</strong> ${escapeHtml(orderالحالةLabel(orderData.deliveryالحالة))}</div>
       <div><strong>تم الإنشاء by:</strong> ${escapeHtml(staffName(t.createdBy))} (${escapeHtml(t.createdBy || "—")})</div>
       <div><strong>Updated:</strong> ${escapeHtml(fmtDate(t.updatedAt))}</div>
       <div><strong>Shopify:</strong> ${shopifyStatusPill(t)}</div>
       <div><strong>Risk:</strong> ${escapeHtml(t.risk || "normal")}</div>
+      ${orderData.adminUrl ? `<div><strong>Admin:</strong> <a href="${escapeHtml(orderData.adminUrl)}" target="_blank" rel="noopener">Open Shopify</a></div>` : ""}
     `;
   }
 
@@ -513,19 +713,56 @@ function hookUI() {
     if (priority && EMERGENCY_TYPES.has(type)) priority.value = "emergency";
   });
 
+  el("shopify-live-settings")?.addEventListener("click", setShopifyApiKey);
+
+  el("shopify-live-search")?.addEventListener("click", async () => {
+    const btn = el("shopify-live-search");
+    const oldText = btn?.textContent || "Search Shopify";
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = "Searching..."; }
+      await searchAndApplyShopifyOrder(el("shopify-live-query")?.value, false);
+    } catch (err) {
+      renderShopifyLiveResult(null, err?.message || "Shopify lookup failed.");
+      showTicketAlert(err?.message || "Shopify lookup failed.", true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = oldText; }
+    }
+  });
+
+  el("shopify-live-query")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      el("shopify-live-search")?.click();
+    }
+  });
+
+  el("shopify-live-use-ticket")?.addEventListener("click", () => {
+    if (!lastLiveShopifyOrder) return showTicketAlert("Search Shopify first.", true);
+    applyOrderToTicketForm(lastLiveShopifyOrder);
+  });
+
+  el("ticket-shopify-autofill-btn")?.addEventListener("click", async () => {
+    const order = normaliseالطلبNumber(el("ticket-order")?.value);
+    if (!order) return showTicketAlert("Enter an order number first.", true);
+    const btn = el("ticket-shopify-autofill-btn");
+    const oldText = btn?.textContent || "جلب من Shopify";
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = "جاري الجلب..."; }
+      await searchAndApplyShopifyOrder(order, true);
+    } catch (err) {
+      showTicketAlert(err?.message || "Shopify lookup failed.", true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = oldText; }
+    }
+  });
+
   el("ticket-autofill-btn")?.addEventListener("click", async () => {
     const order = normaliseالطلبNumber(el("ticket-order")?.value);
     if (!order) return showTicketAlert("Enter an order number first.", true);
-    const cached = await getCachedالطلب(order);
+    const cached = await getBestOrderData(order);
     if (cached) {
-      if (el("ticket-customer")) el("ticket-customer").value = cached.customerName || "";
-      if (el("ticket-email")) el("ticket-email").value = cached.email || "";
-      renderالطلبPreview(cached);
-      const existing = el("ticket-notes")?.value || "";
-      if (el("ticket-notes") && !existing.includes("Shopify order cache loaded:")) {
-        el("ticket-notes").value = `${existing ? existing + "\n\n" : ""}${orderNoteBlock(cached)}`;
-      }
-      showTicketAlert("الطلب cache found and ticket fields were filled.");
+      applyOrderToTicketForm(cached);
+      showTicketAlert(cached.source === "shopify_live" ? "Shopify live order filled." : "الطلب cache found and ticket fields were filled.");
       return;
     }
     renderالطلبPreview(null);
@@ -538,7 +775,7 @@ function hookUI() {
   el("ticket-order")?.addEventListener("blur", async () => {
     const order = normaliseالطلبNumber(el("ticket-order")?.value);
     if (!order) return renderالطلبPreview(null);
-    renderالطلبPreview(await getCachedالطلب(order));
+    renderالطلبPreview(await getBestOrderData(order));
   });
 
   el("order-admin-toggle")?.addEventListener("click", () => {
@@ -596,7 +833,7 @@ async function createTicket() {
   const assignedTo = canEditAll(currentUser)
     ? (el("ticket-assigned")?.value || "")
     : currentUser.id;
-  const cachedالطلب = await getCachedالطلب(orderNumber);
+  const cachedالطلب = await getBestOrderData(orderNumber);
 
   const payload = {
     orderNumber,
@@ -612,7 +849,7 @@ async function createTicket() {
     resolution: "",
     customerMood: inferMood(type, priority),
     risk: riskFromTypeAndالطلب(type, cachedالطلب),
-    source: cachedالطلب ? "order_cache" : "manual",
+    source: cachedالطلب?.source === "shopify_live" ? "shopify_live" : (cachedالطلب ? "order_cache" : "manual"),
     shopifyStatus: cachedالطلب ? "synced" : "failed",
     shopifyStatusLabel: cachedالطلب ? "Synced with Shopify" : "Failed to load from Shopify",
     orderData: cachedالطلب ? {
@@ -624,9 +861,15 @@ async function createTicket() {
       orderDate: cachedالطلب.orderDate || "",
       courier: cachedالطلب.courier || "",
       trackingNumber: cachedالطلب.trackingNumber || "",
+      trackingUrl: cachedالطلب.trackingUrl || "",
+      paymentStatus: cachedالطلب.paymentStatus || "",
+      fulfillmentStatus: cachedالطلب.fulfillmentStatus || "",
       orderالحالة: cachedالطلب.orderالحالة || "unknown",
       deliveryالحالة: cachedالطلب.deliveryالحالة || "unknown",
       shippingAddress: cachedالطلب.shippingAddress || "",
+      billingAddress: cachedالطلب.billingAddress || "",
+      adminUrl: cachedالطلب.adminUrl || "",
+      refundsCount: cachedالطلب.refundsCount || 0,
     } : {},
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -673,6 +916,7 @@ async function saveالطلبCacheForm() {
   if (!canManageالطلبCache(currentUser)) return showTicketAlert("Only supervisor, manager, or admin can save order cache.", true);
   const orderNumber = normaliseالطلبNumber(el("order-cache-number")?.value);
   if (!orderNumber) return showTicketAlert("الطلب number is required.", true);
+  const existing = await getCachedالطلب(orderNumber);
   const payload = {
     orderNumber,
     customerName: cleanText(el("order-cache-customer")?.value),
@@ -689,10 +933,9 @@ async function saveالطلبCacheForm() {
     notes: cleanText(el("order-cache-notes")?.value),
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
-    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
+    history: addHistory(existing?.history, "تم تحديث بيانات الطلب اليدوية", currentUser?.id || ""),
     updatedByName: currentUser?.name || "",
   };
-  const existing = await getCachedالطلب(orderNumber);
   if (!existing) payload.createdAt = serverTimestamp();
   await setDoc(orderDocRef(orderNumber), payload, { merge: true });
   showTicketAlert("الطلب cache saved. Agents can now autofill this order.");
