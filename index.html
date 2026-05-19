@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <title>TeleSyriana – Support OS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2.2.0" />
 </head>
 
-<body>
+<body data-build-version="1.8.0">
   <div class="app-wrapper">
 
     <!-- HEADER -->
@@ -68,14 +68,6 @@
 
             <button type="submit" class="btn-primary">دخول</button>
           </form>
-
-          <p class="hint">
-            حسابات التجربة:<br />
-            <code>0001 / Welcome 2026!</code> (موظف دعم)<br />
-            <code>1001 / 2411</code> (مشرف)<br />
-            <code>2001 / 2411</code> (مدير)<br />
-            <code>9001 / 2411</code> (أدمن)<br />
-          </p>
         </section>
       </div>
     </main>
@@ -275,43 +267,24 @@
 
       <!-- NOTES PAGE -->
       <section id="page-tasks" class="page-section hidden">
-        <section class="card notes-app-card notes-pro-card">
-          <div class="notes-app notes-pro-app">
-            <aside class="notes-sidebar notes-pro-sidebar">
-              <div class="notes-head notes-pro-head">
+        <section class="card notes-app-card">
+          <div class="notes-app">
+            <aside class="notes-sidebar">
+              <div class="notes-head">
                 <div>
                   <h2>الملاحظات</h2>
-                  <p class="subtitle">ملاحظات شخصية للمتابعة، الأفكار، والتعليمات اليومية.</p>
+                  <p class="subtitle">ملاحظات شخصية بأسلوب بسيط للمتابعة والأفكار.</p>
                 </div>
-                <button id="note-new-btn" class="btn-primary notes-new-btn" type="button">+ ملاحظة جديدة</button>
+                <button id="note-new-btn" class="btn-primary" type="button">+ ملاحظة جديدة</button>
               </div>
-              <div class="notes-search-wrap">
-                <input id="notes-search" class="notes-search" type="text" placeholder="البحث في الملاحظات..." />
-                <span id="notes-count" class="notes-count">0</span>
-              </div>
-              <div id="notes-list" class="notes-list notes-pro-list"></div>
+              <input id="notes-search" class="notes-search" type="text" placeholder="البحث في الملاحظات..." />
+              <div id="notes-list" class="notes-list"></div>
             </aside>
-            <main class="notes-editor notes-pro-editor">
-              <div class="notes-editor-topbar">
-                <button id="note-mobile-back" class="btn-secondary note-mobile-back" type="button">رجوع</button>
-                <div>
-                  <strong id="note-editor-mode">ملاحظة شخصية</strong>
-                  <small id="note-last-updated">—</small>
-                </div>
-                <button id="note-save-now-btn" class="btn-secondary note-save-now" type="button">حفظ الآن</button>
-              </div>
-              <div id="note-empty-state" class="note-empty-state">
-                <div class="note-empty-icon">📝</div>
-                <h3>اختر ملاحظة أو أنشئ واحدة جديدة</h3>
-                <p>كل ملاحظة يتم حفظها تلقائياً في حساب الموظف الحالي.</p>
-              </div>
-              <div class="note-editor-fields">
-                <input id="note-title" class="note-title-input" type="text" placeholder="عنوان الملاحظة" />
-                <textarea id="note-body" class="note-body-input" placeholder="ابدأ الكتابة..."></textarea>
-              </div>
+            <main class="notes-editor">
+              <input id="note-title" class="note-title-input" type="text" placeholder="عنوان الملاحظة" />
+              <textarea id="note-body" class="note-body-input" placeholder="ابدأ الكتابة..."></textarea>
               <div class="notes-editor-footer">
                 <span id="note-save-status">Ready</span>
-                <span id="note-word-count" class="note-word-count">0 words</span>
                 <button id="note-delete-btn" class="btn-secondary danger" type="button">حذف</button>
               </div>
             </main>
@@ -330,59 +303,47 @@
             </div>
             <div class="tickets-actions">
               <button id="ticket-refresh-btn" class="btn-secondary" type="button">تحديث</button>
-              <button id="ticket-new-toggle" class="btn-primary" type="button" style="width:auto;padding:10px 16px">+ تذكرة جديدة</button>
+              <button id="ticket-new-toggle" class="btn-primary hidden" type="button" style="width:auto;padding:10px 16px" aria-hidden="true">+ تذكرة جديدة</button>
             </div>
           </div>
 
           <div id="ticket-alert" class="alert hidden"></div>
 
-          <div id="order-admin-panel" class="order-admin-panel hidden">
+          <div id="order-admin-panel" class="order-admin-panel">
             <div class="order-admin-head">
               <div>
-                <h3>بيانات الطلب / ذاكرة Shopify</h3>
-                <p>حفظ يدوي لبيانات الطلب حالياً لاستخدام الملء التلقائي. يمكن ربط Shopify API لاحقاً.</p>
+                <h3>Shopify Live Order Lookup</h3>
+                <p>Search real Shopify orders, see product, customer, postcode, tracking, and save structured tickets.</p>
               </div>
-              <button id="order-admin-toggle" type="button" class="btn-secondary">إضافة / تحديث طلب</button>
+              <button id="shopify-api-key-btn" type="button" class="btn-secondary hidden" aria-hidden="true">API key</button>
             </div>
 
-            <form id="order-cache-form" class="order-cache-form hidden">
-              <div class="order-cache-grid">
-                <label>رقم الطلب #<input id="order-cache-number" type="text" placeholder="2515" required /></label>
-                <label>اسم العميل<input id="order-cache-customer" type="text" placeholder="اسم العميل" /></label>
-                <label>البريد الإلكتروني<input id="order-cache-email" type="email" placeholder="customer@email.com" /></label>
-                <label>رقم الهاتف<input id="order-cache-phone" type="text" placeholder="اختياري" /></label>
-                <label>الإجمالي المدفوع<input id="order-cache-total" type="text" placeholder="£34.99" /></label>
-                <label>تاريخ الطلب<input id="order-cache-date" type="date" /></label>
-                <label>شركة الشحن<input id="order-cache-courier" type="text" placeholder="Royal Mail / EVRI / YunExpress" /></label>
-                <label>رقم التتبع<input id="order-cache-tracking" type="text" placeholder="رقم التتبع" /></label>
-                <label>حالة الطلب
-                  <select id="order-cache-status">
-                    <option value="unknown">غير معروف</option>
-                    <option value="unfulfilled">غير منفذ</option>
-                    <option value="processing">قيد المعالجة</option>
-                    <option value="fulfilled">تم التنفيذ</option>
-                    <option value="cancelled">ملغي</option>
-                    <option value="refunded">تم الاسترداد</option>
-                  </select>
-                </label>
-                <label>حالة التوصيل
-                  <select id="order-cache-delivery">
-                    <option value="unknown">غير معروف</option>
-                    <option value="label_created">تم إنشاء الملصق</option>
-                    <option value="in_transit">قيد الشحن</option>
-                    <option value="delivered">تم التوصيل</option>
-                    <option value="delayed">متأخر</option>
-                    <option value="lost">مفقود / قيد التحقيق</option>
-                  </select>
-                </label>
+            <div class="shopify-live-box">
+              <div class="shopify-live-search-row">
+                <input id="shopify-live-query" type="text" placeholder="Order #, email, phone, customer name" />
+                <button id="shopify-live-search-btn" type="button" class="btn-primary">Search Shopify</button>
+                <button id="shopify-live-use-btn" type="button" class="btn-secondary" disabled>Use in ticket</button>
               </div>
-              <label>المنتجات<textarea id="order-cache-items" rows="2" placeholder="iرقم الهاتف 14 Silicone Case - Olive + Screen Protector 2D"></textarea></label>
-              <label>عنوان الشحن<textarea id="order-cache-address" rows="2" placeholder="اختياري"></textarea></label>
-              <label>ملاحظات داخلية للطلب<textarea id="order-cache-notes" rows="2" placeholder="أي ملاحظة مفيدة للدعم"></textarea></label>
-              <div class="ticket-form-footer">
-                <button type="button" id="order-cache-load" class="btn-secondary">تحميل الطلب</button>
-                <button type="submit" class="btn-primary" style="width:auto">حفظ بيانات الطلب</button>
-              </div>
+              <div id="shopify-live-status" class="shopify-live-status">No Shopify order loaded yet.</div>
+              <div id="shopify-live-result" class="shopify-live-result hidden"></div>
+            </div>
+
+            <form id="order-cache-form" class="order-cache-form hidden" aria-hidden="true">
+              <input id="order-cache-number" type="hidden" />
+              <input id="order-cache-customer" type="hidden" />
+              <input id="order-cache-email" type="hidden" />
+              <input id="order-cache-phone" type="hidden" />
+              <input id="order-cache-total" type="hidden" />
+              <input id="order-cache-date" type="hidden" />
+              <input id="order-cache-courier" type="hidden" />
+              <input id="order-cache-tracking" type="hidden" />
+              <select id="order-cache-status" class="hidden"><option value="unknown">unknown</option></select>
+              <select id="order-cache-delivery" class="hidden"><option value="unknown">unknown</option></select>
+              <textarea id="order-cache-items" class="hidden"></textarea>
+              <textarea id="order-cache-address" class="hidden"></textarea>
+              <textarea id="order-cache-notes" class="hidden"></textarea>
+              <button id="order-cache-load" type="button" class="hidden">load</button>
+              <button id="order-admin-toggle" type="button" class="hidden">toggle</button>
             </form>
           </div>
 
@@ -1218,27 +1179,16 @@
     </main>
   </div>
 
-  <!-- FLOATING CHAT TOGGLE -->
-  <button id="float-chat-toggle" class="floating-chat-toggle hidden" type="button">💬</button>
-
-  <!-- FLOATING CHAT PANEL -->
-  <div id="float-chat-panel" class="floating-chat-panel hidden">
-    <div class="floating-chat-header">
-      <div class="floating-chat-title">دردشة TeleSyriana</div>
-      <button id="float-chat-close" class="floating-chat-close" type="button">×</button>
-    </div>
-    <!-- messages.js will inject the body UI here -->
-  </div>
 
   <!-- scripts -->
-  <script type="module" src="app.js?v=2.5.0"></script>
-  <script type="module" src="tasks.js?v=2.5.0"></script>
-  <script type="module" src="tickets.js?v=2.5.0"></script>
-  <script type="module" src="reports.js?v=2.5.0"></script>
-  <script type="module" src="payroll.js?v=2.5.0"></script>
-  <script type="module" src="messages.js?v=2.5.0"></script>
-  <script type="module" src="groups.js?v=2.5.0"></script>
-  <script type="module" src="meetings.js?v=2.5.0"></script>
+  <script type="module" src="app.js?v=2.2.0"></script>
+  <script type="module" src="tasks.js?v=2.2.0"></script>
+  <script type="module" src="tickets.js?v=2.2.0"></script>
+  <script type="module" src="reports.js?v=2.2.0"></script>
+  <script type="module" src="payroll.js?v=2.2.0"></script>
+  <script type="module" src="messages.js?v=2.2.0"></script>
+  <script type="module" src="groups.js?v=2.2.0"></script>
+  <script type="module" src="meetings.js?v=2.2.0"></script>
 
 </body>
 </html>

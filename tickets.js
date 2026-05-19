@@ -74,6 +74,18 @@ let allTickets = [];
 let selectedTicketId = null;
 let unsubTickets = null;
 let isHooked = false;
+let currentLiveOrder = null;
+let currentLiveOrderFirebaseStatus = "none";
+
+const SHOPIFY_BACKEND_URL = "https://telesyriana-backend.onrender.com";
+const SHOPIFY_API_KEY_STORAGE = "telesyrianaShopifyBackendApiKey";
+// Staff should not handle backend API keys. This is obfuscated only to reduce UI confusion; real security still belongs on the backend/auth layer.
+const SHOPIFY_BACKEND_KEY_MASK = 37;
+const SHOPIFY_BACKEND_KEY_OBFUSCATED = [100,68,21,28,16,20,17,23,22,22,23,17,20,16,4];
+
+function defaultShopifyApiKey() {
+  try { return SHOPIFY_BACKEND_KEY_OBFUSCATED.map(n => String.fromCharCode(n ^ SHOPIFY_BACKEND_KEY_MASK)).join(""); } catch { return ""; }
+}
 
 function el(id) { return document.getElementById(id); }
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
@@ -165,6 +177,223 @@ function escapeHtml(value) {
 }
 
 
+function copyText(value, label = "Copied") {
+  const text = String(value || "").trim();
+  if (!text) return showTicketAlert("Nothing to copy.", true);
+  try {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      showTicketAlert(label);
+      return;
+    }
+  } catch {}
+  const temp = document.createElement("textarea");
+  temp.value = text;
+  document.body.appendChild(temp);
+  temp.select();
+  document.execCommand("copy");
+  temp.remove();
+  showTicketAlert(label);
+}
+
+function getShopifyApiKey() {
+  // Use local override only for developer testing; employees no longer see an API key popup.
+  return localStorage.getItem(SHOPIFY_API_KEY_STORAGE) || defaultShopifyApiKey();
+}
+
+function setShopifyApiKey() {
+  showTicketAlert("Backend API key is already configured for staff.");
+  return getShopifyApiKey();
+}
+
+function firstTracking(order) {
+  const f = Array.isArray(order?.fulfillments) ? order.fulfillments.find(x => Array.isArray(x.tracking) && x.tracking.length) : null;
+  return f?.tracking?.[0] || {};
+}
+
+function formatAddress(a) {
+  if (!a) return "";
+  return [a.firstName, a.lastName, a.company, a.address1, a.address2, a.city, a.province, a.zip, a.country, a.phone].filter(Boolean).join(", ");
+}
+
+function mapShopifyOrder(raw) {
+  if (!raw) return null;
+  const order = raw.order || {};
+  const customer = raw.customer || {};
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  const shipping = raw.shipping_address || {};
+  const track = firstTracking(raw);
+  const orderNumber = normaliseالطلبNumber(order.number || order.name || raw.order_number || "");
+  const totalAmount = order.total_paid?.amount || raw.total_paid?.amount || "";
+  const totalCurrency = order.total_paid?.currency || raw.total_paid?.currency || "";
+  const firstImage = items.find(i => i.image_url)?.image_url || "";
+  return {
+    orderNumber,
+    customerName: customer.name || "",
+    email: customer.email || "",
+    phone: customer.phone || "",
+    postcode: shipping.zip || shipping.postcode || shipping.postalCode || "",
+    totalPaid: totalAmount ? `${totalAmount} ${totalCurrency}`.trim() : "",
+    orderDate: order.created_at || order.createdAt || "",
+    courier: track.company || "",
+    trackingNumber: track.number || "",
+    trackingUrl: track.url || "",
+    orderالحالة: String(order.fulfillment_status || "unknown").toLowerCase(),
+    paymentStatus: order.payment_status || "",
+    deliveryالحالة: track.number ? "in_transit" : "unknown",
+    items: items.map(i => `${i.title || i.product_title || "Item"}${i.variant ? ` - ${i.variant}` : ""} x${i.quantity || 1}`).join("\n"),
+    itemList: items,
+    imageUrl: firstImage,
+    shippingAddress: formatAddress(raw.shipping_address),
+    billingAddress: formatAddress(raw.billing_address),
+    adminUrl: raw.admin_url || raw.adminUrl || "",
+    refunds: Array.isArray(raw.refunds) ? raw.refunds : [],
+    rawShopify: raw,
+    source: "live_shopify",
+  };
+}
+
+function liveStatus(text, mode = "info") {
+  const box = el("shopify-live-status");
+  if (!box) return;
+  box.textContent = text;
+  box.className = `shopify-live-status ${mode}`;
+}
+
+function firebaseStatusBadge(status) {
+  if (status === "saved") return `<span class="firebase-save-badge saved">✅ Saved to Firebase orderRecords</span>`;
+  if (status === "failed") return `<span class="firebase-save-badge failed">⚠️ Loaded from Shopify but not saved to Firebase</span>`;
+  return `<span class="firebase-save-badge pending">Firebase: not saved yet</span>`;
+}
+
+function renderShopifyLiveResult(order, firebaseStatus = currentLiveOrderFirebaseStatus) {
+  const box = el("shopify-live-result");
+  if (!box) return;
+  if (!order) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    if (el("shopify-live-use-btn")) el("shopify-live-use-btn").disabled = true;
+    return;
+  }
+  box.classList.remove("hidden");
+  if (el("shopify-live-use-btn")) el("shopify-live-use-btn").disabled = false;
+  const img = order.imageUrl ? `<img class="shopify-product-thumb" src="${escapeHtml(order.imageUrl)}" alt="Product image" loading="lazy" />` : `<div class="shopify-product-thumb placeholder">No image</div>`;
+  box.innerHTML = `
+    <div class="shopify-order-card">
+      <div class="shopify-order-card-head">
+        ${img}
+        <div>
+          <h4>#${escapeHtml(order.orderNumber || "—")} • ${escapeHtml(order.customerName || "No customer")}</h4>
+          <div class="shopify-muted">${escapeHtml(order.email || "—")} • ${escapeHtml(order.phone || "—")}</div>
+          <div class="shopify-muted">${firebaseStatusBadge(firebaseStatus)}</div>
+        </div>
+      </div>
+      <div class="shopify-order-grid">
+        <div><b>Total</b><span>${escapeHtml(order.totalPaid || "—")}</span></div>
+        <div><b>Payment</b><span>${escapeHtml(order.paymentStatus || "—")}</span></div>
+        <div><b>Fulfilment</b><span>${escapeHtml(order.orderالحالة || "—")}</span></div>
+        <div><b>Courier</b><span>${escapeHtml(order.courier || "—")}</span></div>
+        <div><b>Postcode</b><span>${escapeHtml(order.postcode || "—")}</span></div>
+      </div>
+      <div class="shopify-items-box"><b>Items</b><pre>${escapeHtml(order.items || "—")}</pre></div>
+      <div class="shopify-tracking-box">
+        <div><b>Tracking number:</b> ${escapeHtml(order.trackingNumber || "—")}</div>
+        <div><b>Postcode:</b> ${escapeHtml(order.postcode || "—")}</div>
+        <div><b>Tracking URL:</b> ${order.trackingUrl ? `<a href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener">Open tracking link</a>` : "—"}</div>
+        <div class="shopify-live-actions">
+          <button type="button" class="btn-secondary" data-copy-postcode>Copy postcode</button>
+          <button type="button" class="btn-secondary" data-copy-tracking>Copy tracking</button>
+          <button type="button" class="btn-secondary" data-copy-tracking-url>Copy tracking URL</button>
+          ${order.trackingUrl ? `<button type="button" class="btn-secondary" data-open-tracking>Open tracking</button>` : ""}
+          ${order.adminUrl ? `<button type="button" class="btn-secondary" data-open-shopify>Open Shopify</button>` : ""}
+        </div>
+      </div>
+    </div>`;
+  box.querySelector("[data-copy-postcode]")?.addEventListener("click", () => copyText(order.postcode, "Postcode copied."));
+  box.querySelector("[data-copy-tracking]")?.addEventListener("click", () => copyText(order.trackingNumber, "Tracking number copied."));
+  box.querySelector("[data-copy-tracking-url]")?.addEventListener("click", () => copyText(order.trackingUrl, "Tracking URL copied."));
+  box.querySelector("[data-open-tracking]")?.addEventListener("click", () => order.trackingUrl && window.open(order.trackingUrl, "_blank", "noopener"));
+  box.querySelector("[data-open-shopify]")?.addEventListener("click", () => order.adminUrl && window.open(order.adminUrl, "_blank", "noopener"));
+}
+
+async function saveLiveOrderToFirebase(order) {
+  if (!order?.orderNumber) return "failed";
+  const existing = await getCachedالطلب(order.orderNumber).catch(() => null);
+  const payload = {
+    ...order,
+    shopifyStatus: "synced",
+    shopifySyncStatus: "synced",
+    updatedAt: serverTimestamp(),
+    updatedBy: currentUser?.id || "system",
+    updatedByName: currentUser?.name || "System",
+  };
+  if (!existing) payload.createdAt = serverTimestamp();
+  try {
+    await setDoc(orderDocRef(order.orderNumber), payload, { merge: true });
+    currentLiveOrderFirebaseStatus = "saved";
+    renderShopifyLiveResult(order, "saved");
+    return "saved";
+  } catch (err) {
+    console.warn("Could not save Shopify order to Firebase orderRecords", err);
+    currentLiveOrderFirebaseStatus = "failed";
+    renderShopifyLiveResult(order, "failed");
+    return "failed";
+  }
+}
+
+async function searchShopifyLive({ useInTicket = false } = {}) {
+  const input = el("shopify-live-query");
+  const q = normaliseالطلبNumber(input?.value || el("ticket-order")?.value || "");
+  if (!q) return showTicketAlert("Enter an order number first.", true);
+  let apiKey = getShopifyApiKey();
+  if (!apiKey) apiKey = setShopifyApiKey();
+  if (!apiKey) return showTicketAlert("API key is required for Shopify live search.", true);
+  const btn = el("shopify-live-search-btn");
+  const restoreSearchBtn = setButtonSaving(btn, true, "Searching...");
+  liveStatus("Searching Shopify...", "loading");
+  renderShopifyLiveResult(null);
+  try {
+    const url = `${SHOPIFY_BACKEND_URL}/api/search-orders?q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, { headers: { "x-api-key": apiKey } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || data.details || `HTTP ${res.status}`);
+    if (!data.orders?.length) {
+      currentLiveOrder = null;
+      currentLiveOrderFirebaseStatus = "none";
+      liveStatus(`No Shopify order found for ${q}.`, "warn");
+      renderShopifyLiveResult(null);
+      return null;
+    }
+    currentLiveOrder = mapShopifyOrder(data.orders[0]);
+    currentLiveOrderFirebaseStatus = "pending";
+    renderShopifyLiveResult(currentLiveOrder, "pending");
+    liveStatus(`Loaded #${currentLiveOrder.orderNumber} from Shopify. Saving to Firebase...`, "ok");
+    const saved = await saveLiveOrderToFirebase(currentLiveOrder);
+    liveStatus(saved === "saved" ? `Loaded and saved #${currentLiveOrder.orderNumber}.` : `Loaded #${currentLiveOrder.orderNumber}, but Firebase save failed. Ticket can still use it.`, saved === "saved" ? "ok" : "warn");
+    if (useInTicket) useLiveOrderInTicket();
+    return currentLiveOrder;
+  } catch (err) {
+    console.error("Shopify live lookup failed", err);
+    liveStatus(`Shopify search failed: ${err.message || err}`, "danger");
+    showTicketAlert(`Shopify search failed: ${err.message || err}`, true);
+    return null;
+  } finally {
+    restoreSearchBtn();
+  }
+}
+
+function useLiveOrderInTicket() {
+  const order = currentLiveOrder;
+  if (!order) return showTicketAlert("Search Shopify first.", true);
+  setTicketFormمفتوحة(true);
+  if (el("ticket-order")) el("ticket-order").value = order.orderNumber || "";
+  if (el("ticket-customer")) el("ticket-customer").value = order.customerName || "";
+  if (el("ticket-email")) el("ticket-email").value = order.email || "";
+  renderالطلبPreview(order);
+  showTicketAlert("Structured Shopify order is ready for this ticket. Notes stay for the issue only.");
+}
+
+
 function orderالحالةLabel(v) {
   const labels = {
     unknown: "Unknown", unfulfilled: "Unfulfilled", processing: "Processing", fulfilled: "Fulfilled",
@@ -184,13 +413,22 @@ function renderالطلبPreview(order) {
     return;
   }
   card.classList.remove("hidden");
+  const img = order.imageUrl ? `<img class="shopify-product-thumb small" src="${escapeHtml(order.imageUrl)}" alt="Product image" loading="lazy" />` : "";
   body.innerHTML = `
-    <div><strong>العميل:</strong> ${escapeHtml(order.customerName || "—")}</div>
-    <div><strong>Email:</strong> ${escapeHtml(order.email || "—")}</div>
-    <div><strong>Items:</strong> ${escapeHtml(order.items || "—")}</div>
-    <div><strong>Tracking:</strong> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</div>
-    <div><strong>الحالة:</strong> ${escapeHtml(orderالحالةLabel(order.orderالحالة))} • ${escapeHtml(orderالحالةLabel(order.deliveryالحالة))}</div>
-  `;
+    <div class="ticket-preview-structured">
+      ${img}
+      <div>
+        <div><strong>العميل:</strong> ${escapeHtml(order.customerName || "—")}</div>
+        <div><strong>Email:</strong> ${escapeHtml(order.email || "—")}</div>
+        <div><strong>Phone:</strong> ${escapeHtml(order.phone || "—")}</div>
+        <div><strong>Postcode:</strong> ${escapeHtml(order.postcode || "—")}</div>
+        <div><strong>Items:</strong> ${escapeHtml(order.items || "—")}</div>
+        <div><strong>Total:</strong> ${escapeHtml(order.totalPaid || "—")}</div>
+        <div><strong>Payment:</strong> ${escapeHtml(order.paymentStatus || "—")}</div>
+        <div><strong>Fulfilment:</strong> ${escapeHtml(order.orderالحالة || "—")}</div>
+        <div><strong>Tracking:</strong> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</div>
+      </div>
+    </div>`;
 }
 
 function orderNoteBlock(order) {
@@ -200,6 +438,7 @@ function orderNoteBlock(order) {
     `العميل: ${order.customerName || "—"}`,
     `Email: ${order.email || "—"}`,
     `Phone: ${order.phone || "—"}`,
+    `Postcode: ${order.postcode || "—"}`,
     `Items: ${order.items || "—"}`,
     `Total: ${order.totalPaid || "—"}`,
     `Tracking: ${order.trackingNumber || "—"} ${order.courier ? `(${order.courier})` : ""}`,
@@ -273,13 +512,47 @@ function inferMood(type, priority) {
   return "calm";
 }
 
+function toast(message, danger = false) {
+  let wrap = document.getElementById("ts-toast-wrap");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "ts-toast-wrap";
+    wrap.className = "ts-toast-wrap";
+    document.body.appendChild(wrap);
+  }
+  const item = document.createElement("div");
+  item.className = `ts-toast ${danger ? "danger" : "ok"}`;
+  item.textContent = message;
+  wrap.appendChild(item);
+  requestAnimationFrame(() => item.classList.add("show"));
+  setTimeout(() => {
+    item.classList.remove("show");
+    setTimeout(() => item.remove(), 260);
+  }, 2600);
+}
+
 function showTicketAlert(message, danger = false) {
   const box = el("ticket-alert");
-  if (!box) return;
-  box.textContent = message;
-  box.classList.remove("hidden");
-  box.classList.toggle("danger", Boolean(danger));
-  setTimeout(() => box.classList.add("hidden"), 3500);
+  if (box) {
+    box.textContent = message;
+    box.classList.remove("hidden");
+    box.classList.toggle("danger", Boolean(danger));
+    setTimeout(() => box.classList.add("hidden"), 3500);
+  }
+  toast(message, danger);
+}
+
+function setButtonSaving(button, saving, savingText = "Saving...") {
+  if (!button) return () => {};
+  const oldText = button.textContent;
+  button.disabled = Boolean(saving);
+  button.classList.toggle("is-saving", Boolean(saving));
+  if (saving) button.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span><span>${savingText}</span>`;
+  return () => {
+    button.disabled = false;
+    button.classList.remove("is-saving");
+    button.textContent = oldText;
+  };
 }
 
 function setTicketFormمفتوحة(open) {
@@ -419,7 +692,12 @@ function selectTicket(id) {
   selectedTicketId = id;
   renderTicketList();
   renderTicketDetail();
-  el("ticket-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  // Desktop had a horizontal jump when a ticket opened because scrollIntoView
+  // tried to bring the detail panel into view inside the RTL grid. Only scroll on mobile.
+  if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) {
+    el("ticket-detail")?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+  }
 }
 
 function renderTicketDetail() {
@@ -463,18 +741,56 @@ function renderTicketDetail() {
   const info = el("ticket-info-box");
   if (info) {
     const orderData = t.orderData || {};
-    info.innerHTML = `
-      <div><strong>العميل:</strong> ${escapeHtml(t.customerName || orderData.customerName || "—")}</div>
-      <div><strong>Email:</strong> ${escapeHtml(t.email || orderData.email || "—")}</div>
-      <div><strong>Items:</strong> ${escapeHtml(orderData.items || "—")}</div>
-      <div><strong>Tracking:</strong> ${escapeHtml(orderData.trackingNumber || "—")} ${orderData.courier ? `(${escapeHtml(orderData.courier)})` : ""}</div>
-      <div><strong>الطلب status:</strong> ${escapeHtml(orderالحالةLabel(orderData.orderالحالة))}</div>
-      <div><strong>Delivery:</strong> ${escapeHtml(orderالحالةLabel(orderData.deliveryالحالة))}</div>
-      <div><strong>تم الإنشاء by:</strong> ${escapeHtml(staffName(t.createdBy))} (${escapeHtml(t.createdBy || "—")})</div>
-      <div><strong>Updated:</strong> ${escapeHtml(fmtDate(t.updatedAt))}</div>
-      <div><strong>Shopify:</strong> ${shopifyStatusPill(t)}</div>
-      <div><strong>Risk:</strong> ${escapeHtml(t.risk || "normal")}</div>
-    `;
+    const hasShopifyData = Boolean(orderData.orderNumber || orderData.customerName || orderData.items || orderData.adminUrl || t.shopifyStatus);
+    const img = orderData.imageUrl
+      ? `<img class="shopify-product-thumb ticket-detail-img" src="${escapeHtml(orderData.imageUrl)}" alt="Product image" loading="lazy" />`
+      : `<div class="shopify-product-thumb ticket-detail-img placeholder">No image</div>`;
+
+    if (!hasShopifyData) {
+      info.innerHTML = `<div class="ticket-shopify-empty">No linked Shopify order yet.</div>`;
+    } else {
+      info.innerHTML = `
+        <section class="ticket-shopify-card">
+          <div class="ticket-shopify-head">
+            ${img}
+            <div class="ticket-shopify-title-block">
+              <div class="ticket-shopify-label">Linked Shopify Order</div>
+              <h3>#${escapeHtml(t.orderNumber || orderData.orderNumber || "—")}</h3>
+              <p>${escapeHtml(t.type ? (TYPE_LABELS[t.type] || t.type) : "Support ticket")}</p>
+              ${shopifyStatusPill(t)}
+            </div>
+          </div>
+
+          <div class="ticket-shopify-fields">
+            <div class="field-card wide"><span>Customer</span><strong>${escapeHtml(t.customerName || orderData.customerName || "—")}</strong></div>
+            <div class="field-card"><span>Email</span><strong>${escapeHtml(t.email || orderData.email || "—")}</strong></div>
+            <div class="field-card"><span>Phone</span><strong>${escapeHtml(orderData.phone || "—")}</strong></div>
+            <div class="field-card"><span>Postcode</span><strong>${escapeHtml(orderData.postcode || "—")}</strong></div>
+            <div class="field-card"><span>Total</span><strong>${escapeHtml(orderData.totalPaid || "—")}</strong></div>
+            <div class="field-card"><span>Payment</span><strong>${escapeHtml(orderData.paymentStatus || "—")}</strong></div>
+            <div class="field-card"><span>Fulfilment</span><strong>${escapeHtml(orderData.orderالحالة || "—")}</strong></div>
+            <div class="field-card"><span>Courier</span><strong>${escapeHtml(orderData.courier || "—")}</strong></div>
+            <div class="field-card"><span>Tracking</span><strong>${escapeHtml(orderData.trackingNumber || "—")}</strong></div>
+            <div class="field-card"><span>Risk</span><strong>${escapeHtml(t.risk || "normal")}</strong></div>
+            <div class="field-card"><span>Updated</span><strong>${escapeHtml(fmtDate(t.updatedAt))}</strong></div>
+            <div class="field-card wide items-card"><span>Items</span><pre>${escapeHtml(orderData.items || "—")}</pre></div>
+          </div>
+
+          <div class="ticket-shopify-actions">
+            <button type="button" class="btn-secondary" data-detail-copy-postcode ${orderData.postcode ? "" : "disabled"}>Copy postcode</button>
+            <button type="button" class="btn-secondary" data-detail-copy-tracking ${orderData.trackingNumber ? "" : "disabled"}>Copy tracking</button>
+            <button type="button" class="btn-secondary" data-detail-copy-url ${orderData.trackingUrl ? "" : "disabled"}>Copy tracking URL</button>
+            ${orderData.trackingUrl ? `<button type="button" class="btn-secondary" data-detail-open-tracking>Open tracking</button>` : ""}
+            ${orderData.adminUrl ? `<button type="button" class="btn-secondary" data-detail-open-shopify>Open Shopify</button>` : ""}
+          </div>
+        </section>`;
+    }
+
+    info.querySelector("[data-detail-copy-postcode]")?.addEventListener("click", () => copyText(orderData.postcode, "Postcode copied."));
+    info.querySelector("[data-detail-copy-tracking]")?.addEventListener("click", () => copyText(orderData.trackingNumber, "Tracking number copied."));
+    info.querySelector("[data-detail-copy-url]")?.addEventListener("click", () => copyText(orderData.trackingUrl, "Tracking URL copied."));
+    info.querySelector("[data-detail-open-tracking]")?.addEventListener("click", () => orderData.trackingUrl && window.open(orderData.trackingUrl, "_blank", "noopener"));
+    info.querySelector("[data-detail-open-shopify]")?.addEventListener("click", () => orderData.adminUrl && window.open(orderData.adminUrl, "_blank", "noopener"));
   }
 
   const history = el("ticket-history-box");
@@ -513,26 +829,32 @@ function hookUI() {
     if (priority && EMERGENCY_TYPES.has(type)) priority.value = "emergency";
   });
 
+  el("shopify-api-key-btn")?.addEventListener("click", setShopifyApiKey);
+  el("shopify-live-search-btn")?.addEventListener("click", () => searchShopifyLive());
+  el("shopify-live-use-btn")?.addEventListener("click", useLiveOrderInTicket);
+  el("shopify-live-query")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); searchShopifyLive(); }
+  });
+
   el("ticket-autofill-btn")?.addEventListener("click", async () => {
     const order = normaliseالطلبNumber(el("ticket-order")?.value);
     if (!order) return showTicketAlert("Enter an order number first.", true);
+    if (el("shopify-live-query")) el("shopify-live-query").value = order;
+    const live = await searchShopifyLive({ useInTicket: true });
+    if (live) return;
     const cached = await getCachedالطلب(order);
     if (cached) {
+      currentLiveOrder = cached;
+      currentLiveOrderFirebaseStatus = "saved";
       if (el("ticket-customer")) el("ticket-customer").value = cached.customerName || "";
       if (el("ticket-email")) el("ticket-email").value = cached.email || "";
       renderالطلبPreview(cached);
-      const existing = el("ticket-notes")?.value || "";
-      if (el("ticket-notes") && !existing.includes("Shopify order cache loaded:")) {
-        el("ticket-notes").value = `${existing ? existing + "\n\n" : ""}${orderNoteBlock(cached)}`;
-      }
-      showTicketAlert("الطلب cache found and ticket fields were filled.");
+      renderShopifyLiveResult(cached, "saved");
+      showTicketAlert("Loaded from Firebase orderRecords.");
       return;
     }
     renderالطلبPreview(null);
-    if (!el("ticket-notes")?.value) {
-      el("ticket-notes").value = `الطلب #${order}. Please check Shopify for customer details, tracking status, delivery status, and latest customer message.`;
-    }
-    showTicketAlert("No cached order found. Manual ticket template filled.", true);
+    showTicketAlert("No Shopify/Firebase order found. You can still create a manual ticket.", true);
   });
 
   el("ticket-order")?.addEventListener("blur", async () => {
@@ -566,28 +888,40 @@ function hookUI() {
   el("ticket-save-btn")?.addEventListener("click", saveSelectedTicket);
   el("ticket-escalate-btn")?.addEventListener("click", async () => {
     if (!selectedTicketId) return;
-    await updateDoc(doc(db, TICKETS_COL, selectedTicketId), {
-      status: "escalated",
-      priority: "emergency",
-      risk: "chargeback",
-      updatedAt: serverTimestamp(),
-      escalatedAt: serverTimestamp(),
-      escalatedBy: currentUser?.id || "",
-      history: addHistory(allTickets.find((x) => x.id === selectedTicketId)?.history, "مصعّدة to manager", currentUser?.id || ""),
-    });
-    showTicketAlert("Ticket escalated to manager.");
+    const btn = el("ticket-escalate-btn");
+    const restoreEscalateBtn = setButtonSaving(btn, true, "Escalating...");
+    try {
+      const update = {
+        status: "escalated",
+        priority: "emergency",
+        risk: "chargeback",
+        updatedAt: serverTimestamp(),
+        escalatedAt: serverTimestamp(),
+        escalatedBy: currentUser?.id || "",
+        history: addHistory(allTickets.find((x) => x.id === selectedTicketId)?.history, "مصعّدة to manager", currentUser?.id || ""),
+      };
+      await updateDoc(doc(db, TICKETS_COL, selectedTicketId), update);
+      allTickets = allTickets.map((row) => row.id === selectedTicketId ? { ...row, ...update, updatedAt: Date.now() } : row);
+      renderTicketList();
+      renderTicketDetail();
+      showTicketAlert("Ticket escalated to manager.");
+    } catch (err) {
+      console.error("escalate failed", err);
+      showTicketAlert(`Failed to save: ${err?.code || err?.message || "unknown error"}`, true);
+    } finally {
+      restoreEscalateBtn();
+    }
   });
 }
 
 async function createTicket() {
   if (!currentUser) return;
   const createBtn = document.querySelector('#ticket-form button[type="submit"]');
-  const oldCreateText = createBtn?.textContent || "إنشاء التذكرة";
-  if (createBtn) { createBtn.disabled = true; createBtn.textContent = "جاري الإنشاء..."; }
+  const restoreCreateBtn = setButtonSaving(createBtn, true, "جاري الإنشاء...");
   const orderNumber = normaliseالطلبNumber(el("ticket-order")?.value);
   if (!orderNumber) {
     showTicketAlert("رقم الطلب مطلوب.", true);
-    if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; }
+    restoreCreateBtn();
     return;
   }
 
@@ -596,7 +930,8 @@ async function createTicket() {
   const assignedTo = canEditAll(currentUser)
     ? (el("ticket-assigned")?.value || "")
     : currentUser.id;
-  const cachedالطلب = await getCachedالطلب(orderNumber);
+  const cachedFromDb = await getCachedالطلب(orderNumber);
+  const cachedالطلب = (currentLiveOrder && currentLiveOrder.orderNumber === orderNumber) ? currentLiveOrder : cachedFromDb;
 
   const payload = {
     orderNumber,
@@ -608,17 +943,18 @@ async function createTicket() {
     createdByName: currentUser.name,
     customerName: el("ticket-customer")?.value?.trim() || cachedالطلب?.customerName || "",
     email: el("ticket-email")?.value?.trim() || cachedالطلب?.email || "",
-    notes: el("ticket-notes")?.value?.trim() || (cachedالطلب ? orderNoteBlock(cachedالطلب) : ""),
+    notes: el("ticket-notes")?.value?.trim() || "",
     resolution: "",
     customerMood: inferMood(type, priority),
     risk: riskFromTypeAndالطلب(type, cachedالطلب),
-    source: cachedالطلب ? "order_cache" : "manual",
+    source: cachedالطلب?.source || (cachedالطلب ? "order_cache" : "manual"),
     shopifyStatus: cachedالطلب ? "synced" : "failed",
     shopifyStatusLabel: cachedالطلب ? "Synced with Shopify" : "Failed to load from Shopify",
     orderData: cachedالطلب ? {
       customerName: cachedالطلب.customerName || "",
       email: cachedالطلب.email || "",
       phone: cachedالطلب.phone || "",
+      postcode: cachedالطلب.postcode || "",
       items: cachedالطلب.items || "",
       totalPaid: cachedالطلب.totalPaid || "",
       orderDate: cachedالطلب.orderDate || "",
@@ -627,6 +963,13 @@ async function createTicket() {
       orderالحالة: cachedالطلب.orderالحالة || "unknown",
       deliveryالحالة: cachedالطلب.deliveryالحالة || "unknown",
       shippingAddress: cachedالطلب.shippingAddress || "",
+      billingAddress: cachedالطلب.billingAddress || "",
+      imageUrl: cachedالطلب.imageUrl || "",
+      trackingUrl: cachedالطلب.trackingUrl || "",
+      paymentStatus: cachedالطلب.paymentStatus || "",
+      adminUrl: cachedالطلب.adminUrl || "",
+      itemList: cachedالطلب.itemList || [],
+      refunds: cachedالطلب.refunds || [],
     } : {},
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -638,6 +981,8 @@ async function createTicket() {
     selectedTicketId = created.id;
     el("ticket-form")?.reset();
     renderالطلبPreview(null);
+    currentLiveOrder = null;
+    renderShopifyLiveResult(null);
     fillAssigneeSelect(el("ticket-assigned"), true);
     setTicketFormمفتوحة(false);
     showTicketAlert(cachedالطلب ? "تم إنشاء التذكرة وربطها ببيانات Shopify." : "تم إنشاء التذكرة، لكن لم يتم العثور على بيانات Shopify لهذا الطلب.", !cachedالطلب);
@@ -645,7 +990,7 @@ async function createTicket() {
     console.error("createTicket failed", err);
     showTicketAlert(`Ticket could not be created: ${err?.code || err?.message || "check Firestore permissions/internet"}`, true);
   } finally {
-    if (createBtn) { createBtn.disabled = false; createBtn.textContent = oldCreateText; }
+    restoreCreateBtn();
   }
 }
 
@@ -689,33 +1034,43 @@ async function saveالطلبCacheForm() {
     notes: cleanText(el("order-cache-notes")?.value),
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
-    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
     updatedByName: currentUser?.name || "",
   };
   const existing = await getCachedالطلب(orderNumber);
   if (!existing) payload.createdAt = serverTimestamp();
-  await setDoc(orderDocRef(orderNumber), payload, { merge: true });
-  showTicketAlert("الطلب cache saved. Agents can now autofill this order.");
+  try {
+    await setDoc(orderDocRef(orderNumber), payload, { merge: true });
+    showTicketAlert("Saved successfully.");
+  } catch (err) {
+    console.error("save order cache failed", err);
+    showTicketAlert(`Failed to save: ${err?.code || err?.message || "unknown error"}`, true);
+  } finally {
+    restoreCacheBtn();
+  }
 }
 
 async function saveSelectedTicket() {
   const t = allTickets.find((x) => x.id === selectedTicketId);
   if (!t) return showTicketAlert("Select a ticket first.", true);
   const saveBtn = el("ticket-save-btn");
-  const oldText = saveBtn?.textContent || "حفظ التعديلات";
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "جاري الحفظ..."; }
+  const restoreSaveBtn = setButtonSaving(saveBtn, true, "جاري الحفظ...");
 
   const status = el("ticket-detail-status")?.value || "open";
+  const assignedTo = el("ticket-detail-assigned")?.value || "";
+  const priority = el("ticket-detail-priority-select")?.value || "normal";
+  const customerMood = el("ticket-detail-mood")?.value || "calm";
+  const notes = el("ticket-detail-notes")?.value || "";
+  const resolution = el("ticket-detail-resolution")?.value || "";
   const update = {
     status,
-    assignedTo: el("ticket-detail-assigned")?.value || "",
-    priority: el("ticket-detail-priority-select")?.value || "normal",
-    customerMood: el("ticket-detail-mood")?.value || "calm",
-    notes: el("ticket-detail-notes")?.value || "",
-    resolution: el("ticket-detail-resolution")?.value || "",
+    assignedTo,
+    priority,
+    customerMood,
+    notes,
+    resolution,
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
-    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
+    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[priority] || priority}`, currentUser?.id || ""),
   };
   if (status === "resolved" || status === "closed") {
     update.resolvedAt = serverTimestamp();
@@ -724,12 +1079,15 @@ async function saveSelectedTicket() {
 
   try {
     await updateDoc(doc(db, TICKETS_COL, selectedTicketId), update);
-    showTicketAlert("Ticket updated and saved.");
+    allTickets = allTickets.map((row) => row.id === selectedTicketId ? { ...row, ...update, updatedAt: Date.now() } : row);
+    renderTicketList();
+    renderTicketDetail();
+    showTicketAlert("Saved successfully.");
   } catch (err) {
     console.error("saveSelectedTicket failed", err);
     showTicketAlert(`فشل الحفظ: ${err?.code || err?.message || "تحقق من صلاحيات Firestore أو الاتصال"}`, true);
   } finally {
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = oldText; }
+    restoreSaveBtn();
   }
 }
 
@@ -753,7 +1111,7 @@ function initTickets() {
   hookUI();
   fillAssigneeSelect(el("ticket-assigned"), true);
   fillAssigneeSelect(el("ticket-detail-assigned"), true);
-  el("order-admin-panel")?.classList.toggle("hidden", !canManageالطلبCache(currentUser));
+  el("order-admin-panel")?.classList.remove("hidden");
 
   if (!currentUser) {
     allTickets = [];

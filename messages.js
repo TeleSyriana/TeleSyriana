@@ -29,6 +29,8 @@ const MESSAGES_COL = "globalالرسائل";
 const AGENT_DAYS_COL = "agentDays";
 const GROUPS_COL = "groups";
 const PRESENCE_COL = "userPresence";
+const CHAT_READS_COL = "chatReads";
+const USER_PROFILE_COL = "userProfiles";
 
 // Cloud recents:
 // userRecents/{userId}/items/{recentId}
@@ -59,6 +61,11 @@ let groupsListEl = null;
 let groupsCache = [];  // [{id, name, rules, members, createdAt}]
 let recentsCache = []; // [{id, type, roomId, title, desc, lastTs, otherId?}]
 let unsubPresence = null;
+let unsubscribeProfiles = null;
+let unsubscribeReads = null;
+const presenceCache = new Map();
+const profileCache = new Map();
+const activeReadReceipts = new Map();
 
 // ---------------- ✅ Beep (Sounds/Beep.mp3) ----------------
 
@@ -243,20 +250,22 @@ function markRoomRead(roomId) {
   restartUnreadWatcher(key);
 }
 
-function ensureUnreadWatcher(roomId) {
+function ensureUnreadWatcher(roomId, unorderedFallback = false) {
   const key = String(roomId);
   if (!key) return;
-  if (unreadUnsubs.has(key)) return;
+  if (!unorderedFallback && unreadUnsubs.has(key)) return;
 
-  const seen = getLastSeen(key);
+  const seen = Number(getLastSeen(key) || 0);
   const seenDate = new Date(seen || 0);
 
-  const qUnread = query(
-    collection(db, MESSAGES_COL),
-    where("room", "==", key),
-    where("ts", ">", seenDate),
-    orderBy("ts", "asc")
-  );
+  const qUnread = unorderedFallback
+    ? query(collection(db, MESSAGES_COL), where("room", "==", key))
+    : query(
+        collection(db, MESSAGES_COL),
+        where("room", "==", key),
+        where("ts", ">", seenDate),
+        orderBy("ts", "asc")
+      );
 
   const unsub = onSnapshot(
     qUnread,
@@ -266,30 +275,24 @@ function ensureUnreadWatcher(roomId) {
       let cnt = 0;
       let latest = 0;
 
-      // ✅ Beep only on newly added docs (not every render)
       const changes = snap.docChanges ? snap.docChanges() : [];
       changes.forEach((ch) => {
         if (ch.type !== "added") return;
         const data = ch.doc?.data?.() || {};
         const ms = tsToNumber(data.ts) || 0;
+        if (unorderedFallback && ms <= seen) return;
         const from = String(data.userId || "");
         const me = String(currentUser?.id || "");
 
         if (ms && ms > latest) latest = ms;
-
-        // ✅ Beep only if user is NOT inside this chat
         if (activeChat?.roomId && String(activeChat.roomId) === key) return;
-
-        // beep on incoming only
-        if (from && me && from !== me) {
-          playBeepOnce(key, ms || Date.now());
-        }
+        if (from && me && from !== me) playBeepOnce(key, ms || Date.now());
       });
 
-      // count all unread (excluding my own)
       snap.forEach((d) => {
         const data = d.data() || {};
         const ms = tsToNumber(data.ts) || 0;
+        if (unorderedFallback && ms <= seen) return;
         if (ms > latest) latest = ms;
 
         const from = String(data.userId || "");
@@ -301,20 +304,29 @@ function ensureUnreadWatcher(roomId) {
 
       if (latest) lastMsgTsByRoom.set(key, latest);
 
-      // if currently open => auto read
       if (activeChat?.roomId && String(activeChat.roomId) === key) {
         if (latest) setLastSeen(key, latest);
         unreadByRoom.set(key, 0);
         updateBadgesForRoom(key);
 
-        if (latest) restartUnreadWatcher(key);
+        if (latest && !unorderedFallback) restartUnreadWatcher(key);
         return;
       }
 
       unreadByRoom.set(key, cnt);
       updateBadgesForRoom(key);
     },
-    (err) => console.error("Unread watcher error:", err)
+    (err) => {
+      const msg = String(err?.message || err || "").toLowerCase();
+      if (!unorderedFallback && (msg.includes("index") || msg.includes("failed-precondition"))) {
+        console.warn("Unread watcher query requires index. Falling back to unordered query.");
+        try { unsub?.(); } catch {}
+        unreadUnsubs.delete(key);
+        ensureUnreadWatcher(key, true);
+        return;
+      }
+      console.error("Unread watcher error:", err);
+    }
   );
 
   unreadUnsubs.set(key, unsub);
@@ -377,7 +389,9 @@ const MSG_I18N = {
     away: "بعيد",
     offline: "غير متصل",
     lastSeen: "آخر ظهور",
-    noCustomer: "لا تضع بيانات حساسة للعميل هنا."
+    noCustomer: "لا تضع بيانات حساسة للعميل هنا.",
+    birthdayToday: "عيد ميلاده اليوم 🎂",
+    wishBirthday: "تمنى لـ {name} عيد ميلاد سعيد 🎂"
   },
   en: {
     title: "Messages",
@@ -406,12 +420,98 @@ const MSG_I18N = {
     away: "Away",
     offline: "Offline",
     lastSeen: "Last seen",
-    noCustomer: "Do not post sensitive customer data here."
+    noCustomer: "Do not post sensitive customer data here.",
+    birthdayToday: "Birthday today 🎂",
+    wishBirthday: "Wish {name} a happy birthday 🎂"
   }
 };
 function msgT(key) {
   const lang = msgLang();
   return MSG_I18N[lang]?.[key] || MSG_I18N.en[key] || key;
+}
+
+function firstNameFrom(fullName) {
+  return String(fullName || "").trim().split(/\s+/)[0] || String(fullName || "").trim();
+}
+
+function isBirthdayTodayValue(value) {
+  if (!value) return false;
+  const raw = String(value).trim();
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  let month = null;
+  let day = null;
+  if (m) {
+    month = Number(m[2]);
+    day = Number(m[3]);
+  } else {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      month = d.getMonth() + 1;
+      day = d.getDate();
+    }
+  }
+  if (!month || !day) return false;
+  const now = new Date();
+  return month === now.getMonth() + 1 && day === now.getDate();
+}
+
+function isBirthdayToday(userId) {
+  const p = profileCache.get(String(userId)) || {};
+  return isBirthdayTodayValue(p.birthday || p.birthDate || p.dateOfBirth || p.dob);
+}
+
+function getDmDisplayName(userId) {
+  const profileName = profileCache.get(String(userId))?.name;
+  const nameEl = document.querySelector(`[data-name="${CSS.escape(String(userId))}"]`);
+  return String(profileName || nameEl?.dataset?.baseName || nameEl?.textContent || `CCMS ${userId}`).replace("🎂", "").trim();
+}
+
+function applyBirthdayBadges() {
+  document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {
+    const id = String(btn.dataset.dm || "");
+    const title = btn.querySelector(".chat-room-title");
+    const sub = btn.querySelector(".chat-room-sub");
+    if (!id || !title || !sub) return;
+
+    if (!title.dataset.baseName) title.dataset.baseName = title.textContent.replace("🎂", "").trim();
+    const displayName = getDmDisplayName(id);
+    title.innerHTML = "";
+    title.append(document.createTextNode(displayName));
+
+    const today = isBirthdayToday(id);
+    btn.classList.toggle("birthday-today", today);
+    let cake = btn.querySelector(":scope .birthday-cake");
+    if (today) {
+      if (!cake) {
+        cake = document.createElement("span");
+        cake.className = "birthday-cake";
+        cake.textContent = "🎂";
+        cake.title = msgT("birthdayToday");
+        const avatarWrap = btn.querySelector(".dm-avatar-wrap") || btn.querySelector(".chat-row");
+        avatarWrap?.appendChild(cake);
+      }
+      const first = firstNameFrom(displayName);
+      const base = msgT("wishBirthday").replace("{name}", first);
+      const presence = presenceCache.get(id);
+      const st = presenceالحالة(presence);
+      sub.textContent = st === "online" ? `${msgT("live")} • ${base}` : base;
+      sub.dataset.birthdayLocked = "1";
+    } else {
+      cake?.remove();
+      delete sub.dataset.birthdayLocked;
+      if (!sub.dataset.presenceLocked) sub.textContent = msgT("directChat");
+    }
+  });
+}
+
+function subscribeProfilesSidebar() {
+  if (unsubscribeProfiles) return;
+  unsubscribeProfiles = onSnapshot(collection(db, USER_PROFILE_COL), (snap) => {
+    snap.forEach((d) => {
+      profileCache.set(String(d.id), { id: d.id, ...d.data() });
+    });
+    applyBirthdayBadges();
+  }, (err) => console.warn("profile listener failed", err));
 }
 function translateMessagesUI() {
   const q = (sel) => document.querySelector(sel);
@@ -455,6 +555,11 @@ function getOtherIdFromDmRoom(roomId, myId) {
 function tsToNumber(ts) {
   if (!ts) return 0;
   if (typeof ts === "number") return ts;
+  if (ts instanceof Date) return ts.getTime();
+  if (typeof ts === "string") {
+    const ms = Date.parse(ts);
+    return Number.isFinite(ms) ? ms : 0;
+  }
   if (ts.toMillis) return ts.toMillis();
   if (ts.toDate) return ts.toDate().getTime();
   return 0;
@@ -501,10 +606,62 @@ function ensureTopLoader(listEl) {
   return loader;
 }
 
+function getActiveOtherId() {
+  if (!activeChat || activeChat.type !== "dm" || !currentUser?.id) return "";
+  return getOtherIdFromDmRoom(activeChat.roomId, currentUser.id) || "";
+}
+
+function getMessageMs(m) {
+  return tsToNumber(m?.ts) || Number(m?.clientTs || 0) || 0;
+}
+
+function getDeliveryReceiptForMessage(m) {
+  if (!currentUser || String(m?.userId || "") !== String(currentUser.id || "")) return null;
+  const otherId = getActiveOtherId();
+  if (!otherId) return null;
+
+  const msgMs = getMessageMs(m);
+  const readMs = Number(activeReadReceipts.get(String(otherId)) || 0);
+  const otherPresence = presenceالحالة(presenceCache.get(String(otherId)) || {});
+
+  if (readMs && msgMs && readMs >= msgMs - 1500) {
+    return { text: "✓✓", cls: "seen", label: "Seen" };
+  }
+  if (otherPresence === "online" || otherPresence === "away") {
+    return { text: "✓✓", cls: "delivered", label: "Delivered" };
+  }
+  return { text: "✓", cls: "sent", label: "Sent" };
+}
+
+function updateMessageReadIndicators() {
+  document.querySelectorAll(".msg-read-receipt").forEach((el) => {
+    const msgMs = Number(el.dataset.msgMs || 0);
+    const otherId = getActiveOtherId();
+    const readMs = Number(activeReadReceipts.get(String(otherId)) || 0);
+    const otherPresence = presenceالحالة(presenceCache.get(String(otherId)) || {});
+
+    let info = { text: "✓", cls: "sent", label: "Sent" };
+    if (readMs && msgMs && readMs >= msgMs - 1500) info = { text: "✓✓", cls: "seen", label: "Seen" };
+    else if (otherPresence === "online" || otherPresence === "away") info = { text: "✓✓", cls: "delivered", label: "Delivered" };
+
+    el.textContent = info.text;
+    el.title = info.label;
+    el.classList.remove("sent", "delivered", "seen");
+    el.classList.add(info.cls);
+  });
+}
+
+function scrollMessagesToBottom() {
+  const listEl = document.getElementById("chat-message-list");
+  if (!listEl) return;
+  requestAnimationFrame(() => { listEl.scrollTop = listEl.scrollHeight; });
+}
+
 function createMessageNode(m, showRole) {
   const wrapper = document.createElement("div");
   wrapper.className = "chat-message";
-  if (currentUser && m.userId === currentUser.id) wrapper.classList.add("me");
+  const isMine = currentUser && String(m.userId || "") === String(currentUser.id || "");
+  if (isMine) wrapper.classList.add("me");
 
   const avatar = document.createElement("div");
   avatar.className = "msg-avatar";
@@ -518,13 +675,26 @@ function createMessageNode(m, showRole) {
 
   const nameEl = document.createElement("span");
   nameEl.className = "msg-name";
-  nameEl.textContent = showRole ? `${m.name} (${m.role})` : (m.name || "User");
+  nameEl.textContent = showRole ? `${m.name || "User"} (${m.role || ""})` : (m.name || "User");
 
   const timeEl = document.createElement("span");
-  timeEl.textContent = `• ${formatTime(m.ts)}`;
+  const messageMs = getMessageMs(m);
+  timeEl.textContent = `• ${formatTime(m.ts || messageMs)}`;
 
   meta.appendChild(nameEl);
   meta.appendChild(timeEl);
+
+  if (isMine) {
+    const receipt = getDeliveryReceiptForMessage(m);
+    if (receipt) {
+      const receiptEl = document.createElement("span");
+      receiptEl.className = `msg-read-receipt ${receipt.cls}`;
+      receiptEl.dataset.msgMs = String(messageMs || Date.now());
+      receiptEl.textContent = receipt.text;
+      receiptEl.title = receipt.label;
+      meta.appendChild(receiptEl);
+    }
+  }
 
   const text = document.createElement("div");
   text.className = "chat-message-text";
@@ -540,6 +710,7 @@ function createMessageNode(m, showRole) {
 }
 
 function renderFresh(listEl, msgs, showRole) {
+  if (listEl) listEl.style.display = "flex";
   const loader = ensureTopLoader(listEl);
   Array.from(listEl.children).forEach((ch) => {
     if (ch !== loader) ch.remove();
@@ -547,7 +718,8 @@ function renderFresh(listEl, msgs, showRole) {
   const frag = document.createDocumentFragment();
   msgs.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
   listEl.appendChild(frag);
-  listEl.scrollTop = listEl.scrollHeight;
+  scrollMessagesToBottom();
+  updateMessageReadIndicators();
 }
 
 function renderChunkToTop(listEl, items, showRole) {
@@ -638,22 +810,64 @@ function attachScrollLoader(listEl) {
 function unsubscribeAllMain() {
   unsubscribeMain?.();
   unsubscribeMain = null;
+  unsubscribeReads?.();
+  unsubscribeReads = null;
+  activeReadReceipts.clear();
   roomCache = [];
   renderedCount = 0;
   scrollBoundEl = null;
 }
 
-function subscribeMainToRoom(roomId) {
+function sortMessagesAscending(arr) {
+  return arr.sort((a, b) => (getMessageMs(a) || 0) - (getMessageMs(b) || 0));
+}
+
+function markActiveChatRead() {
+  if (!currentUser?.id || !activeChat?.roomId) return;
+  const roomId = String(activeChat.roomId);
+  const readMs = Date.now();
+  try {
+    setDoc(doc(db, CHAT_READS_COL, `${roomId}_${currentUser.id}`), {
+      roomId,
+      userId: String(currentUser.id),
+      lastReadMs: readMs,
+      updatedAt: serverTimestamp(),
+    }, { merge: true }).catch((err) => console.warn("read receipt update failed", err));
+  } catch (err) {
+    console.warn("read receipt update failed", err);
+  }
+}
+
+function subscribeReadReceipts(roomId) {
+  unsubscribeReads?.();
+  unsubscribeReads = null;
+  activeReadReceipts.clear();
+  if (!roomId) return;
+
+  const qReads = query(collection(db, CHAT_READS_COL), where("roomId", "==", String(roomId)));
+  unsubscribeReads = onSnapshot(qReads, (snap) => {
+    activeReadReceipts.clear();
+    snap.forEach((d) => {
+      const row = d.data() || {};
+      if (row.userId) activeReadReceipts.set(String(row.userId), Number(row.lastReadMs || 0));
+    });
+    updateMessageReadIndicators();
+  }, (err) => console.warn("read receipts listener failed", err));
+}
+
+function subscribeMainToRoom(roomId, unorderedFallback = false) {
   const listEl = document.getElementById("chat-message-list");
   if (!listEl) return;
 
-  unsubscribeAllMain();
+  unsubscribeMain?.();
+  unsubscribeMain = null;
+  roomCache = [];
+  renderedCount = 0;
+  scrollBoundEl = null;
 
-  const qRoom = query(
-    collection(db, MESSAGES_COL),
-    where("room", "==", roomId),
-    orderBy("ts", "desc")
-  );
+  const qRoom = unorderedFallback
+    ? query(collection(db, MESSAGES_COL), where("room", "==", roomId))
+    : query(collection(db, MESSAGES_COL), where("room", "==", roomId), orderBy("ts", "desc"));
 
   unsubscribeMain = onSnapshot(
     qRoom,
@@ -662,8 +876,7 @@ function subscribeMainToRoom(roomId) {
 
       const all = [];
       snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
-      all.reverse(); // ASC
-      roomCache = all;
+      roomCache = unorderedFallback ? sortMessagesAscending(all) : all.reverse();
 
       renderedCount = Math.min(PAGE_SIZE, roomCache.length);
       const startIndex = Math.max(0, roomCache.length - renderedCount);
@@ -671,16 +884,23 @@ function subscribeMainToRoom(roomId) {
       attachScrollLoader(listEl);
 
       const last = roomCache.length ? roomCache[roomCache.length - 1] : null;
-      const lastTs = last ? tsToNumber(last.ts) : 0;
+      const lastTs = last ? getMessageMs(last) : 0;
       if (activeChat?.roomId && String(activeChat.roomId) === String(roomId) && lastTs) {
         lastMsgTsByRoom.set(String(roomId), lastTs);
         setLastSeen(String(roomId), lastTs);
         unreadByRoom.set(String(roomId), 0);
         updateBadgesForRoom(String(roomId));
-        restartUnreadWatcher(String(roomId));
+        markActiveChatRead();
+        if (lastTs && !unorderedFallback) restartUnreadWatcher(String(roomId));
       }
     },
     (err) => {
+      const msg = String(err?.message || err || "").toLowerCase();
+      if (!unorderedFallback && (msg.includes("index") || msg.includes("failed-precondition"))) {
+        console.warn("Main chat query requires index. Falling back to unordered query.");
+        subscribeMainToRoom(roomId, true);
+        return;
+      }
       console.error("Main snapshot error:", err);
     }
   );
@@ -962,7 +1182,10 @@ function openChat(chat, clickedEl = null) {
   setInputEnabled(true);
 
   markRoomRead(String(activeChat.roomId));
+  subscribeReadReceipts(activeChat.roomId);
   subscribeMainToRoom(activeChat.roomId);
+  markActiveChatRead();
+  scrollMessagesToBottom();
 }
 
 // listen events from groups.js
@@ -1105,6 +1328,7 @@ function subscribePresenceSidebar() {
     snap.forEach((d) => {
       const row = { id: d.id, ...d.data() };
       const id = row.userId || d.id;
+      presenceCache.set(String(id), row);
       const st = presenceالحالة(row);
       const dot = document.querySelector(`[data-status-dot="${id}"]`);
       if (dot) {
@@ -1113,8 +1337,10 @@ function subscribePresenceSidebar() {
         dot.title = presenceText(row);
       }
       const sub = document.querySelector(`[data-sub="${id}"]`);
-      if (sub) { sub.textContent = presenceText(row); sub.dataset.presenceLocked = "1"; }
+      if (sub && !sub.dataset.birthdayLocked) { sub.textContent = presenceText(row); sub.dataset.presenceLocked = "1"; }
     });
+    applyBirthdayBadges();
+    updateMessageReadIndicators();
   }, (err) => console.warn("message presence listener failed", err));
 }
 
@@ -1138,6 +1364,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setCurrentUser();
   subscribePresenceSidebar();
+  subscribeProfilesSidebar();
 
   makeCollapsible("Rooms", "rooms-list");
   makeCollapsible("Groups", "groups-list");
@@ -1211,7 +1438,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const roomId = dmRoomId(currentUser.id, otherId);
 
       const nameEl = btn.querySelector(".chat-room-title");
-      const otherName = (nameEl?.textContent || `CCMS ${otherId}`).trim();
+      const otherName = getDmDisplayName(otherId) || (nameEl?.textContent || `CCMS ${otherId}`).replace("🎂", "").trim();
 
       openChat(
         { type: "dm", roomId, title: otherName, desc: `${msgT("directChat")} • CCMS ${otherId}` },
@@ -1233,6 +1460,28 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentUser) return;
     if (!activeChat || activeChat.type === "ai") return;
 
+    const clientTs = Date.now();
+    inputEl.value = "";
+
+    const optimistic = {
+      id: `pending_${clientTs}`,
+      room: activeChat.roomId,
+      text,
+      userId: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+      ts: clientTs,
+      clientTs,
+      pending: true,
+    };
+
+    const listEl = document.getElementById("chat-message-list");
+    if (listEl) {
+      listEl.style.display = "flex";
+      listEl.appendChild(createMessageNode(optimistic, true));
+      scrollMessagesToBottom();
+    }
+
     try {
       await addDoc(collection(db, MESSAGES_COL), {
         room: activeChat.roomId,
@@ -1241,6 +1490,7 @@ document.addEventListener("DOMContentLoaded", () => {
         name: currentUser.name,
         role: currentUser.role,
         ts: serverTimestamp(),
+        clientTs,
       });
 
       await bumpRecentAfterإرسالCloud();
@@ -1248,12 +1498,11 @@ document.addEventListener("DOMContentLoaded", () => {
       setLastSeen(String(activeChat.roomId), Date.now());
       unreadByRoom.set(String(activeChat.roomId), 0);
       updateBadgesForRoom(String(activeChat.roomId));
+      markActiveChatRead();
       restartUnreadWatcher(String(activeChat.roomId));
     } catch (err) {
       console.error("إرسال error:", err);
     }
-
-    inputEl.value = "";
   });
 
   subscribeالحالةDots();
@@ -1269,6 +1518,9 @@ window.addEventListener("telesyriana:user-changed", () => {
 
   clearActiveButtons();
   activeChat = null;
+  unsubscribeReads?.();
+  unsubscribeReads = null;
+  activeReadReceipts.clear();
 
   translateMessagesUI();
   setHeader(msgT("title"), msgT("start"));
@@ -1282,6 +1534,8 @@ window.addEventListener("telesyriana:user-changed", () => {
   subscribeGroupsCloud();
   subscribeRecentsCloud();
   subscribeالحالةDots();
+  subscribeProfilesSidebar();
+  applyBirthdayBadges();
 
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1307,4 +1561,4 @@ window.addEventListener("telesyriana:user-changed", () => {
 });
 
 
-try { window.addEventListener("telesyriana:language-changed", translateMessagesUI); } catch {}
+try { window.addEventListener("telesyriana:language-changed", () => { translateMessagesUI(); applyBirthdayBadges(); }); } catch {}

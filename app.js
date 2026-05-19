@@ -318,15 +318,14 @@ function buildMiniCalendar() {
     } else {
       cell.textContent = String(dayNum);
       const key = `${year}-${String(month+1).padStart(2,"0")}-${String(dayNum).padStart(2,"0")}`;
-      const isTodayCell = isThisMonth && dayNum === today.getDate();
       const stats = issueStatsByDay[key];
-      if (isTodayCell) {
-        cell.classList.add("today");
-        if (stats?.risk >= 3) cell.classList.add("issue-high");
-        else if (stats?.risk >= 1 || stats?.total >= 2) cell.classList.add("issue-mid");
-        else cell.classList.add("issue-low");
+      if (stats) {
+        if (stats.risk >= 3) cell.classList.add("issue-high");
+        else if (stats.risk >= 1) cell.classList.add("issue-mid");
+        else if (stats.total >= 1) cell.classList.add("issue-low");
+        cell.title = `${stats.total} tickets • ${stats.risk} risk issues`;
       }
-      if (stats) cell.title = `${stats.total} open tickets • ${stats.risk} risk issues`;
+      if (isThisMonth && dayNum === today.getDate()) cell.classList.add("today");
     }
 
     gridEl.appendChild(cell);
@@ -676,12 +675,10 @@ function subscribeIssueCalendar() {
       const stats = {};
       snapshot.forEach((d) => {
         const t = d.data();
-        const status = String(t.status || "").toLowerCase();
-        if (["resolved", "closed", "done", "cancelled", "canceled"].includes(status)) return;
         const key = dateKeyFromValue(t.createdAt || t.updatedAt);
         if (!stats[key]) stats[key] = { total: 0, risk: 0 };
         stats[key].total += 1;
-        if (["emergency", "high"].includes(String(t.priority || "").toLowerCase()) || ["chargeback", "high"].includes(String(t.risk || "").toLowerCase()) || t.type === "item_not_genuine") {
+        if (["emergency", "high"].includes(t.priority) || ["chargeback", "high"].includes(t.risk) || t.type === "item_not_genuine") {
           stats[key].risk += 1;
         }
       });
