@@ -891,7 +891,7 @@ async function handleLogin(e) {
   const submitBtn = e?.target?.querySelector('button[type="submit"]');
 
   if (!USERS[id]) return showError("المستخدم غير موجود. جرّب 0001 أو 1001 أو 2001 أو 3001 أو 9001 أو 9002.");
-  if (USERS[id].password !== pw) return showError("كلمة المرور غير صحيحة.");
+  if (USERS[id].password !== pw) return showError(getLanguage() === "ar" ? "كلمة المرور غير صحيحة." : "Incorrect password.");
 
   try {
     if (submitBtn) {
@@ -1645,6 +1645,10 @@ function applyLanguage(language = "ar") {
   setText(".login-card .subtitle", dict.loginSubtitle);
   setLabelFor("ccmsId", dict.ccms);
   setLabelFor("password", dict.password);
+  const ccmsInput = document.getElementById("ccmsId");
+  if (ccmsInput) ccmsInput.placeholder = lang === "ar" ? "مثال: 1001" : "e.g. 1001";
+  const passwordInput = document.getElementById("password");
+  if (passwordInput) passwordInput.placeholder = lang === "ar" ? "كلمة المرور" : "Password";
   setText("#login-form .btn-primary", dict.loginBtn);
   const hint = document.querySelector(".login-card .hint");
   if (hint) {
@@ -1906,6 +1910,8 @@ function ensureProfilePhotoControls() {
 /* --------------------------- View switching ----------------------------- */
 
 function showLogin() {
+  document.body.classList.add("auth-screen");
+  document.body.classList.remove("dashboard-ready");
   document.getElementById("dashboard-screen")?.classList.add("hidden");
   document.getElementById("login-screen")?.classList.remove("hidden");
   document.getElementById("main-nav")?.classList.add("hidden");
@@ -1922,6 +1928,8 @@ function showLogin() {
 }
 
 function showDashboard() {
+  document.body.classList.remove("auth-screen");
+  document.body.classList.add("dashboard-ready");
   document.getElementById("login-screen")?.classList.add("hidden");
   document.getElementById("dashboard-screen")?.classList.remove("hidden");
   document.getElementById("main-nav")?.classList.remove("hidden");
