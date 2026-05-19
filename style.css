@@ -4887,3 +4887,37 @@ html[dir="rtl"] .birthday-cake{
     overflow:hidden !important;
   }
 }
+
+
+/* =========================
+   v2.4 — Calendar health state: no dots, today background only
+========================= */
+.mini-day.issue-low::after,
+.mini-day.issue-mid::after,
+.mini-day.issue-high::after{
+  content:none !important;
+  display:none !important;
+}
+.mini-day.today{
+  color:#fff !important;
+  font-weight:950 !important;
+  box-shadow:0 12px 24px rgba(15,23,42,.14) !important;
+}
+.mini-day.today.today-stable{
+  background:linear-gradient(135deg,#16a34a,#22c55e) !important;
+}
+.mini-day.today.today-manageable{
+  background:linear-gradient(135deg,#f59e0b,#fbbf24) !important;
+  color:#3b2600 !important;
+}
+.mini-day.today.today-overloaded{
+  background:linear-gradient(135deg,#dc2626,#ef4444) !important;
+  animation:todayRiskPulse 1.05s ease-in-out infinite !important;
+}
+@keyframes todayRiskPulse{
+  0%,100%{ transform:scale(1); box-shadow:0 0 0 0 rgba(239,68,68,.40); }
+  50%{ transform:scale(1.08); box-shadow:0 0 0 8px rgba(239,68,68,0); }
+}
+@media (prefers-reduced-motion:reduce){
+  .mini-day.today.today-overloaded{ animation:none !important; }
+}
