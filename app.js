@@ -659,10 +659,26 @@ function subscribePresence() {
   }, (err) => console.warn("presence listener failed", err));
 }
 
+function canViewOnlineNow(user) {
+  return ["admin", "manager", "hr", "supervisor"].includes(normaliseRole(user?.role));
+}
+
 function renderOnlineNow(rows) {
+  const card = document.querySelector(".online-now-card");
   const list = document.getElementById("online-now-list");
   const count = document.getElementById("online-now-count");
   if (!list || !count) return;
+
+  // Online-now is a management visibility widget only.
+  // Agents still update their own presence, but they do not see this team list.
+  if (!canViewOnlineNow(currentUser)) {
+    if (card) card.classList.add("hidden");
+    count.textContent = "0";
+    list.innerHTML = "";
+    return;
+  }
+
+  if (card) card.classList.remove("hidden");
   const visible = rows
     .filter((r) => onlineStatusFromRow(r) !== "offline")
     .sort((a, b) => Number(b.lastSeenMs || 0) - Number(a.lastSeenMs || 0));
