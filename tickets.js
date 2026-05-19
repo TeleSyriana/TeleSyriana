@@ -41,32 +41,32 @@ const EMERGENCY_TYPES = new Set([
 ]);
 
 const TYPE_LABELS = {
-  address_change: "Address Change",
-  product_not_arrived: "Product Not Arrived",
-  item_not_genuine: "Item Not Genuine / Fake Claim",
-  return: "Return",
-  exchange: "Exchange",
-  angry_customer: "Angry العميل",
-  refund_request: "Refund Request",
-  chargeback_risk: "Chargeback Risk",
-  general_question: "General Question",
+  address_change: { ar: "تعديل العنوان", en: "Address Change" },
+  product_not_arrived: { ar: "المنتج لم يصل", en: "Product Not Arrived" },
+  item_not_genuine: { ar: "ادعاء المنتج غير أصلي / مزيف", en: "Item Not Genuine / Fake Claim" },
+  return: { ar: "إرجاع", en: "Return" },
+  exchange: { ar: "استبدال", en: "Exchange" },
+  angry_customer: { ar: "عميل غاضب", en: "Angry Customer" },
+  refund_request: { ar: "طلب استرداد", en: "Refund Request" },
+  chargeback_risk: { ar: "خطر نزاع بنكي", en: "Chargeback Risk" },
+  general_question: { ar: "سؤال عام", en: "General Question" },
 };
 
 const STATUS_LABELS = {
-  open: "مفتوحة",
-  waiting_customer: "بانتظار العميل",
-  waiting_courier: "بانتظار الشحن",
-  waiting_supplier: "بانتظار المورد",
-  escalated: "مصعّدة",
-  resolved: "محلولة",
-  closed: "مغلقة",
+  open: { ar: "مفتوحة", en: "Open" },
+  waiting_customer: { ar: "بانتظار العميل", en: "Waiting customer" },
+  waiting_courier: { ar: "بانتظار الشحن", en: "Waiting courier" },
+  waiting_supplier: { ar: "بانتظار المورد", en: "Waiting supplier" },
+  escalated: { ar: "مصعّدة", en: "Escalated" },
+  resolved: { ar: "محلولة", en: "Resolved" },
+  closed: { ar: "مغلقة", en: "Closed" },
 };
 
 const PRIORITY_LABELS = {
-  emergency: "طارئ",
-  high: "عالي",
-  medium: "متوسط",
-  normal: "عادي",
+  emergency: { ar: "طارئ", en: "Emergency" },
+  high: { ar: "عالي", en: "High" },
+  medium: { ar: "متوسط", en: "Medium" },
+  normal: { ar: "عادي", en: "Normal" },
 };
 
 let currentUser = null;
@@ -88,6 +88,19 @@ function defaultShopifyApiKey() {
 }
 
 function el(id) { return document.getElementById(id); }
+function ticketLang() { return ((document.body?.dataset?.language || document.documentElement.lang || 'ar') === 'en') ? 'en' : 'ar'; }
+function tt(ar, en) { return ticketLang() === 'ar' ? ar : en; }
+function labelOf(map, key, fallback = '') { const item = map[key]; if (!item) return fallback || key || ''; return item[ticketLang()] || item.en || fallback || key || ''; }
+function typeLabel(key) { return labelOf(TYPE_LABELS, key, key || 'Ticket'); }
+function statusLabelText(key) { return labelOf(STATUS_LABELS, key, key || 'Open'); }
+function priorityLabelText(key) { return labelOf(PRIORITY_LABELS, key, key || 'Normal'); }
+function translateTicketsStatic() {
+  const statSpans = Array.from(document.querySelectorAll('#page-tickets .ticket-stat span'));
+  if (statSpans[0]) statSpans[0].textContent = tt('مفتوحة', 'Open');
+  if (statSpans[1]) statSpans[1].textContent = tt('طارئ', 'Emergency');
+  if (statSpans[2]) statSpans[2].textContent = tt('مصعّدة', 'Escalated');
+  if (statSpans[3]) statSpans[3].textContent = tt('محلولة اليوم', 'Resolved today');
+}
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
 function canSeeAll(u) { return roleLevel(u) >= ROLE_LEVELS.manager; }
 function canSupervise(u) { return roleLevel(u) >= ROLE_LEVELS.supervisor; }
@@ -578,7 +591,7 @@ function fillAssigneeSelect(selectEl, includeUnassigned = true) {
   if (includeUnassigned && canEditAll(currentUser)) {
     const opt = document.createElement("option");
     opt.value = "";
-    opt.textContent = "Unassigned";
+    opt.textContent = tt("غير مسندة", "Unassigned");
     selectEl.appendChild(opt);
   }
   for (const s of visibleStaffForAssignment()) {
@@ -609,8 +622,8 @@ function ticketMatchesFilters(ticket) {
       ticket.email,
       ticket.notes,
       ticket.resolution,
-      TYPE_LABELS[ticket.type],
-      STATUS_LABELS[ticket.status],
+      typeLabel(ticket.type),
+      statusLabelText(ticket.status),
       staffName(ticket.assignedTo),
     ].join(" ").toLowerCase();
     if (!hay.includes(q)) return false;
@@ -671,13 +684,13 @@ function renderTicketList() {
     btn.innerHTML = `
       <div class="ticket-row-top">
         <strong>#${escapeHtml(t.orderNumber || "—")}</strong>
-        <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(PRIORITY_LABELS[t.priority] || "عادي")}</span>
+        <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(priorityLabelText(t.priority))}</span>
         ${shopifyStatusPill(t)}
       </div>
-      <div class="ticket-row-title">${escapeHtml(TYPE_LABELS[t.type] || t.type || "Ticket")}</div>
+      <div class="ticket-row-title">${escapeHtml(typeLabel(t.type) || t.type || "Ticket")}</div>
       <div class="ticket-row-meta">
         <span class="ticket-status-dot status-${t.status || "open"}"></span>
-        <span>${escapeHtml(STATUS_LABELS[t.status] || t.status || "مفتوحة")}</span>
+        <span>${escapeHtml(statusLabelText(t.status) || t.status || tt("مفتوحة", "Open"))}</span>
         <span>•</span>
         <span>${escapeHtml(staffName(t.assignedTo))}</span>
       </div>
@@ -716,11 +729,11 @@ function renderTicketDetail() {
   empty.classList.add("hidden");
 
   el("ticket-detail-title").textContent = `Ticket #${t.orderNumber || "—"}`;
-  el("ticket-detail-sub").textContent = `${TYPE_LABELS[t.type] || t.type} • تم الإنشاء ${fmtDate(t.createdAt)}`;
+  el("ticket-detail-sub").textContent = `${typeLabel(t.type) || t.type} • ${tt("تم الإنشاء", "Created")} ${fmtDate(t.createdAt)}`;
 
   const pill = el("ticket-detail-priority");
   if (pill) {
-    pill.textContent = PRIORITY_LABELS[t.priority] || "عادي";
+    pill.textContent = priorityLabelText(t.priority) || tt("عادي", "Normal");
     pill.className = `ticket-priority-pill ${t.priority || "normal"}`;
   }
   const syncPill = el("ticket-detail-shopify");
@@ -756,7 +769,7 @@ function renderTicketDetail() {
             <div class="ticket-shopify-title-block">
               <div class="ticket-shopify-label">Linked Shopify Order</div>
               <h3>#${escapeHtml(t.orderNumber || orderData.orderNumber || "—")}</h3>
-              <p>${escapeHtml(t.type ? (TYPE_LABELS[t.type] || t.type) : "Support ticket")}</p>
+              <p>${escapeHtml(t.type ? (typeLabel(t.type) || t.type) : tt("تذكرة دعم", "Support ticket"))}</p>
               ${shopifyStatusPill(t)}
             </div>
           </div>
@@ -820,7 +833,7 @@ function hookUI() {
   el("ticket-refresh-btn")?.addEventListener("click", () => {
     renderTicketList();
     renderTicketDetail();
-    showTicketAlert("Ticket queue refreshed.");
+    showTicketAlert(tt("تم تحديث قائمة التذاكر.", "Ticket queue refreshed."));
   });
 
   el("ticket-type")?.addEventListener("change", () => {
@@ -1109,6 +1122,7 @@ function subscribeTickets() {
 function initTickets() {
   currentUser = getCurrentUser();
   hookUI();
+  translateTicketsStatic();
   fillAssigneeSelect(el("ticket-assigned"), true);
   fillAssigneeSelect(el("ticket-detail-assigned"), true);
   el("order-admin-panel")?.classList.remove("hidden");
@@ -1128,4 +1142,4 @@ function initTickets() {
 document.addEventListener("DOMContentLoaded", initTickets);
 window.addEventListener("telesyriana:user-changed", initTickets);
 
-try { window.addEventListener("telesyriana:language-changed", () => { renderTicketList(); renderTicketDetail(); }); } catch {}
+try { window.addEventListener("telesyriana:language-changed", () => { translateTicketsStatic(); fillAssigneeSelect(el("ticket-assigned"), true); fillAssigneeSelect(el("ticket-detail-assigned"), true); renderTicketList(); renderTicketDetail(); }); } catch {}

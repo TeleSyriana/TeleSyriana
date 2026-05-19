@@ -29,15 +29,15 @@ const STAFF = {
 };
 
 const REPORT_LABELS = {
-  morning: "تقرير صباحي",
-  midday: "تقرير منتصف اليوم",
-  evening: "تقرير نهاية الدوام",
+  morning: { ar: "تقرير صباحي", en: "Morning report" },
+  midday: { ar: "تقرير منتصف اليوم", en: "Midday report" },
+  evening: { ar: "تقرير نهاية الدوام", en: "End of shift report" },
 };
 
 const REPORT_HINTS = {
-  morning: "طوارئ, fake claims, address changes, angry customers, and yesterday’s unresolved cases.",
-  midday: "محلول tickets, pending emergencies, new issues, and anything that needs supervisor attention.",
-  evening: "New tickets, solved tickets, delayed parcels, pending tomorrow, returns, exchanges, and sensitive cases.",
+  morning: { ar: "طوارئ، ادعاءات fake claims، تغييرات العنوان، عملاء غاضبون، وحالات الأمس غير المحلولة.", en: "Emergencies, fake claims, address changes, angry customers, and yesterday’s unresolved cases." },
+  midday: { ar: "التذاكر المحلولة، الطوارئ المعلقة، المشاكل الجديدة، وكل ما يحتاج انتباه المشرف.", en: "Solved tickets, pending emergencies, new issues, and anything that needs supervisor attention." },
+  evening: { ar: "التذاكر الجديدة، التذاكر المحلولة، الشحنات المتأخرة، مهام الغد، الإرجاع، والاستبدال، والحالات الحساسة.", en: "New tickets, solved tickets, delayed parcels, pending tomorrow, returns, exchanges, and sensitive cases." },
 };
 
 let currentUser = null;
@@ -49,6 +49,15 @@ let isHooked = false;
 let selectedReportId = null;
 
 function el(id) { return document.getElementById(id); }
+function reportLang() { return ((document.body?.dataset?.language || document.documentElement.lang || 'ar') === 'ar') ? 'ar' : 'en'; }
+function rt(ar, en) { return reportLang() === 'ar' ? ar : en; }
+function reportTypeLabel(type) { const item = REPORT_LABELS[type]; return item ? (item[reportLang()] || item.en) : (reportLang() === 'ar' ? 'تقرير يومي' : 'Daily report'); }
+function reportHintText(type) { const item = REPORT_HINTS[type]; return item ? (item[reportLang()] || item.en) : ''; }
+function translateReportsStatic() {
+  const title = document.querySelector('#page-reports h2'); if (title) title.textContent = rt('التقارير اليومية', 'Daily reports');
+  const sub = document.querySelector('#page-reports > .card > .reports-top p.subtitle'); if (sub) sub.textContent = rt('Morning • Midday • End of shift — support handover and emergency visibility', 'Morning • Midday • End of shift — support handover and emergency visibility');
+  const histTitle = document.querySelector('#page-reports .reports-history-head h3'); if (histTitle) histTitle.textContent = rt('سجل التقارير', 'Reports log');
+}
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
 function canSeeAll(u) { return roleLevel(u) >= ROLE_LEVELS.manager; }
 function canSupervise(u) { return roleLevel(u) >= ROLE_LEVELS.supervisor; }
@@ -167,7 +176,7 @@ function setTemplateForType(type) {
   if (hint) hint.textContent = REPORT_HINTS[type] || "Daily support summary.";
 
   const title = el("report-title");
-  if (title && !title.value.trim()) title.value = REPORT_LABELS[type] || "تقرير يومي";
+  if (title && !title.value.trim()) title.value = reportTypeLabel(type);
 }
 
 function showReportAlert(message, danger = false) {
@@ -194,18 +203,18 @@ function renderReports() {
     card.innerHTML = `
       <div class="report-row-head">
         <div>
-          <strong>${REPORT_LABELS[r.reportType] || r.title || "تقرير"}</strong>
+          <strong>${r.title || reportTypeLabel(r.reportType) || rt("تقرير", "Report")}</strong>
           <div class="report-row-sub">${r.day || "—"} • ${staffName(r.createdBy)} • ${fmtDate(r.createdAt)}</div>
         </div>
         <span class="report-pill ${r.reportType || "general"}">${r.reportType || "report"}</span>
       </div>
       <div class="report-grid-read">
-        ${r.emergencies ? `<div><b>طوارئ:</b> ${escapeHtml(r.emergencies)}</div>` : ""}
+        ${r.emergencies ? `<div><b>${rt("طوارئ", "Emergency")}:</b> ${escapeHtml(r.emergencies)}</div>` : ""}
         ${r.delayedShipments ? `<div><b>Delayed:</b> ${escapeHtml(r.delayedShipments)}</div>` : ""}
-        ${r.solvedTickets ? `<div><b>محلول:</b> ${escapeHtml(r.solvedTickets)}</div>` : ""}
-        ${r.pendingغداً ? `<div><b>غداً:</b> ${escapeHtml(r.pendingغداً)}</div>` : ""}
+        ${r.solvedTickets ? `<div><b>${rt("محلول", "Solved") }:</b> ${escapeHtml(r.solvedTickets)}</div>` : ""}
+        ${r.pendingغداً ? `<div><b>${rt("غداً", "Tomorrow")}:</b> ${escapeHtml(r.pendingغداً)}</div>` : ""}
         ${r.returnsExchanges ? `<div><b>Returns/Exchange:</b> ${escapeHtml(r.returnsExchanges)}</div>` : ""}
-        ${r.angryالعميلs ? `<div><b>Sensitive:</b> ${escapeHtml(r.angryالعميلs)}</div>` : ""}
+        ${r.angryالعميلs ? `<div><b>${rt("حساس", "Sensitive")}:</b> ${escapeHtml(r.angryالعميلs)}</div>` : ""}
         ${r.actions ? `<div><b>Actions:</b> ${escapeHtml(r.actions)}</div>` : ""}
         ${r.notes ? `<div><b>Notes:</b> ${escapeHtml(r.notes)}</div>` : ""}
       </div>
@@ -236,7 +245,7 @@ function openReportModal(id) {
   selectedReportId = id;
   const modal = el("report-modal");
   if (!modal) return;
-  if (el("report-modal-title")) el("report-modal-title").textContent = r.title || REPORT_LABELS[r.reportType] || "تقرير";
+  if (el("report-modal-title")) el("report-modal-title").textContent = r.title || reportTypeLabel(r.reportType) || rt("تقرير", "Report");
   if (el("report-modal-sub")) el("report-modal-sub").textContent = `${r.day || "—"} • ${staffName(r.createdBy)} • ${fmtDate(r.createdAt)}`;
   const map = {
     "report-edit-emergencies": r.emergencies || "",
@@ -322,12 +331,12 @@ function fillTemplate() {
 
 async function submitReport(e) {
   e.preventDefault();
-  if (!currentUser) return showReportAlert("يرجى تسجيل الدخول أولاً.", true);
+  if (!currentUser) return showReportAlert(rt("يرجى تسجيل الدخول أولاً.", "Please log in first."), true);
 
   const type = el("report-type")?.value || "morning";
   const payload = {
     reportType: type,
-    title: el("report-title")?.value?.trim() || REPORT_LABELS[type] || "تقرير يومي",
+    title: el("report-title")?.value?.trim() || reportTypeLabel(type),
     day: el("report-day")?.value || todayKey(),
     createdBy: currentUser.id,
     createdByName: currentUser.name,
@@ -350,10 +359,10 @@ async function submitReport(e) {
     if (el("report-type")) el("report-type").value = type;
     if (el("report-day")) el("report-day").value = todayKey();
     setTemplateForType(type);
-    showReportAlert("تم حفظ التقرير بنجاح.");
+    showReportAlert(rt("تم حفظ التقرير بنجاح.", "Report saved successfully."));
   } catch (err) {
     console.error("report save failed", err);
-    showReportAlert("لم يتم حفظ التقرير. تحقق من صلاحيات Firestore أو الاتصال.", true);
+    showReportAlert(rt("لم يتم حفظ التقرير. تحقق من صلاحيات Firestore أو الاتصال.", "Report could not be saved. Check Firestore permissions or connection."), true);
   }
 }
 
@@ -366,7 +375,7 @@ function subscribeReports() {
     renderReports();
   }, (err) => {
     console.error("reports snapshot error", err);
-    showReportAlert("تعذر تحميل التقارير. تحقق من قواعد أو فهارس Firestore.", true);
+    showReportAlert(rt("تعذر تحميل التقارير. تحقق من قواعد أو فهارس Firestore.", "Could not load reports. Check Firestore rules or indexes."), true);
   });
 }
 
@@ -385,6 +394,7 @@ function subscribeTicketsSnapshot() {
 function initReports() {
   currentUser = getCurrentUser();
   hookUI();
+  translateReportsStatic();
   renderTicketSnapshot();
   renderReports();
 
@@ -404,3 +414,5 @@ function initReports() {
 
 document.addEventListener("DOMContentLoaded", initReports);
 window.addEventListener("telesyriana:user-changed", initReports);
+
+window.addEventListener("telesyriana:language-changed", () => { translateReportsStatic(); setTemplateForType(el("report-type")?.value || "morning"); renderTicketSnapshot(); renderReports(); });

@@ -259,6 +259,21 @@ function closeMobileEditor() {
   el("notes-app")?.classList.remove("mobile-editor-open");
 }
 
+function translateNotesStatic() {
+  if (el("note-new-btn")) el("note-new-btn").textContent = nt("+ ملاحظة جديدة", "+ New note");
+  if (el("note-empty-new-btn")) el("note-empty-new-btn").textContent = nt("+ ملاحظة جديدة", "+ New note");
+  if (el("notes-back-btn")) el("notes-back-btn").textContent = nt("رجوع", "Back");
+  if (el("note-save-btn")) el("note-save-btn").textContent = nt("حفظ الآن", "Save now");
+  if (el("note-delete-btn")) el("note-delete-btn").textContent = nt("حذف", "Delete");
+  const title = document.querySelector('#notes-empty-state h3');
+  if (title) title.textContent = nt('اختر ملاحظة أو ابدأ واحدة جديدة', 'Choose a note or start a new one');
+  const sub = document.querySelector('#notes-empty-state p');
+  if (sub) sub.textContent = nt('الملاحظات محفوظة تلقائياً ومربوطة بحساب الموظف.', 'Notes are saved automatically and linked to the agent account.');
+  if (el('notes-search')) el('notes-search').placeholder = nt('البحث في الملاحظات...', 'Search notes...');
+  if (el('note-title')) el('note-title').placeholder = nt('عنوان الملاحظة', 'Note title');
+  if (el('note-body')) el('note-body').placeholder = nt('ابدأ الكتابة...', 'Start typing...');
+}
+
 function hookNotes() {
   if (isHooked) return;
   isHooked = true;
@@ -276,6 +291,7 @@ function hookNotes() {
 function initNotes() {
   currentUser = getUser();
   hookNotes();
+  translateNotesStatic();
   if (!currentUser) {
     notes = [];
     blankEditor(true);
@@ -289,3 +305,5 @@ function initNotes() {
 
 document.addEventListener("DOMContentLoaded", initNotes);
 window.addEventListener("telesyriana:user-changed", initNotes);
+
+window.addEventListener("telesyriana:language-changed", () => { translateNotesStatic(); renderNotesList(); if (selectedId) applyEditor(notes.find((n) => n.id === selectedId)); });

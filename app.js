@@ -59,14 +59,11 @@ function canViewAllStaff(user) {
 
 
 function roleLabel(role) {
-  switch (String(role || "").toLowerCase()) {
-    case "agent": return "موظف دعم";
-    case "supervisor": return "مشرف";
-    case "manager": return "مدير";
-    case "hr": return "HR";
-    case "admin": return "أدمن";
-    default: return role || "—";
-  }
+  const isAr = typeof getLanguage === "function" ? getLanguage() === "ar" : (document.body?.dataset?.language || "ar") === "ar";
+  const arMap = { agent: "موظف دعم", supervisor: "مشرف", manager: "مدير", hr: "الموارد البشرية", admin: "أدمن" };
+  const enMap = { agent: "Agent", supervisor: "Supervisor", manager: "Manager", hr: "HR", admin: "Admin" };
+  const key = String(role || "").toLowerCase();
+  return (isAr ? arMap[key] : enMap[key]) || role || "—";
 }
 
 function safeUserPayload(id) {
@@ -1151,7 +1148,7 @@ function updateDashboardUI() {
   if (welcomeTitle) welcomeTitle.textContent = getLanguage() === "ar" ? `مرحباً، ${currentUser.name}` : `Welcome, ${currentUser.name}`;
   renderHomeProfilePhoto(currentProfileCache().profilePhoto || "");
   if (welcomeSubtitle) {
-    welcomeSubtitle.textContent = `Logged in as ${currentUser.role.toUpperCase()} (CCMS: ${currentUser.id})`;
+    welcomeSubtitle.textContent = getLanguage() === "ar" ? `مسجل الدخول بصفة ${roleLabel(currentUser.role)} (CCMS: ${currentUser.id})` : `Logged in as ${String(currentUser.role || "").toUpperCase()} (CCMS: ${currentUser.id})`;
   }
 
   if (statusValue) {
@@ -2198,9 +2195,9 @@ function translateFeaturePages(lang = 'en') {
   const ticketCreateBtn = document.querySelector('#ticket-form button[type="submit"]');
   if (ticketCreateBtn) ticketCreateBtn.textContent = t.create;
   setPlaceholder('#ticket-search', t.ticketSearch);
-  setSelectOptions('#ticket-filter-status', { '': t.allStates, open:t.open, waiting_customer: isAr?'بانتظار العميل':'Waiting customer', waiting_courier:isAr?'بانتظار الشحن':'Waiting courier', waiting_supplier:isAr?'بانتظار المورد':'Waiting supplier', escalated:t.escalated, resolved:isAr?'محلولة':'Resolved', closed:isAr?'مغلقة':'Closed' });
-  setSelectOptions('#ticket-filter-priority', { '': t.allPriorities, emergency:t.emergency, high:'High', medium:'Medium', normal:'Normal' });
-  setSelectOptions('#ticket-filter-owner', { '': t.allOwners });
+  setSelectOptions('#ticket-filter-status', { all: t.allStates, open:t.open, waiting_customer: isAr?'بانتظار العميل':'Waiting customer', waiting_courier:isAr?'بانتظار الشحن':'Waiting courier', waiting_supplier:isAr?'بانتظار المورد':'Waiting supplier', escalated:t.escalated, resolved:isAr?'محلولة':'Resolved', closed:isAr?'مغلقة':'Closed' });
+  setSelectOptions('#ticket-filter-priority', { all: t.allPriorities, emergency:t.emergency, high:'High', medium:'Medium', normal:'Normal' });
+  setSelectOptions('#ticket-filter-owner', { all: t.allOwners, mine: isAr ? 'تذاكري' : 'My tickets', unassigned: isAr ? 'غير مسندة' : 'Unassigned' });
   setText('#ticket-escalate-btn', t.escalate);
   setText('#ticket-save-btn', t.saveChanges);
 
@@ -2244,6 +2241,94 @@ function translateFeaturePages(lang = 'en') {
   setText('#join-meeting-btn', t.openLink);
   const meetingNote = document.querySelector('#page-meetings .meeting-note');
   if (meetingNote) meetingNote.textContent = t.meetingNote;
+
+  // Stronger static translations for Home / Notes / Tickets / Reports.
+  const statusLabelBox = document.querySelector('#page-home .status-box .status-label');
+  if (statusLabelBox) statusLabelBox.textContent = isAr ? 'الحالة الحالية:' : 'Current status:';
+  const statusNote = document.querySelector('#page-home .status-note');
+  if (statusNote) statusNote.innerHTML = isAr
+    ? 'مدة الاستراحة المسموحة: <strong>45 دقيقة</strong>. يتم تحديث الوقت تلقائياً، ويتم حفظ الرواتب في Firestore عند تفعيل قاعدة البيانات.'
+    : 'Allowed break time: <strong>45 minutes</strong>. Time updates automatically and payroll is saved to Firestore when enabled.';
+  const breakBox = Array.from(document.querySelectorAll('#page-home .break-box > div'));
+  if (breakBox[0]) breakBox[0].childNodes[0].nodeValue = isAr ? 'الاستراحة المستخدمة: ' : 'Break used: ';
+  if (breakBox[1]) breakBox[1].childNodes[0].nodeValue = isAr ? 'المتبقي: ' : 'Remaining: ';
+  const timeBox = Array.from(document.querySelectorAll('#page-home .time-box > div'));
+  if (timeBox[0]) timeBox[0].childNodes[0].nodeValue = isAr ? 'التشغيل: ' : 'Operating: ';
+  if (timeBox[1]) timeBox[1].childNodes[0].nodeValue = isAr ? 'الاجتماع: ' : 'Meeting: ';
+  if (timeBox[2]) timeBox[2].childNodes[0].nodeValue = isAr ? 'متابعة الحالة: ' : 'Handling: ';
+  const supTitle = document.querySelector('#supervisor-panel h2');
+  if (supTitle) supTitle.textContent = isAr ? 'نظرة عامة على الفريق' : 'Team Overview';
+  const supNote = document.querySelector('#supervisor-panel .sup-note');
+  if (supNote) supNote.textContent = isAr ? 'المشرف يرى الموظفين التابعين له، والمدير/الأدمن يرى الفريق بالكامل.' : 'Supervisor sees assigned agents. Manager/Admin sees the full team.';
+  const supSummary = Array.from(document.querySelectorAll('#supervisor-panel .sup-summary span'));
+  if (supSummary[0]) supSummary[0].childNodes[0].nodeValue = isAr ? 'التشغيل: ' : 'Operating: ';
+  if (supSummary[1]) supSummary[1].childNodes[0].nodeValue = isAr ? 'الاستراحة: ' : 'Break: ';
+  if (supSummary[2]) supSummary[2].childNodes[0].nodeValue = isAr ? 'الاجتماع: ' : 'Meeting: ';
+  if (supSummary[3]) supSummary[3].childNodes[0].nodeValue = isAr ? 'غير متاح: ' : 'Unavailable: ';
+
+  const notesEmptyTitle = document.querySelector('#notes-empty-state h3');
+  if (notesEmptyTitle) notesEmptyTitle.textContent = isAr ? 'اختر ملاحظة أو ابدأ واحدة جديدة' : 'Choose a note or start a new one';
+  const notesEmptySub = document.querySelector('#notes-empty-state p');
+  if (notesEmptySub) notesEmptySub.textContent = isAr ? 'الملاحظات محفوظة تلقائياً ومربوطة بحساب الموظف.' : 'Notes are saved automatically and linked to the agent account.';
+  setText('#note-empty-new-btn', t.newNote);
+  setText('#note-save-btn', isAr ? 'حفظ الآن' : 'Save now');
+  setText('#notes-back-btn', isAr ? 'رجوع' : 'Back');
+
+  setText('#shopify-live-search-btn', isAr ? 'بحث Shopify' : 'Search Shopify');
+  setText('#shopify-live-use-btn', isAr ? 'استخدام في التذكرة' : 'Use in ticket');
+  setText('#shopify-live-status', isAr ? 'لا يوجد طلب Shopify محمّل بعد.' : 'No Shopify order loaded yet.');
+  const ticketLabels = Array.from(document.querySelectorAll('#ticket-form .ticket-form-grid > label'));
+  if (ticketLabels[0]) ticketLabels[0].childNodes[0].nodeValue = isAr ? 'رقم الطلب #' : 'Order number #';
+  if (ticketLabels[1]) ticketLabels[1].childNodes[0].nodeValue = isAr ? 'الفئة' : 'Category';
+  if (ticketLabels[2]) ticketLabels[2].childNodes[0].nodeValue = isAr ? 'الأولوية' : 'Priority';
+  if (ticketLabels[3]) ticketLabels[3].childNodes[0].nodeValue = isAr ? 'تعيين إلى' : 'Assign to';
+  if (ticketLabels[4]) ticketLabels[4].childNodes[0].nodeValue = isAr ? 'اسم العميل' : 'Customer name';
+  if (ticketLabels[5]) ticketLabels[5].childNodes[0].nodeValue = isAr ? 'بريد العميل الإلكتروني' : 'Customer email';
+  const ticketNotesLabel = document.querySelector('#ticket-notes')?.parentElement;
+  if (ticketNotesLabel) ticketNotesLabel.childNodes[0].nodeValue = isAr ? 'ملاحظات داخلية' : 'Internal notes';
+  setPlaceholder('#ticket-notes', isAr ? 'ما الذي حدث؟ وما الخطوة التالية المطلوبة؟' : 'What happened and what is the next required step?');
+  const ticketFormClose = document.getElementById('ticket-form-close');
+  if (ticketFormClose) ticketFormClose.setAttribute('aria-label', isAr ? 'إغلاق نموذج التذكرة' : 'Close ticket form');
+  const ticketsListHead = document.querySelector('#page-tickets .tickets-list-head');
+  if (ticketsListHead) ticketsListHead.textContent = isAr ? 'قائمة التذاكر' : 'Ticket Queue';
+  setText('#ticket-detail-empty', isAr ? 'اختر تذكرة لعرض التفاصيل.' : 'Select a ticket to view details.');
+  setText('#tickets-empty', isAr ? 'لا توجد تذاكر' : 'No tickets found');
+
+  const reportFormLabels = Array.from(document.querySelectorAll('#report-form > label'));
+  const rf = [
+    isAr ? 'طارئ / مسائل عاجلة' : 'Emergency / urgent issues',
+    isAr ? 'الشحنات المتأخرة' : 'Delayed shipments',
+    isAr ? 'التذاكر المحلولة' : 'Solved tickets',
+    isAr ? 'مؤجل للغد / للشفت التالي' : 'Pending tomorrow / next shift',
+    isAr ? 'الإرجاع / الاستبدال' : 'Returns / exchange',
+    isAr ? 'عملاء غاضبون أو حالات حساسة' : 'Angry customers or sensitive cases',
+    isAr ? 'المهام المطلوبة' : 'Required actions',
+    isAr ? 'ملاحظات عامة' : 'General notes',
+  ];
+  reportFormLabels.forEach((labelEl, i) => { if (rf[i]) labelEl.childNodes[0].nodeValue = rf[i]; });
+  const reportGridLabels = Array.from(document.querySelectorAll('#report-form .report-form-grid > label'));
+  if (reportGridLabels[0]) reportGridLabels[0].childNodes[0].nodeValue = isAr ? 'نوع التقرير' : 'Report type';
+  if (reportGridLabels[1]) reportGridLabels[1].childNodes[0].nodeValue = isAr ? 'التاريخ' : 'Date';
+  if (reportGridLabels[2]) reportGridLabels[2].childNodes[0].nodeValue = isAr ? 'العنوان' : 'Title';
+  setPlaceholder('#report-title', isAr ? 'تقرير صباحي' : 'Morning report');
+  const reportHint = document.getElementById('report-type-hint');
+  if (reportHint) reportHint.textContent = isAr ? 'ملخص دعم يومي.' : 'Daily support summary.';
+  const reportSaveBtn = document.querySelector('#report-form button[type="submit"]');
+  if (reportSaveBtn) reportSaveBtn.textContent = isAr ? 'حفظ التقرير' : 'Save report';
+  const histTitle = document.querySelector('#page-reports .reports-history-head h3');
+  if (histTitle) histTitle.textContent = isAr ? 'سجل التقارير' : 'Reports log';
+  const histSub = document.querySelector('#page-reports .reports-history-head .subtitle');
+  if (histSub) histSub.textContent = isAr ? 'المدير يرى الكل، المشرف يرى فريقه، والموظف يرى تقاريره فقط.' : 'Manager sees everything, supervisor sees their team, and agents only see their own reports.';
+  setText('#reports-empty', isAr ? 'لا توجد تقارير' : 'No reports found');
+  setSelectOptions('#report-filter-type', { all: isAr ? 'كل الأنواع' : 'All types', morning:t.morning, midday:t.midday, evening:t.endShift });
+  setSelectOptions('#report-filter-owner', { all: isAr ? 'كل الظاهرين' : 'All visible staff', mine: isAr ? 'تقاريري' : 'My reports' });
+  const reportModalLabels = Array.from(document.querySelectorAll('#report-modal .modal-body > label'));
+  reportModalLabels.forEach((labelEl, i) => { if (rf[i]) labelEl.childNodes[0].nodeValue = rf[i]; });
+  const reportModalTitle = document.getElementById('report-modal-title');
+  if (reportModalTitle && /^التقرير|Report$/i.test(reportModalTitle.textContent || '')) reportModalTitle.textContent = isAr ? 'التقرير' : 'Report';
+  const reportModalBtns = Array.from(document.querySelectorAll('#report-modal .modal-actions button'));
+  if (reportModalBtns[0]) reportModalBtns[0].textContent = isAr ? 'إغلاق' : 'Close';
+  if (reportModalBtns[1]) reportModalBtns[1].textContent = isAr ? 'حفظ تعديلات التقرير' : 'Save report changes';
 
   const navMap = { home:t.homeLabel, tasks:t.notesLabel, tickets:t.ticketsLabel, reports:t.reportsLabel, payroll:t.payrollLabel, messages:t.messagesLabel, meetings:t.meetingsLabel, settings:t.settingsLabel };
   document.querySelectorAll('.nav-link[data-page]').forEach((btn) => {
@@ -2340,12 +2425,12 @@ function applyPhase21LanguagePolish(lang = getLanguage()) {
     : { in_operation:'Operating', break:'Break', handling:'Handling', meeting:'Meeting', unavailable:'Unavailable' }
   );
   phase21Opt('#ticket-filter-status', isAr
-    ? { '':'كل الحالات', open:'مفتوحة', waiting_customer:'بانتظار العميل', waiting_courier:'بانتظار الشحن', waiting_supplier:'بانتظار المورد', escalated:'مصعّدة', resolved:'محلولة', closed:'مغلقة' }
-    : { '':'All statuses', open:'Open', waiting_customer:'Waiting customer', waiting_courier:'Waiting courier', waiting_supplier:'Waiting supplier', escalated:'Escalated', resolved:'Resolved', closed:'Closed' }
+    ? { all:'كل الحالات', open:'مفتوحة', waiting_customer:'بانتظار العميل', waiting_courier:'بانتظار الشحن', waiting_supplier:'بانتظار المورد', escalated:'مصعّدة', resolved:'محلولة', closed:'مغلقة' }
+    : { all:'All statuses', open:'Open', waiting_customer:'Waiting customer', waiting_courier:'Waiting courier', waiting_supplier:'Waiting supplier', escalated:'Escalated', resolved:'Resolved', closed:'Closed' }
   );
   phase21Opt('#ticket-filter-priority', isAr
-    ? { '':'كل الأولويات', emergency:'طارئ', high:'عالي', medium:'متوسط', normal:'عادي' }
-    : { '':'All priorities', emergency:'Emergency', high:'High', medium:'Medium', normal:'Normal' }
+    ? { all:'كل الأولويات', emergency:'طارئ', high:'عالي', medium:'متوسط', normal:'عادي' }
+    : { all:'All priorities', emergency:'Emergency', high:'High', medium:'Medium', normal:'Normal' }
   );
   phase21Opt('#report-type', isAr
     ? { morning:'تقرير صباحي', midday:'تقرير منتصف اليوم', evening:'تقرير نهاية الدوام' }
