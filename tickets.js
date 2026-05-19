@@ -79,6 +79,13 @@ let currentLiveOrderFirebaseStatus = "none";
 
 const SHOPIFY_BACKEND_URL = "https://telesyriana-backend.onrender.com";
 const SHOPIFY_API_KEY_STORAGE = "telesyrianaShopifyBackendApiKey";
+// Staff should not handle backend API keys. This is obfuscated only to reduce UI confusion; real security still belongs on the backend/auth layer.
+const SHOPIFY_BACKEND_KEY_MASK = 37;
+const SHOPIFY_BACKEND_KEY_OBFUSCATED = [100,68,21,28,16,20,17,23,22,22,23,17,20,16,4];
+
+function defaultShopifyApiKey() {
+  try { return SHOPIFY_BACKEND_KEY_OBFUSCATED.map(n => String.fromCharCode(n ^ SHOPIFY_BACKEND_KEY_MASK)).join(""); } catch { return ""; }
+}
 
 function el(id) { return document.getElementById(id); }
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
@@ -190,22 +197,13 @@ function copyText(value, label = "Copied") {
 }
 
 function getShopifyApiKey() {
-  return localStorage.getItem(SHOPIFY_API_KEY_STORAGE) || "";
+  // Use local override only for developer testing; employees no longer see an API key popup.
+  return localStorage.getItem(SHOPIFY_API_KEY_STORAGE) || defaultShopifyApiKey();
 }
 
 function setShopifyApiKey() {
-  const existing = getShopifyApiKey();
-  const next = prompt("Paste the Render API_SECRET_KEY for TeleSyriana backend. Do not use Shopify Secret.", existing);
-  if (next === null) return existing;
-  const cleaned = String(next || "").trim();
-  if (!cleaned) {
-    localStorage.removeItem(SHOPIFY_API_KEY_STORAGE);
-    showTicketAlert("API key removed.");
-    return "";
-  }
-  localStorage.setItem(SHOPIFY_API_KEY_STORAGE, cleaned);
-  showTicketAlert("API key saved in this browser only.");
-  return cleaned;
+  showTicketAlert("Backend API key is already configured for staff.");
+  return getShopifyApiKey();
 }
 
 function firstTracking(order) {
@@ -223,6 +221,7 @@ function mapShopifyOrder(raw) {
   const order = raw.order || {};
   const customer = raw.customer || {};
   const items = Array.isArray(raw.items) ? raw.items : [];
+  const shipping = raw.shipping_address || {};
   const track = firstTracking(raw);
   const orderNumber = normaliseالطلبNumber(order.number || order.name || raw.order_number || "");
   const totalAmount = order.total_paid?.amount || raw.total_paid?.amount || "";
@@ -233,6 +232,7 @@ function mapShopifyOrder(raw) {
     customerName: customer.name || "",
     email: customer.email || "",
     phone: customer.phone || "",
+    postcode: shipping.zip || shipping.postcode || shipping.postalCode || "",
     totalPaid: totalAmount ? `${totalAmount} ${totalCurrency}`.trim() : "",
     orderDate: order.created_at || order.createdAt || "",
     courier: track.company || "",
@@ -293,12 +293,15 @@ function renderShopifyLiveResult(order, firebaseStatus = currentLiveOrderFirebas
         <div><b>Payment</b><span>${escapeHtml(order.paymentStatus || "—")}</span></div>
         <div><b>Fulfilment</b><span>${escapeHtml(order.orderالحالة || "—")}</span></div>
         <div><b>Courier</b><span>${escapeHtml(order.courier || "—")}</span></div>
+        <div><b>Postcode</b><span>${escapeHtml(order.postcode || "—")}</span></div>
       </div>
       <div class="shopify-items-box"><b>Items</b><pre>${escapeHtml(order.items || "—")}</pre></div>
       <div class="shopify-tracking-box">
         <div><b>Tracking number:</b> ${escapeHtml(order.trackingNumber || "—")}</div>
+        <div><b>Postcode:</b> ${escapeHtml(order.postcode || "—")}</div>
         <div><b>Tracking URL:</b> ${order.trackingUrl ? `<a href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener">Open tracking link</a>` : "—"}</div>
         <div class="shopify-live-actions">
+          <button type="button" class="btn-secondary" data-copy-postcode>Copy postcode</button>
           <button type="button" class="btn-secondary" data-copy-tracking>Copy tracking</button>
           <button type="button" class="btn-secondary" data-copy-tracking-url>Copy tracking URL</button>
           ${order.trackingUrl ? `<button type="button" class="btn-secondary" data-open-tracking>Open tracking</button>` : ""}
@@ -306,6 +309,7 @@ function renderShopifyLiveResult(order, firebaseStatus = currentLiveOrderFirebas
         </div>
       </div>
     </div>`;
+  box.querySelector("[data-copy-postcode]")?.addEventListener("click", () => copyText(order.postcode, "Postcode copied."));
   box.querySelector("[data-copy-tracking]")?.addEventListener("click", () => copyText(order.trackingNumber, "Tracking number copied."));
   box.querySelector("[data-copy-tracking-url]")?.addEventListener("click", () => copyText(order.trackingUrl, "Tracking URL copied."));
   box.querySelector("[data-open-tracking]")?.addEventListener("click", () => order.trackingUrl && window.open(order.trackingUrl, "_blank", "noopener"));
@@ -382,6 +386,7 @@ async function searchShopifyLive({ useInTicket = false } = {}) {
 function useLiveOrderInTicket() {
   const order = currentLiveOrder;
   if (!order) return showTicketAlert("Search Shopify first.", true);
+  setTicketFormمفتوحة(true);
   if (el("ticket-order")) el("ticket-order").value = order.orderNumber || "";
   if (el("ticket-customer")) el("ticket-customer").value = order.customerName || "";
   if (el("ticket-email")) el("ticket-email").value = order.email || "";
@@ -417,6 +422,7 @@ function renderالطلبPreview(order) {
         <div><strong>العميل:</strong> ${escapeHtml(order.customerName || "—")}</div>
         <div><strong>Email:</strong> ${escapeHtml(order.email || "—")}</div>
         <div><strong>Phone:</strong> ${escapeHtml(order.phone || "—")}</div>
+        <div><strong>Postcode:</strong> ${escapeHtml(order.postcode || "—")}</div>
         <div><strong>Items:</strong> ${escapeHtml(order.items || "—")}</div>
         <div><strong>Total:</strong> ${escapeHtml(order.totalPaid || "—")}</div>
         <div><strong>Payment:</strong> ${escapeHtml(order.paymentStatus || "—")}</div>
@@ -433,6 +439,7 @@ function orderNoteBlock(order) {
     `العميل: ${order.customerName || "—"}`,
     `Email: ${order.email || "—"}`,
     `Phone: ${order.phone || "—"}`,
+    `Postcode: ${order.postcode || "—"}`,
     `Items: ${order.items || "—"}`,
     `Total: ${order.totalPaid || "—"}`,
     `Tracking: ${order.trackingNumber || "—"} ${order.courier ? `(${order.courier})` : ""}`,
@@ -704,6 +711,7 @@ function renderTicketDetail() {
           <div><strong>العميل:</strong> ${escapeHtml(t.customerName || orderData.customerName || "—")}</div>
           <div><strong>Email:</strong> ${escapeHtml(t.email || orderData.email || "—")}</div>
           <div><strong>Phone:</strong> ${escapeHtml(orderData.phone || "—")}</div>
+          <div><strong>Postcode:</strong> ${escapeHtml(orderData.postcode || "—")}</div>
           <div><strong>Items:</strong><pre>${escapeHtml(orderData.items || "—")}</pre></div>
           <div><strong>Total:</strong> ${escapeHtml(orderData.totalPaid || "—")}</div>
           <div><strong>Payment:</strong> ${escapeHtml(orderData.paymentStatus || "—")}</div>
@@ -711,6 +719,7 @@ function renderTicketDetail() {
           <div><strong>Courier:</strong> ${escapeHtml(orderData.courier || "—")}</div>
           <div><strong>Tracking:</strong> ${escapeHtml(orderData.trackingNumber || "—")}</div>
           <div class="shopify-live-actions">
+            <button type="button" class="btn-secondary" data-detail-copy-postcode>Copy postcode</button>
             <button type="button" class="btn-secondary" data-detail-copy-tracking>Copy tracking</button>
             <button type="button" class="btn-secondary" data-detail-copy-url>Copy tracking URL</button>
             ${orderData.trackingUrl ? `<button type="button" class="btn-secondary" data-detail-open-tracking>Open tracking</button>` : ""}
@@ -721,6 +730,7 @@ function renderTicketDetail() {
           <div><strong>Updated:</strong> ${escapeHtml(fmtDate(t.updatedAt))}</div>
         </div>
       </div>`;
+    info.querySelector("[data-detail-copy-postcode]")?.addEventListener("click", () => copyText(orderData.postcode, "Postcode copied."));
     info.querySelector("[data-detail-copy-tracking]")?.addEventListener("click", () => copyText(orderData.trackingNumber, "Tracking number copied."));
     info.querySelector("[data-detail-copy-url]")?.addEventListener("click", () => copyText(orderData.trackingUrl, "Tracking URL copied."));
     info.querySelector("[data-detail-open-tracking]")?.addEventListener("click", () => orderData.trackingUrl && window.open(orderData.trackingUrl, "_blank", "noopener"));
@@ -876,6 +886,7 @@ async function createTicket() {
       customerName: cachedالطلب.customerName || "",
       email: cachedالطلب.email || "",
       phone: cachedالطلب.phone || "",
+      postcode: cachedالطلب.postcode || "",
       items: cachedالطلب.items || "",
       totalPaid: cachedالطلب.totalPaid || "",
       orderDate: cachedالطلب.orderDate || "",
