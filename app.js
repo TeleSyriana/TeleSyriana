@@ -80,10 +80,13 @@ const STATE_KEY = "telesyrianaState";
 const BREAK_LIMIT_MIN = 45;
 
 // ✅ Work target (8 hours)
-const WORK_TARGET_MIN = 8 * 60;
+const DEFAULT_WORK_TARGET_MIN = 8 * 60;
+let currentWorkTargetMin = DEFAULT_WORK_TARGET_MIN;
+let currentStaffSettings = {};
 
 const AGENT_DAYS_COL = "agentDays";
 const USER_PROFILE_COL = "userProfiles";
+const STAFF_SETTINGS_COL = "staffSettings";
 const USER_PRESENCE_COL = "userPresence";
 
 let currentUser = null;
@@ -93,6 +96,7 @@ let supUnsub = null;
 let presenceUnsub = null;
 let presenceTimerId = null;
 let issueCalendarUnsub = null;
+let staffSettingsUnsub = null;
 let issueStatsByDay = {};
 
 // widgets timers
@@ -238,9 +242,15 @@ function setRing(percent) {
 
 /* --------------------------- Widgets (Work target box) ------------------- */
 
+function getCurrentWorkTargetMin() {
+  const n = Number(currentStaffSettings?.shiftTargetMinutes ?? currentWorkTargetMin ?? DEFAULT_WORK_TARGET_MIN);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_WORK_TARGET_MIN;
+}
+
 function updateWorkUI(workedMin) {
   const used = Math.max(0, Math.floor(workedMin));
-  const remaining = Math.max(0, WORK_TARGET_MIN - used);
+  const targetMin = getCurrentWorkTargetMin();
+  const remaining = Math.max(0, targetMin - used);
 
   // text
   const workText = document.getElementById("work-text");
@@ -248,12 +258,12 @@ function updateWorkUI(workedMin) {
   const remainingText = document.getElementById("work-remaining-text");
 
   if (workText) workText.textContent = formatDuration(used);
-  if (targetText) targetText.textContent = formatDuration(WORK_TARGET_MIN);
+  if (targetText) targetText.textContent = formatDuration(targetMin);
   if (remainingText) remainingText.textContent = formatDuration(remaining);
 
   // ring
   const pct =
-    WORK_TARGET_MIN > 0 ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100)) : 0;
+    targetMin > 0 ? Math.min(100, Math.round((used / targetMin) * 100)) : 0;
   const ring = document.getElementById("work-ring-progress");
   const label = document.getElementById("work-ring-label");
 
@@ -446,6 +456,7 @@ async function syncStateToFirestore(live, force = false) {
     Math.floor(usage.meeting),
     Math.floor(usage.handling),
     Math.floor(usage.unavailable),
+    getCurrentWorkTargetMin(),
   ].join("|");
 
   if (!force && payloadHash === lastSyncPayloadHash && state.status === lastSyncStatus) {
@@ -459,6 +470,8 @@ async function syncStateToFirestore(live, force = false) {
     supervisorId: currentUser.supervisorId || "",
     hourlyRate: Number(currentUser.hourlyRate) || 0,
     currency: currentUser.currency || "USD",
+    shiftTargetMinutes: getCurrentWorkTargetMin(),
+    shiftType: getCurrentWorkTargetMin() === 4 * 60 ? "part_time" : getCurrentWorkTargetMin() === 8 * 60 ? "full_time" : "custom",
     day: today,
     status: state.status,
     loginTime: state.loginTime,
@@ -476,6 +489,25 @@ async function syncStateToFirestore(live, force = false) {
   lastSyncMs = now;
   lastSyncStatus = state.status;
   lastSyncPayloadHash = payloadHash;
+}
+
+function subscribeCurrentStaffSettings() {
+  if (!currentUser?.id) return;
+  try { if (staffSettingsUnsub) staffSettingsUnsub(); } catch {}
+  staffSettingsUnsub = null;
+
+  const ref = doc(collection(db, STAFF_SETTINGS_COL), currentUser.id);
+  staffSettingsUnsub = onSnapshot(ref, (snap) => {
+    currentStaffSettings = snap.exists() ? (snap.data() || {}) : {};
+    const target = Number(currentStaffSettings.shiftTargetMinutes || DEFAULT_WORK_TARGET_MIN);
+    currentWorkTargetMin = Number.isFinite(target) && target > 0 ? target : DEFAULT_WORK_TARGET_MIN;
+    updateDashboardUI();
+  }, (err) => {
+    console.warn("staff settings listener failed", err);
+    currentStaffSettings = {};
+    currentWorkTargetMin = DEFAULT_WORK_TARGET_MIN;
+    updateDashboardUI();
+  });
 }
 
 function subscribeSupervisorDashboard() {
@@ -912,6 +944,10 @@ async function handleLogout() {
   presenceUnsub = null;
   try { if (issueCalendarUnsub) issueCalendarUnsub(); } catch {}
   issueCalendarUnsub = null;
+  try { if (staffSettingsUnsub) staffSettingsUnsub(); } catch {}
+  staffSettingsUnsub = null;
+  currentStaffSettings = {};
+  currentWorkTargetMin = DEFAULT_WORK_TARGET_MIN;
 
   currentUser = null;
   state = null;
@@ -1023,6 +1059,7 @@ async function initStateForUser() {
 
 function finishInit(now) {
   if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();
+  subscribeCurrentStaffSettings();
 
   loadUserProfile().then(() => { updateDashboardUI(); updatePresence(true).catch(() => {}); });
   startTimer();

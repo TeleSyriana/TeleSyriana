@@ -5216,3 +5216,34 @@ html[dir="rtl"] #page-tasks .notes-pro-sidebar{
   }
   #page-tasks .notes-editor-actions button{ width:100% !important; min-width:0 !important; }
 }
+
+/* =========================
+   Phase 3 — Payroll shift target settings
+========================= */
+.payroll-summary-grid{
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr)) !important;
+}
+.payroll-rate-grid{
+  grid-template-columns:1.2fr 1fr .8fr .85fr .75fr auto !important;
+}
+.payroll-rate-grid label.is-disabled{
+  opacity:.55;
+}
+.payroll-rate-grid label.is-disabled input,
+.payroll-rate-grid label.is-disabled select{
+  cursor:not-allowed;
+  background:rgba(148,163,184,.12);
+}
+.payroll-pill.warn{
+  background:rgba(245,158,11,.14);
+  color:#92400e;
+}
+.payroll-table{
+  min-width:1260px !important;
+}
+@media(max-width:1100px){
+  .payroll-rate-grid{ grid-template-columns:1fr 1fr !important; }
+}
+@media(max-width:720px){
+  .payroll-rate-grid{ grid-template-columns:1fr !important; }
+}

@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <title>TeleSyriana – Support OS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="style.css?v=phase2-notes" />
+  <link rel="stylesheet" href="style.css?v=phase3-shifts" />
 </head>
 
-<body data-build-version="1.8.0">
+<body data-build-version="phase3-shifts">
   <div class="app-wrapper">
 
     <!-- HEADER -->
@@ -1075,7 +1075,9 @@
           </div>
 
           <div class="payroll-summary-grid">
-            <div class="payroll-snap"><span>إلىtal worked</span><strong id="payroll-sum-worked">0 min</strong></div>
+            <div class="payroll-snap"><span>Total worked</span><strong id="payroll-sum-worked">0 min</strong></div>
+            <div class="payroll-snap"><span>Shift target</span><strong id="payroll-sum-target">0 min</strong></div>
+            <div class="payroll-snap"><span>Difference</span><strong id="payroll-sum-diff">—</strong></div>
             <div class="payroll-snap"><span>Operation</span><strong id="payroll-sum-operation">0 min</strong></div>
             <div class="payroll-snap"><span>الاستراحة المستخدمة</span><strong id="payroll-sum-break">0 min</strong></div>
             <div class="payroll-snap warning"><span>الاستراحات المتأخرة</span><strong id="payroll-sum-late">0</strong></div>
@@ -1083,26 +1085,38 @@
           </div>
 
           <div id="payroll-rate-panel" class="payroll-rate-panel hidden">
-            <h3>إعدادات أجر الساعة</h3>
-            <p class="subtitle">يمكن للمدير/الأدمن تحديد أجر الساعة والعملة. الحسابات الجديدة تستخدم هذه القيم.</p>
+            <h3>Staff shift settings</h3>
+            <p class="subtitle">Supervisor, Manager, and Admin can set 4h part-time, 8h full-time, or custom shift targets. Only Manager/Admin can edit hourly rates.</p>
             <div class="payroll-rate-grid">
               <label>
-                الموظف member
+                Staff member
                 <select id="payroll-rate-staff"></select>
               </label>
               <label>
-                أجر الساعة
-                <input id="payroll-rate-value" type="number" min="0" step="0.01" placeholder="1.25" />
+                Shift type
+                <select id="payroll-shift-mode">
+                  <option value="part_time">Part time — 4 hours</option>
+                  <option value="full_time">Full time — 8 hours</option>
+                  <option value="custom">Custom</option>
+                </select>
               </label>
               <label>
-                العملة
+                Custom hours
+                <input id="payroll-shift-custom" type="number" min="1" max="24" step="0.25" placeholder="6" />
+              </label>
+              <label data-rate-only>
+                Hourly rate
+                <input id="payroll-rate-value" type="number" min="0" step="0.01" placeholder="1.25" />
+              </label>
+              <label data-rate-only>
+                Currency
                 <select id="payroll-rate-currency">
                   <option value="USD">USD</option>
                   <option value="GBP">GBP</option>
                 </select>
               </label>
-              <button id="payroll-save-rate" type="button" class="btn-primary" style="width:auto">حفظ الأجر</button>
-              <div id="payroll-rate-status" class="payroll-rate-status">اختر موظفاً لعرض الأجر الحالي.</div>
+              <button id="payroll-save-rate" type="button" class="btn-primary" style="width:auto">Save staff settings</button>
+              <div id="payroll-rate-status" class="payroll-rate-status">Select staff member to view current settings.</div>
             </div>
           </div>
 
@@ -1120,6 +1134,8 @@
                   <th>استراحة</th>
                   <th>غير متاح</th>
                   <th>العمل</th>
+                  <th>هدف الدوام</th>
+                  <th>فرق الدوام</th>
                   <th>الأجر</th>
                   <th>الأجر المتوقع</th>
                   <th>ملاحظة الاستراحة</th>
@@ -1208,14 +1224,14 @@
 
 
   <!-- scripts -->
-  <script type="module" src="app.js?v=phase2-notes"></script>
-  <script type="module" src="tasks.js?v=phase2-notes"></script>
-  <script type="module" src="tickets.js?v=2.2.0"></script>
-  <script type="module" src="reports.js?v=2.2.0"></script>
-  <script type="module" src="payroll.js?v=2.2.0"></script>
-  <script type="module" src="messages.js?v=2.2.0"></script>
-  <script type="module" src="groups.js?v=2.2.0"></script>
-  <script type="module" src="meetings.js?v=2.2.0"></script>
+  <script type="module" src="app.js?v=phase3-shifts"></script>
+  <script type="module" src="tasks.js?v=phase3-shifts"></script>
+  <script type="module" src="tickets.js?v=phase3-shifts"></script>
+  <script type="module" src="reports.js?v=phase3-shifts"></script>
+  <script type="module" src="payroll.js?v=phase3-shifts"></script>
+  <script type="module" src="messages.js?v=phase3-shifts"></script>
+  <script type="module" src="groups.js?v=phase3-shifts"></script>
+  <script type="module" src="meetings.js?v=phase3-shifts"></script>
 
 </body>
 </html>

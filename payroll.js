@@ -18,6 +18,8 @@ const USER_KEY = "telesyrianaUser";
 const AGENT_DAYS_COL = "agentDays";
 const STAFF_SETTINGS_COL = "staffSettings";
 const BREAK_LIMIT_MIN = 45;
+const DEFAULT_SHIFT_TARGET_MIN = 8 * 60;
+const SHIFT_PRESETS = { part_time: 4 * 60, full_time: 8 * 60, custom: null };
 
 const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
 const STAFF = {
@@ -40,6 +42,7 @@ function el(id) { return document.getElementById(id); }
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
 function canSeeAll(u) { return roleLevel(u) >= ROLE_LEVELS.manager; }
 function canManageRates(u) { return roleLevel(u) >= ROLE_LEVELS.manager; }
+function canManageShifts(u) { return roleLevel(u) >= ROLE_LEVELS.supervisor; }
 function canSupervise(u) { return roleLevel(u) >= ROLE_LEVELS.supervisor; }
 
 function getCurrentUser() {
@@ -102,6 +105,25 @@ function getStaffRate(id, row = {}) {
   return { hourlyRate: Number(rate) || 0, currency };
 }
 
+function getStaffShift(id, row = {}) {
+  const override = staffSettings[id] || {};
+  const minutes = Number(override.shiftTargetMinutes ?? row.shiftTargetMinutes ?? DEFAULT_SHIFT_TARGET_MIN);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_SHIFT_TARGET_MIN;
+}
+
+function shiftModeForMinutes(minutes) {
+  const m = Number(minutes) || DEFAULT_SHIFT_TARGET_MIN;
+  if (m === SHIFT_PRESETS.part_time) return "part_time";
+  if (m === SHIFT_PRESETS.full_time) return "full_time";
+  return "custom";
+}
+
+function shiftDifferenceHtml(diffMin) {
+  const diff = Math.round(Number(diffMin) || 0);
+  if (diff >= 0) return `<span class="payroll-pill warn">${formatDuration(diff)} remaining</span>`;
+  return `<span class="payroll-pill ok">${formatDuration(Math.abs(diff))} over</span>`;
+}
+
 function visibleStaffIds() {
   if (!currentUser) return [];
   if (canSeeAll(currentUser)) return Object.keys(STAFF);
@@ -126,7 +148,7 @@ function canViewRow(row) {
 function staffLabel(id) {
   const s = getStaffBase(id);
   const rate = getStaffRate(id);
-  return `${s.name} (${id}) — ${rate.currency} ${Number(rate.hourlyRate || 0).toFixed(2)}/hr`;
+  return `${s.name} (${id}) — ${formatDuration(getStaffShift(id))} shift • ${rate.currency} ${Number(rate.hourlyRate || 0).toFixed(2)}/hr`;
 }
 
 function populateStaffFilters() {
@@ -144,9 +166,10 @@ function populateStaffFilters() {
 
   if (rateStaff) {
     const existing = rateStaff.value || "";
-    const allIds = Object.keys(STAFF);
-    rateStaff.innerHTML = allIds.map((id) => `<option value="${id}">${staffLabel(id)}</option>`).join("");
-    if (allIds.includes(existing)) rateStaff.value = existing;
+    const editableIds = canSeeAll(currentUser) ? Object.keys(STAFF) : visibleIds;
+    rateStaff.innerHTML = editableIds.map((id) => `<option value="${id}">${staffLabel(id)}</option>`).join("");
+    if (editableIds.includes(existing)) rateStaff.value = existing;
+    else if (editableIds.length) rateStaff.value = editableIds[0];
     syncRateEditor();
   }
 }
@@ -190,6 +213,7 @@ function renderPayroll() {
   let totalWorked = 0;
   let totalتشغيل = 0;
   let totalاستراحة = 0;
+  let totalShiftTarget = 0;
   let lateاستراحةs = 0;
   const payByCurrency = {};
 
@@ -197,11 +221,14 @@ function renderPayroll() {
     const staff = getStaffBase(row.userId);
     const rate = getStaffRate(row.userId, row);
     const worked = workedMinutes(row);
+    const shiftTarget = getStaffShift(row.userId, row);
+    const shiftDiff = shiftTarget - worked;
     const op = Number(row.operationMinutes) || 0;
     const br = Number(row.breakUsedMinutes) || 0;
     const pay = (worked / 60) * rate.hourlyRate;
 
     totalWorked += worked;
+    totalShiftTarget += shiftTarget;
     totalتشغيل += op;
     totalاستراحة += br;
     if (br > BREAK_LIMIT_MIN) lateاستراحةs += 1;
@@ -223,6 +250,8 @@ function renderPayroll() {
       <td>${formatDuration(row.breakUsedMinutes)}</td>
       <td>${formatDuration(row.unavailableMinutes)}</td>
       <td><strong>${formatDuration(worked)}</strong></td>
+      <td>${formatDuration(shiftTarget)}</td>
+      <td>${shiftDifferenceHtml(shiftDiff)}</td>
       <td>${rate.currency} ${rate.hourlyRate.toFixed(2)}/h</td>
       <td><strong>${money(rate.currency, pay)}</strong></td>
       <td>${breakNote}</td>
@@ -231,6 +260,8 @@ function renderPayroll() {
   });
 
   if (el("payroll-sum-worked")) el("payroll-sum-worked").textContent = formatDuration(totalWorked);
+  if (el("payroll-sum-target")) el("payroll-sum-target").textContent = formatDuration(totalShiftTarget);
+  if (el("payroll-sum-diff")) el("payroll-sum-diff").textContent = totalShiftTarget ? (totalShiftTarget - totalWorked >= 0 ? `${formatDuration(totalShiftTarget - totalWorked)} remaining` : `${formatDuration(totalWorked - totalShiftTarget)} over`) : "—";
   if (el("payroll-sum-operation")) el("payroll-sum-operation").textContent = formatDuration(totalتشغيل);
   if (el("payroll-sum-break")) el("payroll-sum-break").textContent = formatDuration(totalاستراحة);
   if (el("payroll-sum-late")) el("payroll-sum-late").textContent = String(lateاستراحةs);
@@ -244,10 +275,28 @@ function syncRateEditor() {
   const id = el("payroll-rate-staff")?.value;
   if (!id) return;
   const rate = getStaffRate(id);
-  if (el("payroll-rate-value")) el("payroll-rate-value").value = String(rate.hourlyRate || 0);
-  if (el("payroll-rate-currency")) el("payroll-rate-currency").value = rate.currency || "USD";
+  const shiftTarget = getStaffShift(id);
+  const shiftMode = shiftModeForMinutes(shiftTarget);
+  const canEditRate = canManageRates(currentUser);
+
+  if (el("payroll-rate-value")) {
+    el("payroll-rate-value").value = String(rate.hourlyRate || 0);
+    el("payroll-rate-value").disabled = !canEditRate;
+  }
+  if (el("payroll-rate-currency")) {
+    el("payroll-rate-currency").value = rate.currency || "USD";
+    el("payroll-rate-currency").disabled = !canEditRate;
+  }
+  if (el("payroll-shift-mode")) el("payroll-shift-mode").value = shiftMode;
+  if (el("payroll-shift-custom")) {
+    el("payroll-shift-custom").value = String((shiftTarget / 60).toFixed(shiftTarget % 60 ? 2 : 0));
+    el("payroll-shift-custom").disabled = shiftMode !== "custom";
+  }
   const status = el("payroll-rate-status");
-  if (status) status.textContent = `Current saved rate: ${rate.currency || "USD"} ${Number(rate.hourlyRate || 0).toFixed(2)} / hour`;
+  if (status) {
+    const rateText = canEditRate ? `${rate.currency || "USD"} ${Number(rate.hourlyRate || 0).toFixed(2)} / hour` : "rate locked for supervisor";
+    status.textContent = `Current: ${formatDuration(shiftTarget)} shift • ${rateText}`;
+  }
 }
 
 
@@ -260,32 +309,50 @@ function showAlert(message, danger = false) {
   setTimeout(() => box.classList.add("hidden"), 3500);
 }
 
-async function saveRate() {
-  if (!currentUser || !canManageRates(currentUser)) return showAlert("Only Manager/Admin can update rates.", true);
+function selectedShiftTargetMinutes() {
+  const mode = el("payroll-shift-mode")?.value || "full_time";
+  if (mode === "part_time") return SHIFT_PRESETS.part_time;
+  if (mode === "full_time") return SHIFT_PRESETS.full_time;
+  const hours = Number(el("payroll-shift-custom")?.value || 0);
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 24) return null;
+  return Math.round(hours * 60);
+}
+
+async function saveStaffSettings() {
+  if (!currentUser || !canManageShifts(currentUser)) return showAlert("Only Supervisor, Manager, or Admin can update shift settings.", true);
   const id = el("payroll-rate-staff")?.value;
+  const shiftTargetMinutes = selectedShiftTargetMinutes();
+  const canEditRate = canManageRates(currentUser);
   const hourlyRate = Number(el("payroll-rate-value")?.value || 0);
   const currency = el("payroll-rate-currency")?.value || "USD";
   if (!id) return showAlert("Select staff member first.", true);
-  if (Number.isNaN(hourlyRate) || hourlyRate < 0) return showAlert("Hourly rate must be 0 or higher.", true);
+  if (!shiftTargetMinutes) return showAlert("Shift target must be between 1 and 24 hours.", true);
+  if (canEditRate && (Number.isNaN(hourlyRate) || hourlyRate < 0)) return showAlert("Hourly rate must be 0 or higher.", true);
+
+  const payload = {
+    userId: id,
+    shiftTargetMinutes,
+    shiftType: shiftModeForMinutes(shiftTargetMinutes),
+    updatedBy: currentUser.id,
+    updatedByName: currentUser.name,
+    updatedAt: serverTimestamp(),
+  };
+  if (canEditRate) {
+    payload.hourlyRate = hourlyRate;
+    payload.currency = currency;
+  }
 
   try {
-    await setDoc(doc(collection(db, STAFF_SETTINGS_COL), id), {
-      userId: id,
-      hourlyRate,
-      currency,
-      updatedBy: currentUser.id,
-      updatedByName: currentUser.name,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    await setDoc(doc(collection(db, STAFF_SETTINGS_COL), id), payload, { merge: true });
 
-    staffSettings[id] = { ...(staffSettings[id] || {}), hourlyRate, currency };
+    staffSettings[id] = { ...(staffSettings[id] || {}), ...payload };
     populateStaffFilters();
     renderPayroll();
     syncRateEditor();
-    showAlert(`Rate saved: ${currency} ${hourlyRate.toFixed(2)} / hour.`);
+    showAlert(`Saved: ${formatDuration(shiftTargetMinutes)} shift${canEditRate ? ` • ${currency} ${hourlyRate.toFixed(2)} / hour` : ""}.`);
   } catch (err) {
-    console.error("saveRate failed", err);
-    showAlert("Rate was not saved. Check Firestore permissions or internet.", true);
+    console.error("saveStaffSettings failed", err);
+    showAlert("Staff settings were not saved. Check Firestore permissions or internet.", true);
   }
 }
 
@@ -314,7 +381,9 @@ function subscribePayroll() {
 
 function setPermissionsUI() {
   const panel = el("payroll-rate-panel");
-  if (panel) panel.classList.toggle("hidden", !canManageRates(currentUser));
+  if (panel) panel.classList.toggle("hidden", !canManageShifts(currentUser));
+  const rateOnlyEls = document.querySelectorAll("[data-rate-only]");
+  rateOnlyEls.forEach((node) => node.classList.toggle("is-disabled", !canManageRates(currentUser)));
 }
 
 function hookPayroll() {
@@ -327,7 +396,8 @@ function hookPayroll() {
   el("payroll-from")?.addEventListener("change", renderPayroll);
   el("payroll-to")?.addEventListener("change", renderPayroll);
   el("payroll-rate-staff")?.addEventListener("change", syncRateEditor);
-  el("payroll-save-rate")?.addEventListener("click", saveRate);
+  el("payroll-shift-mode")?.addEventListener("change", syncRateEditor);
+  el("payroll-save-rate")?.addEventListener("click", saveStaffSettings);
 }
 
 function init() {
