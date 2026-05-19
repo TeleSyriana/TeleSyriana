@@ -71,7 +71,7 @@ if (window.__TS_MEETINGS_INIT__) {
 
   // -------------------- helpers --------------------
 
-  const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
+  const ROLE_LEVELS = { agent: 1, supervisor: 2, hr: 3, manager: 3, admin: 4 };
   function roleLevel(user) { return ROLE_LEVELS[String(user?.role || "").toLowerCase()] || 0; }
   function canManageاجتماعs(user) { return roleLevel(user) >= ROLE_LEVELS.supervisor; }
 

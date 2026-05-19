@@ -5532,3 +5532,8 @@ body[data-language="ar"] #page-payroll .payroll-table td{
     padding:10px 11px !important;
   }
 }
+
+/* Phase 22: staff role avatar aliases */
+.chat-avatar.role-manager{ background:var(--brand); }
+.chat-avatar.role-admin{ background:#111827; }
+.chat-avatar.role-hr{ background:var(--brand); }

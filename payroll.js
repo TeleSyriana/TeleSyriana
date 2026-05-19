@@ -151,14 +151,14 @@ function lang() {
 function tr(key) { return PAYROLL_I18N[lang()]?.[key] || PAYROLL_I18N.en[key] || key; }
 
 
-const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
+const ROLE_LEVELS = { agent: 1, supervisor: 2, hr: 3, manager: 3, admin: 4 };
 const STAFF = {
-  "0001": { id: "0001", name: "Agent Raghad", role: "agent", supervisorId: "1001", hourlyRate: 1.25, currency: "USD" },
-  "0002": { id: "0002", name: "Agent Qamar", role: "agent", supervisorId: "1001", hourlyRate: 1.25, currency: "USD" },
-  "0003": { id: "0003", name: "Agent", role: "agent", supervisorId: "1001", hourlyRate: 1.25, currency: "USD" },
-  "1001": { id: "1001", name: "Supervisor Dema", role: "supervisor", hourlyRate: 1.75, currency: "USD" },
-  "2001": { id: "2001", name: "Manager Mohammad", role: "manager", hourlyRate: 0, currency: "GBP" },
-  "9001": { id: "9001", name: "Owner Admin", role: "admin", hourlyRate: 0, currency: "GBP" },
+  "0001": { id: "0001", name: "Owner Jack Smith", role: "admin", hourlyRate: 0, currency: "GBP" },
+  "1001": { id: "1001", name: "Manager Mohammad Safar", role: "manager", hourlyRate: 5.8, currency: "GBP" },
+  "2001": { id: "2001", name: "Supervisor Dema Shabar", role: "supervisor", hourlyRate: 5.8, currency: "GBP" },
+  "3001": { id: "3001", name: "HR Fatima Kaka", role: "hr", hourlyRate: 5.8, currency: "GBP" },
+  "9001": { id: "9001", name: "Agent Raghad Moussa", role: "agent", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
+  "9002": { id: "9002", name: "Agent Qamar Moussa", role: "agent", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
 };
 
 let currentUser = null;

@@ -1,5 +1,5 @@
 
-const TS_ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
+const TS_ROLE_LEVELS = { agent: 1, supervisor: 2, hr: 3, manager: 3, admin: 4 };
 function tsRoleLevel(u) { return TS_ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
 function tsCanUseSupervisorRoom(u) { return tsRoleLevel(u) >= TS_ROLE_LEVELS.supervisor; }
 // messages.js – Firestore chat (NO limit()) + lazy render on scroll up + Rooms + DMs + status dots

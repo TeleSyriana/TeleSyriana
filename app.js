@@ -20,17 +20,18 @@ const {
 // - Manager codes start with 200x
 // - Admin/Owner codes start with 900x
 const USERS = {
-  "9001": { password: "Welcome2026!", role: "agent", name: "Raghad Mousa", supervisorId: "1001", hourlyRate: 1.15, currency: "USD" },
-  "9002": { password: "Welcome2026!", role: "agent", name: "Qamar Mousa", supervisorId: "1001", hourlyRate: 1.15, currency: "USD" },
-  "9003": { password: "Welcome2026!", role: "agent", name: "Agent", supervisorId: "1001", hourlyRate: 1.15, currency: "USD" },
-  "2001": { password: "2411", role: "supervisor", name: "Dema Shabar", hourlyRate: 5.8, currency: "GBP" },
-  "1001": { password: "0951", role: "manager", name: "Mohammad Safar", hourlyRate: 5.8, currency: "GBP" },
   "0001": { password: "Aa095142332415!", role: "admin", name: "Jack Smith", hourlyRate: 0, currency: "GBP" },
+  "1001": { password: "0951", role: "manager", name: "Mohammad Safar", hourlyRate: 5.8, currency: "GBP" },
+  "2001": { password: "2411", role: "supervisor", name: "Dema Shabar", hourlyRate: 5.8, currency: "GBP" },
+  "3001": { password: "2411", role: "hr", name: "Fatima Kaka", hourlyRate: 5.8, currency: "GBP" },
+  "9001": { password: "Welcome2026!", role: "agent", name: "Raghad Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
+  "9002": { password: "Welcome2026!", role: "agent", name: "Qamar Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
 };
 
 const ROLE_LEVELS = {
   agent: 1,
   supervisor: 2,
+  hr: 3,
   manager: 3,
   admin: 4,
 };
@@ -62,6 +63,7 @@ function roleLabel(role) {
     case "agent": return "موظف دعم";
     case "supervisor": return "مشرف";
     case "manager": return "مدير";
+    case "hr": return "HR";
     case "admin": return "أدمن";
     default: return role || "—";
   }
@@ -874,7 +876,7 @@ async function handleLogin(e) {
   const pw = document.getElementById("password")?.value || "";
   const submitBtn = e?.target?.querySelector('button[type="submit"]');
 
-  if (!USERS[id]) return showError("المستخدم غير موجود. جرّب 0001 أو 0002 أو 1001 أو 2001 أو 9001.");
+  if (!USERS[id]) return showError("المستخدم غير موجود. جرّب 0001 أو 1001 أو 2001 أو 3001 أو 9001 أو 9002.");
   if (USERS[id].password !== pw) return showError("كلمة المرور غير صحيحة.");
 
   try {

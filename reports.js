@@ -18,14 +18,14 @@ const USER_KEY = "telesyrianaUser";
 const REPORTS_COL = "dailyReports";
 const TICKETS_COL = "tickets";
 
-const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
+const ROLE_LEVELS = { agent: 1, supervisor: 2, hr: 3, manager: 3, admin: 4 };
 const STAFF = {
-  "0001": { id: "0001", name: "Agent Raghad", role: "agent", supervisorId: "1001" },
-  "0002": { id: "0002", name: "Agent Qamar", role: "agent", supervisorId: "1001" },
-  "0003": { id: "0003", name: "Agent", role: "agent", supervisorId: "1001" },
-  "1001": { id: "1001", name: "Supervisor Dema", role: "supervisor" },
-  "2001": { id: "2001", name: "Manager Mohammad", role: "manager" },
-  "9001": { id: "9001", name: "Owner Admin", role: "admin" },
+  "0001": { id: "0001", name: "Owner Jack Smith", role: "admin" },
+  "1001": { id: "1001", name: "Manager Mohammad Safar", role: "manager" },
+  "2001": { id: "2001", name: "Supervisor Dema Shabar", role: "supervisor" },
+  "3001": { id: "3001", name: "HR Fatima Kaka", role: "hr" },
+  "9001": { id: "9001", name: "Agent Raghad Moussa", role: "agent", supervisorId: "2001" },
+  "9002": { id: "9002", name: "Agent Qamar Moussa", role: "agent", supervisorId: "2001" },
 };
 
 const REPORT_LABELS = {

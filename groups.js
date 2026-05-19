@@ -18,7 +18,7 @@ const USER_KEY = "telesyrianaUser";
 const GROUPS_COL = "groups";
 
 const norm = (x) => String(x ?? "").trim();
-const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
+const ROLE_LEVELS = { agent: 1, supervisor: 2, hr: 3, manager: 3, admin: 4 };
 const roleLevel = (u) => ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0;
 const canCreateGroups = (u) => roleLevel(u) >= ROLE_LEVELS.supervisor;
 
