@@ -1051,16 +1051,21 @@ async function saveSelectedTicket() {
   const restoreSaveBtn = setButtonSaving(saveBtn, true, "جاري الحفظ...");
 
   const status = el("ticket-detail-status")?.value || "open";
+  const assignedTo = el("ticket-detail-assigned")?.value || "";
+  const priority = el("ticket-detail-priority-select")?.value || "normal";
+  const customerMood = el("ticket-detail-mood")?.value || "calm";
+  const notes = el("ticket-detail-notes")?.value || "";
+  const resolution = el("ticket-detail-resolution")?.value || "";
   const update = {
     status,
-    assignedTo: el("ticket-detail-assigned")?.value || "",
-    priority: el("ticket-detail-priority-select")?.value || "normal",
-    customerMood: el("ticket-detail-mood")?.value || "calm",
-    notes: el("ticket-detail-notes")?.value || "",
-    resolution: el("ticket-detail-resolution")?.value || "",
+    assignedTo,
+    priority,
+    customerMood,
+    notes,
+    resolution,
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
-    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[update.priority] || update.priority}`, currentUser?.id || ""),
+    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[priority] || priority}`, currentUser?.id || ""),
   };
   if (status === "resolved" || status === "closed") {
     update.resolvedAt = serverTimestamp();

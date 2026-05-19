@@ -75,6 +75,15 @@ if (window.__TS_MEETINGS_INIT__) {
   function roleLevel(user) { return ROLE_LEVELS[String(user?.role || "").toLowerCase()] || 0; }
   function canManageاجتماعs(user) { return roleLevel(user) >= ROLE_LEVELS.supervisor; }
 
+  function mt(ar, en) {
+    try {
+      const lang = document.body?.dataset?.language || localStorage.getItem("telesyrianaLang") || "ar";
+      return String(lang).toLowerCase().startsWith("ar") ? ar : en;
+    } catch {
+      return ar;
+    }
+  }
+
   function getCurrentUser() {
     try {
       return JSON.parse(localStorage.getItem("telesyrianaUser") || "null");

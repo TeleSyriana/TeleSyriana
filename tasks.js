@@ -27,6 +27,16 @@ let autosaveTimer = null;
 let isDirty = false;
 function noteLang(){ return ((document.body?.dataset?.language || document.documentElement.lang || "en") === "ar") ? "ar" : "en"; }
 function nt(ar, en){ return noteLang() === "ar" ? ar : en; }
+function tsToMs(v){
+  if (!v) return 0;
+  if (typeof v === "number") return v;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v?.toMillis === "function") return v.toMillis();
+  if (typeof v?.seconds === "number") return v.seconds * 1000;
+  const ms = Date.parse(v);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 
 function el(id) { return document.getElementById(id); }
 function uid() { return `note_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`; }
@@ -134,16 +144,30 @@ async function deleteCurrentNote() {
 function subscribeNotes() {
   if (unsubNotes) unsubNotes();
   if (!currentUser) return;
-  const q = query(collection(db, NOTES_COL), where("userId", "==", currentUser.id), orderBy("updatedAt", "desc"));
-  unsubNotes = onSnapshot(q, (snap) => {
-    notes = [];
-    snap.forEach((d) => notes.push({ id: d.id, ...d.data() }));
-    renderNotesList();
-    if (!selectedId && notes.length) selectNote(notes[0].id);
-  }, (err) => {
-    console.error("notes listener failed", err);
-    setالحالة("Could not load notes. Check Firestore rules/indexes.", true);
-  });
+
+  const attachNotesListener = (useOrderedQuery = true) => {
+    const baseQ = query(collection(db, NOTES_COL), where("userId", "==", currentUser.id));
+    const q = useOrderedQuery ? query(baseQ, orderBy("updatedAt", "desc")) : baseQ;
+    unsubNotes = onSnapshot(q, (snap) => {
+      notes = [];
+      snap.forEach((d) => notes.push({ id: d.id, ...d.data() }));
+      notes.sort((a, b) => (tsToMs(b.updatedAt) || 0) - (tsToMs(a.updatedAt) || 0));
+      renderNotesList();
+      if (!selectedId && notes.length) selectNote(notes[0].id);
+    }, (err) => {
+      const msg = String(err?.message || err || "").toLowerCase();
+      if (useOrderedQuery && (msg.includes("index") || msg.includes("failed-precondition"))) {
+        console.warn("notes ordered query requires index. Falling back to unordered query.");
+        try { unsubNotes?.(); } catch {}
+        attachNotesListener(false);
+        return;
+      }
+      console.error("notes listener failed", err);
+      setالحالة("Could not load notes. Check Firestore rules/indexes.", true);
+    });
+  };
+
+  attachNotesListener(true);
 }
 
 function newNote() {

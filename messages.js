@@ -243,20 +243,22 @@ function markRoomRead(roomId) {
   restartUnreadWatcher(key);
 }
 
-function ensureUnreadWatcher(roomId) {
+function ensureUnreadWatcher(roomId, unorderedFallback = false) {
   const key = String(roomId);
   if (!key) return;
-  if (unreadUnsubs.has(key)) return;
+  if (!unorderedFallback && unreadUnsubs.has(key)) return;
 
-  const seen = getLastSeen(key);
+  const seen = Number(getLastSeen(key) || 0);
   const seenDate = new Date(seen || 0);
 
-  const qUnread = query(
-    collection(db, MESSAGES_COL),
-    where("room", "==", key),
-    where("ts", ">", seenDate),
-    orderBy("ts", "asc")
-  );
+  const qUnread = unorderedFallback
+    ? query(collection(db, MESSAGES_COL), where("room", "==", key))
+    : query(
+        collection(db, MESSAGES_COL),
+        where("room", "==", key),
+        where("ts", ">", seenDate),
+        orderBy("ts", "asc")
+      );
 
   const unsub = onSnapshot(
     qUnread,
@@ -266,30 +268,24 @@ function ensureUnreadWatcher(roomId) {
       let cnt = 0;
       let latest = 0;
 
-      // ✅ Beep only on newly added docs (not every render)
       const changes = snap.docChanges ? snap.docChanges() : [];
       changes.forEach((ch) => {
         if (ch.type !== "added") return;
         const data = ch.doc?.data?.() || {};
         const ms = tsToNumber(data.ts) || 0;
+        if (unorderedFallback && ms <= seen) return;
         const from = String(data.userId || "");
         const me = String(currentUser?.id || "");
 
         if (ms && ms > latest) latest = ms;
-
-        // ✅ Beep only if user is NOT inside this chat
         if (activeChat?.roomId && String(activeChat.roomId) === key) return;
-
-        // beep on incoming only
-        if (from && me && from !== me) {
-          playBeepOnce(key, ms || Date.now());
-        }
+        if (from && me && from !== me) playBeepOnce(key, ms || Date.now());
       });
 
-      // count all unread (excluding my own)
       snap.forEach((d) => {
         const data = d.data() || {};
         const ms = tsToNumber(data.ts) || 0;
+        if (unorderedFallback && ms <= seen) return;
         if (ms > latest) latest = ms;
 
         const from = String(data.userId || "");
@@ -301,20 +297,29 @@ function ensureUnreadWatcher(roomId) {
 
       if (latest) lastMsgTsByRoom.set(key, latest);
 
-      // if currently open => auto read
       if (activeChat?.roomId && String(activeChat.roomId) === key) {
         if (latest) setLastSeen(key, latest);
         unreadByRoom.set(key, 0);
         updateBadgesForRoom(key);
 
-        if (latest) restartUnreadWatcher(key);
+        if (latest && !unorderedFallback) restartUnreadWatcher(key);
         return;
       }
 
       unreadByRoom.set(key, cnt);
       updateBadgesForRoom(key);
     },
-    (err) => console.error("Unread watcher error:", err)
+    (err) => {
+      const msg = String(err?.message || err || "").toLowerCase();
+      if (!unorderedFallback && (msg.includes("index") || msg.includes("failed-precondition"))) {
+        console.warn("Unread watcher query requires index. Falling back to unordered query.");
+        try { unsub?.(); } catch {}
+        unreadUnsubs.delete(key);
+        ensureUnreadWatcher(key, true);
+        return;
+      }
+      console.error("Unread watcher error:", err);
+    }
   );
 
   unreadUnsubs.set(key, unsub);
