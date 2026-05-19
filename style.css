@@ -5247,3 +5247,135 @@ html[dir="rtl"] #page-tasks .notes-pro-sidebar{
 @media(max-width:720px){
   .payroll-rate-grid{ grid-template-columns:1fr !important; }
 }
+
+/* =========================
+   Payroll language polish — Arabic + English clean layout
+========================= */
+#page-payroll{
+  width:100%;
+}
+#page-payroll .payroll-card{
+  width:100%;
+  max-width:1320px;
+  margin-inline:auto;
+  overflow:hidden;
+}
+#page-payroll[data-payroll-lang="ar"],
+body[data-language="ar"] #page-payroll{
+  direction:rtl;
+  text-align:right;
+}
+#page-payroll[data-payroll-lang="en"],
+body[data-language="en"] #page-payroll{
+  direction:ltr;
+  text-align:left;
+}
+body[data-language="en"] #page-payroll .payroll-top,
+body[data-language="en"] #page-payroll .payroll-filters,
+body[data-language="en"] #page-payroll .payroll-rate-grid,
+body[data-language="en"] #page-payroll .payroll-summary-grid,
+body[data-language="en"] #page-payroll .payroll-table{
+  direction:ltr !important;
+}
+body[data-language="ar"] #page-payroll .payroll-top,
+body[data-language="ar"] #page-payroll .payroll-filters,
+body[data-language="ar"] #page-payroll .payroll-rate-grid,
+body[data-language="ar"] #page-payroll .payroll-summary-grid,
+body[data-language="ar"] #page-payroll .payroll-table{
+  direction:rtl !important;
+}
+body[data-language="en"] #page-payroll .payroll-table th,
+body[data-language="en"] #page-payroll .payroll-table td{
+  text-align:left !important;
+}
+body[data-language="ar"] #page-payroll .payroll-table th,
+body[data-language="ar"] #page-payroll .payroll-table td{
+  text-align:right !important;
+}
+#page-payroll .payroll-top h2{
+  font-size:clamp(28px,3vw,44px);
+  line-height:1.08;
+  letter-spacing:-.03em;
+}
+#page-payroll .payroll-top .subtitle{
+  font-size:clamp(15px,1.3vw,18px);
+  opacity:.86;
+}
+#page-payroll .payroll-filters{
+  grid-template-columns:repeat(3,minmax(190px,1fr)) auto auto !important;
+  align-items:end;
+}
+#page-payroll .payroll-summary-grid{
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) !important;
+}
+#page-payroll .payroll-snap{
+  min-height:92px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+#page-payroll .payroll-snap span,
+#page-payroll .payroll-rate-grid label{
+  font-weight:800;
+}
+#page-payroll .payroll-snap strong{
+  font-size:clamp(20px,1.8vw,26px);
+  line-height:1.15;
+}
+#page-payroll .payroll-rate-panel{
+  margin-top:6px;
+  background:rgba(255,255,255,.62);
+  border-color:rgba(255,255,255,.48);
+}
+#page-payroll .payroll-rate-panel h3{
+  font-size:clamp(22px,2vw,30px);
+}
+#page-payroll .payroll-rate-status{
+  grid-column:1 / -1;
+  text-align:center;
+  font-weight:900;
+}
+body[data-language="ar"] #page-payroll .payroll-rate-status{
+  text-align:right;
+}
+body[data-language="en"] #page-payroll .payroll-rate-status{
+  text-align:left;
+}
+#page-payroll .payroll-table th{
+  font-size:clamp(13px,1.05vw,17px);
+  white-space:normal;
+}
+#page-payroll .payroll-table td{
+  font-size:clamp(13px,1vw,16px);
+}
+#page-payroll .payroll-pill{
+  white-space:normal;
+  line-height:1.2;
+  justify-content:center;
+  min-width:70px;
+}
+@media(max-width:980px){
+  #page-payroll .payroll-filters{
+    grid-template-columns:1fr 1fr !important;
+  }
+  #page-payroll .payroll-summary-grid{
+    grid-template-columns:1fr 1fr !important;
+  }
+}
+@media(max-width:620px){
+  #page-payroll .payroll-card{
+    border-radius:24px;
+    padding:18px;
+  }
+  #page-payroll .payroll-filters,
+  #page-payroll .payroll-summary-grid,
+  #page-payroll .payroll-rate-grid{
+    grid-template-columns:1fr !important;
+  }
+  #page-payroll .payroll-top h2{
+    font-size:34px;
+  }
+  #page-payroll .payroll-table{
+    min-width:1120px !important;
+  }
+}

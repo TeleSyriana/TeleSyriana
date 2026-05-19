@@ -1048,8 +1048,8 @@
         <section class="card payroll-card">
           <div class="payroll-top">
             <div>
-              <h2 style="margin:0">الساعات والرواتب</h2>
-              <p class="subtitle" style="margin:6px 0 0">متابعة ساعات العمل، الاستراحة 45 دقيقة، التأخير، والأجر المتوقع.</p>
+              <h2 id="payroll-title" style="margin:0">الساعات والرواتب</h2>
+              <p id="payroll-subtitle" class="subtitle" style="margin:6px 0 0">متابعة ساعات العمل، الاستراحة 45 دقيقة، التأخير، والأجر المتوقع.</p>
             </div>
           </div>
 
@@ -1057,17 +1057,17 @@
 
           <div class="payroll-filters">
             <label>
-              من
+              <span id="payroll-label-from">من</span>
               <input id="payroll-from" type="date" />
             </label>
             <label>
-              إلى
+              <span id="payroll-label-to">إلى</span>
               <input id="payroll-to" type="date" />
             </label>
             <label>
-              الموظف
+              <span id="payroll-label-staff-filter">الموظف</span>
               <select id="payroll-staff-filter">
-                <option value="all">كل الظاهر staff</option>
+                <option value="all">كل الموظفين الظاهرين</option>
               </select>
             </label>
             <button id="payroll-this-week" type="button" class="btn-secondary">هذا الأسبوع</button>
@@ -1075,62 +1075,62 @@
           </div>
 
           <div class="payroll-summary-grid">
-            <div class="payroll-snap"><span>Total worked</span><strong id="payroll-sum-worked">0 min</strong></div>
-            <div class="payroll-snap"><span>Shift target</span><strong id="payroll-sum-target">0 min</strong></div>
-            <div class="payroll-snap"><span>Difference</span><strong id="payroll-sum-diff">—</strong></div>
-            <div class="payroll-snap"><span>Operation</span><strong id="payroll-sum-operation">0 min</strong></div>
-            <div class="payroll-snap"><span>الاستراحة المستخدمة</span><strong id="payroll-sum-break">0 min</strong></div>
-            <div class="payroll-snap warning"><span>الاستراحات المتأخرة</span><strong id="payroll-sum-late">0</strong></div>
-            <div class="payroll-snap"><span>الأجر المتوقع</span><strong id="payroll-sum-pay">—</strong></div>
+            <div class="payroll-snap"><span id="payroll-snap-worked-label">إجمالي العمل</span><strong id="payroll-sum-worked">0 د</strong></div>
+            <div class="payroll-snap"><span id="payroll-snap-target-label">هدف الدوام</span><strong id="payroll-sum-target">0 د</strong></div>
+            <div class="payroll-snap"><span id="payroll-snap-diff-label">فرق الدوام</span><strong id="payroll-sum-diff">—</strong></div>
+            <div class="payroll-snap"><span id="payroll-snap-operation-label">وقت التشغيل</span><strong id="payroll-sum-operation">0 د</strong></div>
+            <div class="payroll-snap"><span id="payroll-snap-break-label">الاستراحة المستخدمة</span><strong id="payroll-sum-break">0 د</strong></div>
+            <div class="payroll-snap warning"><span id="payroll-snap-late-label">الاستراحات المتأخرة</span><strong id="payroll-sum-late">0</strong></div>
+            <div class="payroll-snap"><span id="payroll-snap-pay-label">الأجر المتوقع</span><strong id="payroll-sum-pay">—</strong></div>
           </div>
 
           <div id="payroll-rate-panel" class="payroll-rate-panel hidden">
-            <h3>Staff shift settings</h3>
-            <p class="subtitle">Supervisor, Manager, and Admin can set 4h part-time, 8h full-time, or custom shift targets. Only Manager/Admin can edit hourly rates.</p>
+            <h3 id="payroll-settings-title">إعدادات دوام الفريق</h3>
+            <p id="payroll-settings-subtitle" class="subtitle">يمكن للمشرف أو المدير أو الأدمن تحديد دوام 4 ساعات، 8 ساعات، أو دوام مخصص. تعديل الأجر للمدير والأدمن فقط.</p>
             <div class="payroll-rate-grid">
               <label>
-                Staff member
+                <span id="payroll-label-rate-staff">الموظف</span>
                 <select id="payroll-rate-staff"></select>
               </label>
               <label>
-                Shift type
+                <span id="payroll-label-shift-mode">نوع الدوام</span>
                 <select id="payroll-shift-mode">
-                  <option value="part_time">Part time — 4 hours</option>
-                  <option value="full_time">Full time — 8 hours</option>
-                  <option value="custom">Custom</option>
+                  <option value="part_time">دوام جزئي — 4 ساعات</option>
+                  <option value="full_time">دوام كامل — 8 ساعات</option>
+                  <option value="custom">مخصص</option>
                 </select>
               </label>
               <label>
-                Custom hours
+                <span id="payroll-label-custom-hours">ساعات مخصصة</span>
                 <input id="payroll-shift-custom" type="number" min="1" max="24" step="0.25" placeholder="6" />
               </label>
               <label data-rate-only>
-                Hourly rate
+                <span id="payroll-label-hourly-rate">الأجر بالساعة</span>
                 <input id="payroll-rate-value" type="number" min="0" step="0.01" placeholder="1.25" />
               </label>
               <label data-rate-only>
-                Currency
+                <span id="payroll-label-currency">العملة</span>
                 <select id="payroll-rate-currency">
                   <option value="USD">USD</option>
                   <option value="GBP">GBP</option>
                 </select>
               </label>
-              <button id="payroll-save-rate" type="button" class="btn-primary" style="width:auto">Save staff settings</button>
-              <div id="payroll-rate-status" class="payroll-rate-status">Select staff member to view current settings.</div>
+              <button id="payroll-save-rate" type="button" class="btn-primary" style="width:auto">حفظ إعدادات الموظف</button>
+              <div id="payroll-rate-status" class="payroll-rate-status">اختر موظفاً لعرض الإعدادات الحالية.</div>
             </div>
           </div>
 
           <div class="payroll-table-wrapper">
             <table class="payroll-table">
               <thead>
-                <tr>
+                <tr id="payroll-table-head-row">
                   <th>التاريخ</th>
                   <th>الموظف</th>
                   <th>الدور</th>
                   <th>الحالة</th>
                   <th>تشغيل</th>
                   <th>اجتماع</th>
-                  <th>متابعة حالة</th>
+                  <th>متابعة</th>
                   <th>استراحة</th>
                   <th>غير متاح</th>
                   <th>العمل</th>
@@ -1228,7 +1228,7 @@
   <script type="module" src="tasks.js?v=phase3-shifts-fix1"></script>
   <script type="module" src="tickets.js?v=phase3-shifts-fix1"></script>
   <script type="module" src="reports.js?v=phase3-shifts-fix1"></script>
-  <script type="module" src="payroll.js?v=phase3-shifts-fix1"></script>
+  <script type="module" src="payroll.js?v=phase3-payroll-polish"></script>
   <script type="module" src="messages.js?v=phase3-shifts-fix1"></script>
   <script type="module" src="groups.js?v=phase3-shifts-fix1"></script>
   <script type="module" src="meetings.js?v=phase3-shifts-fix1"></script>

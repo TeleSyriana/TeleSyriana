@@ -21,6 +21,136 @@ const BREAK_LIMIT_MIN = 45;
 const DEFAULT_SHIFT_TARGET_MIN = 8 * 60;
 const SHIFT_PRESETS = { part_time: 4 * 60, full_time: 8 * 60, custom: null };
 
+const PAYROLL_I18N = {
+  ar: {
+    title: "الساعات والرواتب",
+    subtitle: "متابعة ساعات العمل، الاستراحة 45 دقيقة، التأخير، والأجر المتوقع.",
+    from: "من",
+    to: "إلى",
+    staff: "الموظف",
+    allVisibleStaff: "كل الموظفين الظاهرين",
+    thisWeek: "هذا الأسبوع",
+    refresh: "تحديث",
+    totalWorked: "إجمالي العمل",
+    shiftTarget: "هدف الدوام",
+    difference: "فرق الدوام",
+    operation: "وقت التشغيل",
+    breakUsed: "الاستراحة المستخدمة",
+    lateBreaks: "الاستراحات المتأخرة",
+    estimatedPay: "الأجر المتوقع",
+    settingsTitle: "إعدادات دوام الفريق",
+    settingsSubtitle: "يمكن للمشرف أو المدير أو الأدمن تحديد دوام 4 ساعات، 8 ساعات، أو دوام مخصص. تعديل الأجر للمدير والأدمن فقط.",
+    staffMember: "الموظف",
+    shiftType: "نوع الدوام",
+    partTime: "دوام جزئي — 4 ساعات",
+    fullTime: "دوام كامل — 8 ساعات",
+    custom: "مخصص",
+    customHours: "ساعات مخصصة",
+    hourlyRate: "الأجر بالساعة",
+    currency: "العملة",
+    saveStaffSettings: "حفظ إعدادات الموظف",
+    selectStaffStatus: "اختر موظفاً لعرض الإعدادات الحالية.",
+    date: "التاريخ",
+    agent: "الموظف",
+    role: "الدور",
+    status: "الحالة",
+    operating: "تشغيل",
+    meeting: "اجتماع",
+    handling: "متابعة",
+    break: "استراحة",
+    unavailable: "غير متاح",
+    work: "العمل",
+    wage: "الأجر",
+    breakNote: "ملاحظة الاستراحة",
+    noRows: "لا توجد سجلات رواتب لهذه الفترة.",
+    remaining: "متبقي",
+    over: "زيادة",
+    ok: "جيد",
+    overBy: "تجاوز بـ",
+    shift: "دوام",
+    hour: "ساعة",
+    current: "الحالي",
+    selected: "المختار",
+    rateLocked: "الأجر مقفل للمشرف",
+    saved: "تم الحفظ",
+    onlyManagers: "فقط المشرف أو المدير أو الأدمن يمكنه تعديل الدوام.",
+    selectStaffFirst: "اختر الموظف أولاً.",
+    invalidShift: "هدف الدوام يجب أن يكون بين 1 و 24 ساعة.",
+    invalidRate: "الأجر بالساعة يجب أن يكون 0 أو أكثر.",
+    saveFailed: "لم يتم حفظ الإعدادات. تحقق من صلاحيات Firestore أو الاتصال.",
+    couldNotLoad: "تعذر تحميل الساعات. تحقق من الصلاحيات أو الفهارس.",
+  },
+  en: {
+    title: "Payroll & Hours",
+    subtitle: "Track working hours, 45-minute breaks, delays, and estimated pay.",
+    from: "From",
+    to: "To",
+    staff: "Staff",
+    allVisibleStaff: "All visible staff",
+    thisWeek: "This week",
+    refresh: "Refresh",
+    totalWorked: "Total worked",
+    shiftTarget: "Shift target",
+    difference: "Difference",
+    operation: "Operation",
+    breakUsed: "Break used",
+    lateBreaks: "Late breaks",
+    estimatedPay: "Estimated pay",
+    settingsTitle: "Staff shift settings",
+    settingsSubtitle: "Supervisors, Managers, and Admins can set 4h part-time, 8h full-time, or custom shift targets. Only Managers/Admins can edit hourly rates.",
+    staffMember: "Staff member",
+    shiftType: "Shift type",
+    partTime: "Part time — 4 hours",
+    fullTime: "Full time — 8 hours",
+    custom: "Custom",
+    customHours: "Custom hours",
+    hourlyRate: "Hourly rate",
+    currency: "Currency",
+    saveStaffSettings: "Save staff settings",
+    selectStaffStatus: "Select a staff member to view current settings.",
+    date: "Date",
+    agent: "Agent",
+    role: "Role",
+    status: "Status",
+    operating: "Operating",
+    meeting: "Meeting",
+    handling: "Handling",
+    break: "Break",
+    unavailable: "Unavailable",
+    work: "Work",
+    wage: "Wage",
+    breakNote: "Break note",
+    noRows: "No payroll records for this period.",
+    remaining: "remaining",
+    over: "over",
+    ok: "OK",
+    overBy: "Over by",
+    shift: "shift",
+    hour: "hour",
+    current: "Current",
+    selected: "Selected",
+    rateLocked: "rate locked for supervisor",
+    saved: "Saved",
+    onlyManagers: "Only Supervisor, Manager, or Admin can update shift settings.",
+    selectStaffFirst: "Select staff member first.",
+    invalidShift: "Shift target must be between 1 and 24 hours.",
+    invalidRate: "Hourly rate must be 0 or higher.",
+    saveFailed: "Staff settings were not saved. Check Firestore permissions or internet.",
+    couldNotLoad: "Could not load hours. Check Firestore rules/indexes.",
+  }
+};
+
+function lang() {
+  try {
+    const bodyLang = document.body?.dataset?.language;
+    const saved = localStorage.getItem("telesyrianaLanguage") || localStorage.getItem("telesyrianaLang");
+    const value = bodyLang || saved || document.documentElement.lang || "ar";
+    return String(value).toLowerCase().startsWith("en") ? "en" : "ar";
+  } catch { return "ar"; }
+}
+function tr(key) { return PAYROLL_I18N[lang()]?.[key] || PAYROLL_I18N.en[key] || key; }
+
+
 const ROLE_LEVELS = { agent: 1, supervisor: 2, manager: 3, admin: 4 };
 const STAFF = {
   "0001": { id: "0001", name: "Agent Raghad", role: "agent", supervisorId: "1001", hourlyRate: 1.25, currency: "USD" },
@@ -77,9 +207,11 @@ function endOfWeek(date = new Date()) {
 
 function formatDuration(mins) {
   const m = Math.max(0, Math.floor(Number(mins) || 0));
-  if (m < 60) return `${m} min`;
+  const isAr = lang() === "ar";
+  if (m < 60) return isAr ? `${m} د` : `${m} min`;
   const h = Math.floor(m / 60);
   const r = m % 60;
+  if (isAr) return r ? `${h}س ${r}د` : `${h}س`;
   return r ? `${h}h ${r}m` : `${h}h`;
 }
 
@@ -120,8 +252,8 @@ function shiftModeForMinutes(minutes) {
 
 function shiftDifferenceHtml(diffMin) {
   const diff = Math.round(Number(diffMin) || 0);
-  if (diff >= 0) return `<span class="payroll-pill warn">${formatDuration(diff)} remaining</span>`;
-  return `<span class="payroll-pill ok">${formatDuration(Math.abs(diff))} over</span>`;
+  if (diff >= 0) return `<span class="payroll-pill warn">${formatDuration(diff)} ${tr("remaining")}</span>`;
+  return `<span class="payroll-pill ok">${formatDuration(Math.abs(diff))} ${tr("over")}</span>`;
 }
 
 function visibleStaffIds() {
@@ -148,7 +280,8 @@ function canViewRow(row) {
 function staffLabel(id) {
   const s = getStaffBase(id);
   const rate = getStaffRate(id);
-  return `${s.name} (${id}) — ${formatDuration(getStaffShift(id))} shift • ${rate.currency} ${Number(rate.hourlyRate || 0).toFixed(2)}/hr`;
+  const rateSuffix = lang() === "ar" ? "ساعة" : "hr";
+  return `${s.name} (${id}) — ${formatDuration(getStaffShift(id))} ${tr("shift")} • ${rate.currency} ${Number(rate.hourlyRate || 0).toFixed(2)}/${rateSuffix}`;
 }
 
 function populateStaffFilters() {
@@ -158,7 +291,7 @@ function populateStaffFilters() {
 
   if (filter) {
     const existing = filter.value || "all";
-    filter.innerHTML = `<option value="all">All visible staff</option>` + visibleIds.map((id) => {
+    filter.innerHTML = `<option value="all">${tr("allVisibleStaff")}</option>` + visibleIds.map((id) => {
       return `<option value="${id}">${staffLabel(id)}</option>`;
     }).join("");
     filter.value = visibleIds.includes(existing) ? existing : "all";
@@ -201,7 +334,55 @@ function workedMinutes(row) {
     + (Number(row.breakUsedMinutes) || 0);
 }
 
+function setText(id, value) {
+  const node = el(id);
+  if (node) node.textContent = value;
+}
+
+function translatePayrollStatic() {
+  const isAr = lang() === "ar";
+  const page = el("page-payroll");
+  if (page) page.dataset.payrollLang = isAr ? "ar" : "en";
+  setText("payroll-title", tr("title"));
+  setText("payroll-subtitle", tr("subtitle"));
+  setText("payroll-label-from", tr("from"));
+  setText("payroll-label-to", tr("to"));
+  setText("payroll-label-staff-filter", tr("staff"));
+  setText("payroll-this-week", tr("thisWeek"));
+  setText("payroll-refresh", tr("refresh"));
+  setText("payroll-snap-worked-label", tr("totalWorked"));
+  setText("payroll-snap-target-label", tr("shiftTarget"));
+  setText("payroll-snap-diff-label", tr("difference"));
+  setText("payroll-snap-operation-label", tr("operation"));
+  setText("payroll-snap-break-label", tr("breakUsed"));
+  setText("payroll-snap-late-label", tr("lateBreaks"));
+  setText("payroll-snap-pay-label", tr("estimatedPay"));
+  setText("payroll-settings-title", tr("settingsTitle"));
+  setText("payroll-settings-subtitle", tr("settingsSubtitle"));
+  setText("payroll-label-rate-staff", tr("staffMember"));
+  setText("payroll-label-shift-mode", tr("shiftType"));
+  setText("payroll-label-custom-hours", tr("customHours"));
+  setText("payroll-label-hourly-rate", tr("hourlyRate"));
+  setText("payroll-label-currency", tr("currency"));
+  setText("payroll-save-rate", tr("saveStaffSettings"));
+  const mode = el("payroll-shift-mode");
+  if (mode) {
+    const selected = mode.value;
+    const labels = { part_time: tr("partTime"), full_time: tr("fullTime"), custom: tr("custom") };
+    Array.from(mode.options || []).forEach((opt) => { opt.textContent = labels[opt.value] || opt.textContent; });
+    mode.value = selected || "full_time";
+  }
+  const head = el("payroll-table-head-row");
+  if (head) {
+    head.innerHTML = [tr("date"), tr("agent"), tr("role"), tr("status"), tr("operating"), tr("meeting"), tr("handling"), tr("break"), tr("unavailable"), tr("work"), tr("shiftTarget"), tr("difference"), tr("wage"), tr("estimatedPay"), tr("breakNote")]
+      .map((label) => `<th>${label}</th>`).join("");
+  }
+  const empty = el("payroll-empty");
+  if (empty) empty.textContent = tr("noRows");
+}
+
 function renderPayroll() {
+  translatePayrollStatic();
   const body = el("payroll-table-body");
   const empty = el("payroll-empty");
   if (!body || !empty) return;
@@ -235,8 +416,8 @@ function renderPayroll() {
     payByCurrency[rate.currency] = (payByCurrency[rate.currency] || 0) + pay;
 
     const breakNote = br > BREAK_LIMIT_MIN
-      ? `<span class="payroll-pill danger">Over by ${formatDuration(br - BREAK_LIMIT_MIN)}</span>`
-      : `<span class="payroll-pill ok">OK</span>`;
+      ? `<span class="payroll-pill danger">${tr("overBy")} ${formatDuration(br - BREAK_LIMIT_MIN)}</span>`
+      : `<span class="payroll-pill ok">${tr("ok")}</span>`;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -261,7 +442,7 @@ function renderPayroll() {
 
   if (el("payroll-sum-worked")) el("payroll-sum-worked").textContent = formatDuration(totalWorked);
   if (el("payroll-sum-target")) el("payroll-sum-target").textContent = formatDuration(totalShiftTarget);
-  if (el("payroll-sum-diff")) el("payroll-sum-diff").textContent = totalShiftTarget ? (totalShiftTarget - totalWorked >= 0 ? `${formatDuration(totalShiftTarget - totalWorked)} remaining` : `${formatDuration(totalWorked - totalShiftTarget)} over`) : "—";
+  if (el("payroll-sum-diff")) el("payroll-sum-diff").textContent = totalShiftTarget ? (totalShiftTarget - totalWorked >= 0 ? `${formatDuration(totalShiftTarget - totalWorked)} ${tr("remaining")}` : `${formatDuration(totalWorked - totalShiftTarget)} ${tr("over")}`) : "—";
   if (el("payroll-sum-operation")) el("payroll-sum-operation").textContent = formatDuration(totalتشغيل);
   if (el("payroll-sum-break")) el("payroll-sum-break").textContent = formatDuration(totalاستراحة);
   if (el("payroll-sum-late")) el("payroll-sum-late").textContent = String(lateاستراحةs);
@@ -294,8 +475,8 @@ function syncRateEditor() {
   }
   const status = el("payroll-rate-status");
   if (status) {
-    const rateText = canEditRate ? `${rate.currency || "USD"} ${Number(rate.hourlyRate || 0).toFixed(2)} / hour` : "rate locked for supervisor";
-    status.textContent = `Current: ${formatDuration(shiftTarget)} shift • ${rateText}`;
+    const rateText = canEditRate ? `${rate.currency || "USD"} ${Number(rate.hourlyRate || 0).toFixed(2)} / ${tr("hour")}` : tr("rateLocked");
+    status.textContent = `${tr("current")}: ${formatDuration(shiftTarget)} ${tr("shift")} • ${rateText}`;
   }
 }
 
@@ -314,8 +495,8 @@ function previewShiftEditor() {
     const draftMinutes = selectedShiftTargetMinutes();
     const rate = getStaffRate(id);
     const canEditRate = canManageRates(currentUser);
-    const rateText = canEditRate ? `${el("payroll-rate-currency")?.value || rate.currency || "USD"} ${Number(el("payroll-rate-value")?.value || rate.hourlyRate || 0).toFixed(2)} / hour` : "rate locked for supervisor";
-    status.textContent = `Selected: ${draftMinutes ? formatDuration(draftMinutes) : "custom shift"} shift • ${rateText}`;
+    const rateText = canEditRate ? `${el("payroll-rate-currency")?.value || rate.currency || "USD"} ${Number(el("payroll-rate-value")?.value || rate.hourlyRate || 0).toFixed(2)} / ${tr("hour")}` : tr("rateLocked");
+    status.textContent = `${tr("selected")}: ${draftMinutes ? formatDuration(draftMinutes) : tr("custom")} ${tr("shift")} • ${rateText}`;
   }
 }
 
@@ -338,15 +519,15 @@ function selectedShiftTargetMinutes() {
 }
 
 async function saveStaffSettings() {
-  if (!currentUser || !canManageShifts(currentUser)) return showAlert("Only Supervisor, Manager, or Admin can update shift settings.", true);
+  if (!currentUser || !canManageShifts(currentUser)) return showAlert(tr("onlyManagers"), true);
   const id = el("payroll-rate-staff")?.value;
   const shiftTargetMinutes = selectedShiftTargetMinutes();
   const canEditRate = canManageRates(currentUser);
   const hourlyRate = Number(el("payroll-rate-value")?.value || 0);
   const currency = el("payroll-rate-currency")?.value || "USD";
-  if (!id) return showAlert("Select staff member first.", true);
-  if (!shiftTargetMinutes) return showAlert("Shift target must be between 1 and 24 hours.", true);
-  if (canEditRate && (Number.isNaN(hourlyRate) || hourlyRate < 0)) return showAlert("Hourly rate must be 0 or higher.", true);
+  if (!id) return showAlert(tr("selectStaffFirst"), true);
+  if (!shiftTargetMinutes) return showAlert(tr("invalidShift"), true);
+  if (canEditRate && (Number.isNaN(hourlyRate) || hourlyRate < 0)) return showAlert(tr("invalidRate"), true);
 
   const payload = {
     userId: id,
@@ -368,10 +549,10 @@ async function saveStaffSettings() {
     populateStaffFilters();
     renderPayroll();
     syncRateEditor();
-    showAlert(`Saved: ${formatDuration(shiftTargetMinutes)} shift${canEditRate ? ` • ${currency} ${hourlyRate.toFixed(2)} / hour` : ""}.`);
+    showAlert(`${tr("saved")}: ${formatDuration(shiftTargetMinutes)} ${tr("shift")}${canEditRate ? ` • ${currency} ${hourlyRate.toFixed(2)} / ${tr("hour")}` : ""}.`);
   } catch (err) {
     console.error("saveStaffSettings failed", err);
-    showAlert("Staff settings were not saved. Check Firestore permissions or internet.", true);
+    showAlert(tr("saveFailed"), true);
   }
 }
 
@@ -385,7 +566,7 @@ function subscribePayroll() {
     renderPayroll();
   }, (err) => {
     console.error("Payroll agentDays listener failed", err);
-    showAlert("Could not load hours. Check Firestore rules/indexes.", true);
+    showAlert(tr("couldNotLoad"), true);
   });
 
   unsubSettings = onSnapshot(collection(db, STAFF_SETTINGS_COL), (snap) => {
@@ -423,12 +604,20 @@ function hookPayroll() {
 }
 
 function init() {
+  translatePayrollStatic();
   currentUser = getCurrentUser();
   populateStaffFilters();
   setThisWeekFilters();
   setPermissionsUI();
   if (currentUser) subscribePayroll();
 }
+
+window.addEventListener("telesyriana:language-changed", () => {
+  translatePayrollStatic();
+  populateStaffFilters();
+  renderPayroll();
+  syncRateEditor();
+});
 
 window.addEventListener("telesyriana:user-changed", () => {
   currentUser = getCurrentUser();
