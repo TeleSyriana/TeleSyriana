@@ -299,6 +299,25 @@ function syncRateEditor() {
   }
 }
 
+function previewShiftEditor() {
+  const mode = el("payroll-shift-mode")?.value || "full_time";
+  const custom = el("payroll-shift-custom");
+  if (custom) {
+    custom.disabled = mode !== "custom";
+    if (mode === "part_time") custom.value = "4";
+    else if (mode === "full_time") custom.value = "8";
+    else if (!custom.value || Number(custom.value) <= 0) custom.value = "8";
+  }
+  const id = el("payroll-rate-staff")?.value;
+  const status = el("payroll-rate-status");
+  if (status && id) {
+    const draftMinutes = selectedShiftTargetMinutes();
+    const rate = getStaffRate(id);
+    const canEditRate = canManageRates(currentUser);
+    const rateText = canEditRate ? `${el("payroll-rate-currency")?.value || rate.currency || "USD"} ${Number(el("payroll-rate-value")?.value || rate.hourlyRate || 0).toFixed(2)} / hour` : "rate locked for supervisor";
+    status.textContent = `Selected: ${draftMinutes ? formatDuration(draftMinutes) : "custom shift"} shift • ${rateText}`;
+  }
+}
 
 function showAlert(message, danger = false) {
   const box = el("payroll-alert");
@@ -396,7 +415,10 @@ function hookPayroll() {
   el("payroll-from")?.addEventListener("change", renderPayroll);
   el("payroll-to")?.addEventListener("change", renderPayroll);
   el("payroll-rate-staff")?.addEventListener("change", syncRateEditor);
-  el("payroll-shift-mode")?.addEventListener("change", syncRateEditor);
+  el("payroll-shift-mode")?.addEventListener("change", previewShiftEditor);
+  el("payroll-shift-custom")?.addEventListener("input", previewShiftEditor);
+  el("payroll-rate-value")?.addEventListener("input", previewShiftEditor);
+  el("payroll-rate-currency")?.addEventListener("change", previewShiftEditor);
   el("payroll-save-rate")?.addEventListener("click", saveStaffSettings);
 }
 
