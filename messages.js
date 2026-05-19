@@ -598,6 +598,16 @@ function getInitials(name = "") {
   return parts.map((p) => p[0]?.toUpperCase() || "").join("") || "U";
 }
 
+function roleClassForUser(userId = "") {
+  const id = String(userId || "");
+  if (id === "0001") return "role-admin";
+  if (id === "1001") return "role-manager";
+  if (id === "2001") return "role-supervisor";
+  if (id === "3001") return "role-hr";
+  if (id === "9001" || id === "9002") return "role-agent";
+  return "role-room";
+}
+
 
 function getProfilePhoto(userId) {
   const id = String(userId || "");
@@ -789,8 +799,49 @@ function renderChunkToTop(listEl, items, showRole) {
 function setHeader(title, desc) {
   const roomNameEl = document.getElementById("chat-room-name");
   const roomDescEl = document.getElementById("chat-room-desc");
-  if (roomNameEl) roomNameEl.textContent = title || msgT("title");
+  const headerAvatar = document.getElementById("chat-header-avatar");
+
+  const safeTitle = title || msgT("title");
+  if (roomNameEl) roomNameEl.textContent = safeTitle;
   if (roomDescEl) roomDescEl.textContent = desc || msgT("start");
+
+  if (!headerAvatar) return;
+
+  const chatType = activeChat?.type || "";
+  const roomId = activeChat?.roomId || "";
+  let avatarUserId = "";
+  let fallbackName = safeTitle;
+  let roleClass = "role-room";
+
+  if (chatType === "dm" && currentUser?.id) {
+    avatarUserId = getOtherIdFromDmRoom(roomId, currentUser.id) || "";
+    roleClass = roleClassForUser(avatarUserId);
+    fallbackName = getDmDisplayName(avatarUserId) || safeTitle;
+    headerAvatar.dataset.avatar = avatarUserId;
+    headerAvatar.dataset.initial = getInitials(fallbackName);
+  } else if (chatType === "ai") {
+    delete headerAvatar.dataset.avatar;
+    headerAvatar.dataset.initial = "AI";
+    roleClass = "role-ai";
+  } else if (chatType) {
+    delete headerAvatar.dataset.avatar;
+    headerAvatar.dataset.initial = getInitials(fallbackName);
+    roleClass = "role-room";
+  } else {
+    delete headerAvatar.dataset.avatar;
+    headerAvatar.dataset.initial = "";
+    roleClass = "role-room";
+  }
+
+  headerAvatar.className = `chat-header-avatar chat-avatar ${roleClass}`;
+  headerAvatar.classList.toggle("is-hidden", !chatType);
+
+  if (avatarUserId) {
+    setAvatarVisual(headerAvatar, avatarUserId, fallbackName);
+  } else {
+    headerAvatar.classList.remove("has-photo");
+    headerAvatar.textContent = headerAvatar.dataset.initial || "💬";
+  }
 }
 
 function setEmpty(on) {
