@@ -30,6 +30,7 @@ const AGENT_DAYS_COL = "agentDays";
 const GROUPS_COL = "groups";
 const PRESENCE_COL = "userPresence";
 const CHAT_READS_COL = "chatReads";
+const USER_PROFILE_COL = "userProfiles";
 
 // Cloud recents:
 // userRecents/{userId}/items/{recentId}
@@ -60,8 +61,10 @@ let groupsListEl = null;
 let groupsCache = [];  // [{id, name, rules, members, createdAt}]
 let recentsCache = []; // [{id, type, roomId, title, desc, lastTs, otherId?}]
 let unsubPresence = null;
+let unsubscribeProfiles = null;
 let unsubscribeReads = null;
 const presenceCache = new Map();
+const profileCache = new Map();
 const activeReadReceipts = new Map();
 
 // ---------------- ✅ Beep (Sounds/Beep.mp3) ----------------
@@ -386,7 +389,9 @@ const MSG_I18N = {
     away: "بعيد",
     offline: "غير متصل",
     lastSeen: "آخر ظهور",
-    noCustomer: "لا تضع بيانات حساسة للعميل هنا."
+    noCustomer: "لا تضع بيانات حساسة للعميل هنا.",
+    birthdayToday: "عيد ميلاده اليوم 🎂",
+    wishBirthday: "تمنى لـ {name} عيد ميلاد سعيد 🎂"
   },
   en: {
     title: "Messages",
@@ -415,12 +420,98 @@ const MSG_I18N = {
     away: "Away",
     offline: "Offline",
     lastSeen: "Last seen",
-    noCustomer: "Do not post sensitive customer data here."
+    noCustomer: "Do not post sensitive customer data here.",
+    birthdayToday: "Birthday today 🎂",
+    wishBirthday: "Wish {name} a happy birthday 🎂"
   }
 };
 function msgT(key) {
   const lang = msgLang();
   return MSG_I18N[lang]?.[key] || MSG_I18N.en[key] || key;
+}
+
+function firstNameFrom(fullName) {
+  return String(fullName || "").trim().split(/\s+/)[0] || String(fullName || "").trim();
+}
+
+function isBirthdayTodayValue(value) {
+  if (!value) return false;
+  const raw = String(value).trim();
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  let month = null;
+  let day = null;
+  if (m) {
+    month = Number(m[2]);
+    day = Number(m[3]);
+  } else {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      month = d.getMonth() + 1;
+      day = d.getDate();
+    }
+  }
+  if (!month || !day) return false;
+  const now = new Date();
+  return month === now.getMonth() + 1 && day === now.getDate();
+}
+
+function isBirthdayToday(userId) {
+  const p = profileCache.get(String(userId)) || {};
+  return isBirthdayTodayValue(p.birthday || p.birthDate || p.dateOfBirth || p.dob);
+}
+
+function getDmDisplayName(userId) {
+  const profileName = profileCache.get(String(userId))?.name;
+  const nameEl = document.querySelector(`[data-name="${CSS.escape(String(userId))}"]`);
+  return String(profileName || nameEl?.dataset?.baseName || nameEl?.textContent || `CCMS ${userId}`).replace("🎂", "").trim();
+}
+
+function applyBirthdayBadges() {
+  document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {
+    const id = String(btn.dataset.dm || "");
+    const title = btn.querySelector(".chat-room-title");
+    const sub = btn.querySelector(".chat-room-sub");
+    if (!id || !title || !sub) return;
+
+    if (!title.dataset.baseName) title.dataset.baseName = title.textContent.replace("🎂", "").trim();
+    const displayName = getDmDisplayName(id);
+    title.innerHTML = "";
+    title.append(document.createTextNode(displayName));
+
+    const today = isBirthdayToday(id);
+    btn.classList.toggle("birthday-today", today);
+    let cake = btn.querySelector(":scope .birthday-cake");
+    if (today) {
+      if (!cake) {
+        cake = document.createElement("span");
+        cake.className = "birthday-cake";
+        cake.textContent = "🎂";
+        cake.title = msgT("birthdayToday");
+        const avatarWrap = btn.querySelector(".dm-avatar-wrap") || btn.querySelector(".chat-row");
+        avatarWrap?.appendChild(cake);
+      }
+      const first = firstNameFrom(displayName);
+      const base = msgT("wishBirthday").replace("{name}", first);
+      const presence = presenceCache.get(id);
+      const st = presenceالحالة(presence);
+      sub.textContent = st === "online" ? `${msgT("live")} • ${base}` : base;
+      sub.dataset.birthdayLocked = "1";
+    } else {
+      cake?.remove();
+      delete sub.dataset.birthdayLocked;
+      if (!sub.dataset.presenceLocked) sub.textContent = msgT("directChat");
+    }
+  });
+}
+
+function subscribeProfilesSidebar() {
+  if (unsubscribeProfiles) return;
+  unsubscribeProfiles = onSnapshot(collection(db, USER_PROFILE_COL), (snap) => {
+    snap.forEach((d) => {
+      profileCache.set(String(d.id), { id: d.id, ...d.data() });
+    });
+    applyBirthdayBadges();
+  }, (err) => console.warn("profile listener failed", err));
 }
 function translateMessagesUI() {
   const q = (sel) => document.querySelector(sel);
@@ -1246,8 +1337,9 @@ function subscribePresenceSidebar() {
         dot.title = presenceText(row);
       }
       const sub = document.querySelector(`[data-sub="${id}"]`);
-      if (sub) { sub.textContent = presenceText(row); sub.dataset.presenceLocked = "1"; }
+      if (sub && !sub.dataset.birthdayLocked) { sub.textContent = presenceText(row); sub.dataset.presenceLocked = "1"; }
     });
+    applyBirthdayBadges();
     updateMessageReadIndicators();
   }, (err) => console.warn("message presence listener failed", err));
 }
@@ -1272,6 +1364,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setCurrentUser();
   subscribePresenceSidebar();
+  subscribeProfilesSidebar();
 
   makeCollapsible("Rooms", "rooms-list");
   makeCollapsible("Groups", "groups-list");
@@ -1345,7 +1438,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const roomId = dmRoomId(currentUser.id, otherId);
 
       const nameEl = btn.querySelector(".chat-room-title");
-      const otherName = (nameEl?.textContent || `CCMS ${otherId}`).trim();
+      const otherName = getDmDisplayName(otherId) || (nameEl?.textContent || `CCMS ${otherId}`).replace("🎂", "").trim();
 
       openChat(
         { type: "dm", roomId, title: otherName, desc: `${msgT("directChat")} • CCMS ${otherId}` },
@@ -1441,6 +1534,8 @@ window.addEventListener("telesyriana:user-changed", () => {
   subscribeGroupsCloud();
   subscribeRecentsCloud();
   subscribeالحالةDots();
+  subscribeProfilesSidebar();
+  applyBirthdayBadges();
 
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1466,4 +1561,4 @@ window.addEventListener("telesyriana:user-changed", () => {
 });
 
 
-try { window.addEventListener("telesyriana:language-changed", translateMessagesUI); } catch {}
+try { window.addEventListener("telesyriana:language-changed", () => { translateMessagesUI(); applyBirthdayBadges(); }); } catch {}

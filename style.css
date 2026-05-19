@@ -4809,3 +4809,75 @@ body[data-language="ar"] #page-messages .chat-message.me{
     font-size:15px !important;
   }
 }
+
+
+/* =========================
+   v2.2 — mobile date widths + birthday badge in chat list
+========================= */
+.chat-dm.birthday-today{
+  border-color:rgba(244,114,182,.42) !important;
+  background:linear-gradient(135deg, rgba(255,255,255,.96), rgba(255,241,248,.96)) !important;
+}
+.birthday-cake{
+  position:absolute;
+  right:-4px;
+  top:-7px;
+  display:grid;
+  place-items:center;
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  background:#fff;
+  box-shadow:0 8px 18px rgba(15,23,42,.14);
+  font-size:15px;
+  z-index:4;
+}
+html[dir="rtl"] .birthday-cake{
+  right:auto;
+  left:-4px;
+}
+.chat-dm.birthday-today .chat-room-sub{
+  color:#be185d !important;
+  font-weight:900 !important;
+}
+
+@media (max-width: 640px){
+  #page-payroll .payroll-filters,
+  #page-reports .report-filters{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    justify-items:center !important;
+    gap:14px !important;
+  }
+  #page-payroll .payroll-filters label,
+  #page-reports .report-filters > *,
+  #page-reports .report-form label{
+    width:100% !important;
+    max-width:100% !important;
+  }
+  #page-payroll .payroll-filters input[type="date"],
+  #page-payroll .payroll-filters select,
+  #page-reports .report-filters input[type="date"],
+  #page-reports .report-filters select,
+  #page-reports #report-day{
+    width:min(92%, 340px) !important;
+    max-width:340px !important;
+    margin-left:auto !important;
+    margin-right:auto !important;
+    display:block !important;
+    text-align:center !important;
+    box-sizing:border-box !important;
+  }
+  #page-payroll .payroll-filters label{
+    align-items:stretch !important;
+  }
+  #page-payroll .payroll-filters label > span,
+  #page-payroll .payroll-filters label,
+  #page-reports .report-filters{
+    text-align:right !important;
+  }
+  #page-payroll .payroll-card,
+  #page-reports .reports-card{
+    overflow:hidden !important;
+  }
+}
