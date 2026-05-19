@@ -319,13 +319,19 @@ function buildMiniCalendar() {
       cell.textContent = String(dayNum);
       const key = `${year}-${String(month+1).padStart(2,"0")}-${String(dayNum).padStart(2,"0")}`;
       const stats = issueStatsByDay[key];
-      if (stats) {
-        if (stats.risk >= 3) cell.classList.add("issue-high");
-        else if (stats.risk >= 1) cell.classList.add("issue-mid");
-        else if (stats.total >= 1) cell.classList.add("issue-low");
-        cell.title = `${stats.total} tickets • ${stats.risk} risk issues`;
+      const isToday = isThisMonth && dayNum === today.getDate();
+      if (isToday) {
+        const todayStats = stats || { total: 0, risk: 0, emergency: 0 };
+        cell.classList.add("today");
+        if (todayStats.emergency >= 1 || todayStats.risk >= 2 || todayStats.total >= 3) {
+          cell.classList.add("today-danger");
+        } else if (todayStats.risk >= 1 || todayStats.total >= 1) {
+          cell.classList.add("today-warning");
+        } else {
+          cell.classList.add("today-stable");
+        }
+        cell.title = `${todayStats.total} active tickets • ${todayStats.risk} risk issues`;
       }
-      if (isThisMonth && dayNum === today.getDate()) cell.classList.add("today");
     }
 
     gridEl.appendChild(cell);
@@ -673,22 +679,37 @@ function subscribeIssueCalendar() {
   try {
     issueCalendarUnsub = onSnapshot(collection(db, "tickets"), (snapshot) => {
       const stats = {};
+      const todayKey = getTodayKey();
       snapshot.forEach((d) => {
-        const t = d.data();
-        const key = dateKeyFromValue(t.createdAt || t.updatedAt);
-        if (!stats[key]) stats[key] = { total: 0, risk: 0 };
+        const t = d.data() || {};
+        const status = String(t.status || "open").toLowerCase();
+        if (["resolved", "closed", "done", "cancelled", "canceled"].includes(status)) return;
+
+        // Active unresolved issues affect Today until they are solved.
+        const key = todayKey;
+        if (!stats[key]) stats[key] = { total: 0, risk: 0, emergency: 0 };
         stats[key].total += 1;
-        if (["emergency", "high"].includes(t.priority) || ["chargeback", "high"].includes(t.risk) || t.type === "item_not_genuine") {
-          stats[key].risk += 1;
-        }
+
+        const priority = String(t.priority || "").toLowerCase();
+        const risk = String(t.risk || t.customerMood || "").toLowerCase();
+        const type = String(t.type || "").toLowerCase();
+        const isEmergency = priority === "emergency" || status === "escalated" || status === "urgent";
+        const isRisk = isEmergency || priority === "high" || risk.includes("chargeback") || risk === "high" || type === "item_not_genuine";
+        if (isRisk) stats[key].risk += 1;
+        if (isEmergency) stats[key].emergency += 1;
       });
       issueStatsByDay = stats;
       buildMiniCalendar();
       const summary = document.getElementById("issue-calendar-summary");
       if (summary) {
-        const today = getTodayKey();
-        const s = stats[today] || { total: 0, risk: 0 };
-        summary.textContent = `Today: ${s.total} tickets • ${s.risk} risk issues. Add daily sales later for real issue-rate %.`;
+        const s = stats[todayKey] || { total: 0, risk: 0, emergency: 0 };
+        if (s.emergency >= 1 || s.risk >= 2 || s.total >= 3) {
+          summary.textContent = `Today: ${s.total} active issues • ${s.risk} risk issues. Emergency/overload active.`;
+        } else if (s.total >= 1) {
+          summary.textContent = `Today: ${s.total} active issue${s.total === 1 ? "" : "s"} • manageable.`;
+        } else {
+          summary.textContent = "Today: stable. No active unresolved issues.";
+        }
       }
     }, (err) => console.warn("issue calendar listener failed", err));
   } catch (err) {
