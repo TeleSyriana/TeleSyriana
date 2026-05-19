@@ -22,7 +22,7 @@ const {
 const USERS = {
   "0001": { password: "Welcome2026!", role: "agent", name: "Raghad Mousa", supervisorId: "1001", hourlyRate: 1.15, currency: "USD" },
   "0002": { password: "Welcome2026!", role: "agent", name: "Qamar Mousa", supervisorId: "1001", hourlyRate: 1.15, currency: "USD" },
-  "0003": { password: "Welcome2026!", role: "agent", name: "Agent", supervisorId: "1001", hourlyRate: 1.25, currency: "USD" },
+  "0003": { password: "Welcome2026!", role: "agent", name: "Agent", supervisorId: "1001", hourlyRate: 1.15, currency: "USD" },
   "1001": { password: "2411", role: "supervisor", name: "Dema Shabar", hourlyRate: 5.8, currency: "GBP" },
   "2001": { password: "0951", role: "manager", name: "Mohammad Safar", hourlyRate: 5.8, currency: "GBP" },
   "9001": { password: "1234", role: "admin", name: "Owner Admin", hourlyRate: 0, currency: "GBP" },
