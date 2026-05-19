@@ -170,6 +170,47 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+async function copyText(value, label = "Text") {
+  const text = String(value || "").trim();
+  if (!text) {
+    showTicketAlert(`${label} is empty.`, true);
+    return false;
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const temp = document.createElement("textarea");
+      temp.value = text;
+      temp.setAttribute("readonly", "");
+      temp.style.position = "fixed";
+      temp.style.left = "-9999px";
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand("copy");
+      temp.remove();
+    }
+    showTicketAlert(`${label} copied.`);
+    return true;
+  } catch (err) {
+    console.error("copyText failed", err);
+    showTicketAlert(`Could not copy ${label}.`, true);
+    return false;
+  }
+}
+
+function copyButton(value, label, text = "Copy") {
+  const safeValue = escapeHtml(value || "");
+  const safeLabel = escapeHtml(label || "Text");
+  const disabled = value ? "" : " disabled";
+  return `<button type="button" class="tiny-copy-btn" data-copy="${safeValue}" data-copy-label="${safeLabel}"${disabled}>${escapeHtml(text)}</button>`;
+}
+
+function statusChip(value, label = "Status") {
+  const raw = String(value || "unknown");
+  return `<span class="status-chip status-${escapeHtml(raw.toLowerCase())}"><b>${escapeHtml(label)}:</b> ${escapeHtml(raw || "—")}</span>`;
+}
+
 function getShopifyBackendUrl() {
   return (localStorage.getItem(SHOPIFY_BACKEND_URL_KEY) || DEFAULT_SHOPIFY_BACKEND_URL).replace(/\/+$/, "");
 }
@@ -233,11 +274,20 @@ function normaliseShopifyOrder(apiOrder) {
   const order = apiOrder.order || {};
   const customer = apiOrder.customer || {};
   const tracking = firstTracking(apiOrder);
-  const items = (apiOrder.items || []).map((item) => {
-    const variant = item.variant && item.variant !== "Default Title" ? ` - ${item.variant}` : "";
+  const itemsList = (apiOrder.items || []).map((item) => ({
+    title: item.title || "Item",
+    variant: item.variant && item.variant !== "Default Title" ? item.variant : "",
+    quantity: item.quantity || 1,
+    sku: item.sku || "",
+    imageUrl: item.image_url || item.imageUrl || "",
+    productTitle: item.product_title || item.productTitle || "",
+  }));
+  const items = itemsList.map((item) => {
+    const variant = item.variant ? ` - ${item.variant}` : "";
     const qty = item.quantity ? ` x${item.quantity}` : "";
     return `${item.title || "Item"}${variant}${qty}`;
   }).join(" | ");
+  const imageUrl = itemsList.find((item) => item.imageUrl)?.imageUrl || "";
   const orderNumber = normaliseالطلبNumber(order.number || apiOrder.order_number || "");
   return {
     orderNumber,
@@ -254,6 +304,8 @@ function normaliseShopifyOrder(apiOrder) {
     paymentStatus: order.payment_status || "",
     fulfillmentStatus: order.fulfillment_status || "",
     items,
+    itemsList,
+    imageUrl,
     shippingAddress: addressText(apiOrder.shipping_address),
     billingAddress: addressText(apiOrder.billing_address),
     notes: "",
@@ -272,6 +324,25 @@ function rememberSessionOrder(order) {
 
 function getSessionOrder(orderNumber) {
   return sessionShopifyOrders.get(normaliseالطلبNumber(orderNumber)) || null;
+}
+
+async function syncShopifyOrderToFirebase(order) {
+  if (!order?.orderNumber) return false;
+  const ref = orderDocRef(order.orderNumber);
+  if (!ref) return false;
+  const payload = {
+    ...order,
+    source: "shopify_live",
+    shopifyStatus: "synced",
+    shopifyStatusLabel: "Synced with Shopify",
+    syncedFromShopifyAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    updatedBy: currentUser?.id || "shopify_lookup",
+  };
+  // Avoid storing an unnecessarily huge raw Shopify object in the live cache.
+  delete payload.raw;
+  await setDoc(ref, payload, { merge: true });
+  return true;
 }
 
 async function getBestOrderData(orderNumber) {
@@ -307,19 +378,38 @@ function renderShopifyLiveResult(order, message = "") {
     if (useBtn) useBtn.disabled = true;
     return;
   }
+  const trackingActions = `
+    <div class="shopify-actions-line">
+      ${copyButton(order.trackingNumber, "Tracking number", "Copy tracking")}
+      ${copyButton(order.trackingUrl, "Tracking URL", "Copy tracking URL")}
+      ${order.trackingUrl ? `<a class="mini-link" href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener">Open tracking</a>` : ""}
+      ${order.adminUrl ? `<a class="mini-link" href="${escapeHtml(order.adminUrl)}" target="_blank" rel="noopener">Open Shopify</a>` : ""}
+    </div>`;
+
   box.className = "shopify-live-result";
   box.innerHTML = `
-    <div class="shopify-live-title">#${escapeHtml(order.orderNumber)} • ${escapeHtml(order.customerName || "No customer name")}</div>
-    <div class="shopify-live-grid-result">
-      <span><b>Email:</b> ${escapeHtml(order.email || "—")}</span>
-      <span><b>Phone:</b> ${escapeHtml(order.phone || "—")}</span>
-      <span><b>Total:</b> ${escapeHtml(order.totalPaid || "—")}</span>
-      <span><b>Payment:</b> ${escapeHtml(order.paymentStatus || "—")}</span>
-      <span><b>Fulfilment:</b> ${escapeHtml(order.fulfillmentStatus || "—")}</span>
-      <span><b>Tracking:</b> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</span>
+    <div class="shopify-live-result-inner">
+      ${order.imageUrl ? `<img class="shopify-live-image" src="${escapeHtml(order.imageUrl)}" alt="${escapeHtml(order.items || "Shopify product")}" loading="lazy" referrerpolicy="no-referrer" onerror="this.classList.add('hidden')">` : `<div class="shopify-live-image empty">No image</div>`}
+      <div class="shopify-live-copy">
+        <div class="shopify-live-title">#${escapeHtml(order.orderNumber)} • ${escapeHtml(order.customerName || "No customer name")}</div>
+        <div class="shopify-live-save-line ${order.firebaseSynced ? "ok" : "warn"}">
+          ${order.firebaseSynced ? "✅ Saved to Firebase orderRecords" : "⚠️ Loaded from Shopify but not saved to Firebase"}
+        </div>
+        <div class="shopify-live-grid-result">
+          <span><b>Email:</b> ${escapeHtml(order.email || "—")}</span>
+          <span><b>Phone:</b> ${escapeHtml(order.phone || "—")}</span>
+          <span><b>Total:</b> ${escapeHtml(order.totalPaid || "—")}</span>
+          <span>${statusChip(order.paymentStatus || "—", "Payment")}</span>
+          <span>${statusChip(order.fulfillmentStatus || "—", "Fulfilment")}</span>
+          <span><b>Courier:</b> ${escapeHtml(order.courier || "—")}</span>
+          <span><b>Tracking:</b> ${escapeHtml(order.trackingNumber || "—")}</span>
+          <span><b>Order date:</b> ${escapeHtml(order.orderDate || "—")}</span>
+          <span><b>Refunds:</b> ${escapeHtml(String(order.refundsCount || 0))}</span>
+        </div>
+        <div class="shopify-live-items"><b>Items:</b> ${escapeHtml(order.items || "—")}</div>
+        ${trackingActions}
+      </div>
     </div>
-    <div class="shopify-live-items"><b>Items:</b> ${escapeHtml(order.items || "—")}</div>
-    ${order.adminUrl ? `<a class="shopify-admin-link" href="${escapeHtml(order.adminUrl)}" target="_blank" rel="noopener">Open Shopify order</a>` : ""}
   `;
   if (useBtn) useBtn.disabled = false;
 }
@@ -331,12 +421,8 @@ function applyOrderToTicketForm(order) {
   if (el("ticket-customer")) el("ticket-customer").value = order.customerName || "";
   if (el("ticket-email")) el("ticket-email").value = order.email || "";
   renderالطلبPreview(order);
-  const block = orderNoteBlock(order);
-  const notes = el("ticket-notes");
-  if (notes && !notes.value.includes("Shopify live order loaded:")) {
-    notes.value = `${notes.value ? notes.value + "\n\n" : ""}${block}`;
-  }
   setTicketFormمفتوحة(true);
+  showTicketAlert(`Order #${order.orderNumber} applied to the ticket form. Details are saved as structured order data, not dumped into notes.`);
 }
 
 async function searchAndApplyShopifyOrder(queryValue, applyToTicket = false) {
@@ -347,9 +433,18 @@ async function searchAndApplyShopifyOrder(queryValue, applyToTicket = false) {
     return null;
   }
   rememberSessionOrder(order);
+  try {
+    order.firebaseSynced = await syncShopifyOrderToFirebase(order);
+    if (order.firebaseSynced) rememberSessionOrder(order);
+  } catch (err) {
+    console.warn("Shopify order loaded but Firebase sync failed", err);
+    order.firebaseSynced = false;
+  }
   renderShopifyLiveResult(order);
   if (applyToTicket) applyOrderToTicketForm(order);
-  showTicketAlert(`Shopify order #${order.orderNumber} loaded.`);
+  showTicketAlert(order.firebaseSynced
+    ? `Shopify order #${order.orderNumber} loaded and synced to Firebase.`
+    : `Shopify order #${order.orderNumber} loaded. Firebase sync failed/check rules.`);
   return order;
 }
 
@@ -373,34 +468,41 @@ function renderالطلبPreview(order) {
   }
   card.classList.remove("hidden");
   body.innerHTML = `
-    <div><strong>العميل:</strong> ${escapeHtml(order.customerName || "—")}</div>
-    <div><strong>Email:</strong> ${escapeHtml(order.email || "—")}</div>
-    <div><strong>Phone:</strong> ${escapeHtml(order.phone || "—")}</div>
-    <div><strong>Total:</strong> ${escapeHtml(order.totalPaid || "—")}</div>
-    <div><strong>Items:</strong> ${escapeHtml(order.items || "—")}</div>
-    <div><strong>Tracking:</strong> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</div>
-    <div><strong>الحالة:</strong> ${escapeHtml(order.paymentStatus || orderالحالةLabel(order.orderالحالة))} • ${escapeHtml(order.fulfillmentStatus || orderالحالةLabel(order.deliveryالحالة))}</div>
-    ${order.adminUrl ? `<div><a href="${escapeHtml(order.adminUrl)}" target="_blank" rel="noopener">Open Shopify order</a></div>` : ""}
+    <div class="order-preview-card">
+      ${order.imageUrl ? `<img class="ticket-order-image" src="${escapeHtml(order.imageUrl)}" alt="${escapeHtml(order.items || "Order product")}" loading="lazy" referrerpolicy="no-referrer" onerror="this.classList.add('hidden')">` : `<div class="ticket-order-image empty">No image</div>`}
+      <div class="order-preview-main">
+        <div class="order-preview-title">#${escapeHtml(order.orderNumber || "—")} • ${escapeHtml(order.customerName || "—")}</div>
+        <div class="shopify-live-save-line ${order.firebaseSynced ? "ok" : "warn"}">${order.firebaseSynced ? "✅ Saved to Firebase" : "⚠️ Not confirmed saved to Firebase"}</div>
+        <div class="structured-order-grid">
+          <div><b>Email</b><span>${escapeHtml(order.email || "—")}</span></div>
+          <div><b>Phone</b><span>${escapeHtml(order.phone || "—")}</span></div>
+          <div><b>Total</b><span>${escapeHtml(order.totalPaid || "—")}</span></div>
+          <div><b>Items</b><span>${escapeHtml(order.items || "—")}</span></div>
+          <div><b>Payment</b><span>${escapeHtml(order.paymentStatus || "—")}</span></div>
+          <div><b>Fulfilment</b><span>${escapeHtml(order.fulfillmentStatus || "—")}</span></div>
+          <div><b>Courier</b><span>${escapeHtml(order.courier || "—")}</span></div>
+          <div><b>Tracking</b><span>${escapeHtml(order.trackingNumber || "—")}</span></div>
+        </div>
+        <div class="shopify-actions-line">
+          ${copyButton(order.trackingNumber, "Tracking number", "Copy tracking")}
+          ${copyButton(order.trackingUrl, "Tracking URL", "Copy tracking URL")}
+          ${order.trackingUrl ? `<a class="mini-link" href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener">Open tracking</a>` : ""}
+          ${order.adminUrl ? `<a class="mini-link" href="${escapeHtml(order.adminUrl)}" target="_blank" rel="noopener">Open Shopify</a>` : ""}
+        </div>
+      </div>
+    </div>
   `;
 }
 
 function orderNoteBlock(order) {
   if (!order) return "";
   return [
-    order.source === "shopify_live" ? `Shopify live order loaded:` : `Shopify order cache loaded:`,
-    `العميل: ${order.customerName || "—"}`,
-    `Email: ${order.email || "—"}`,
-    `Phone: ${order.phone || "—"}`,
+    `Order #${order.orderNumber || "—"} loaded from Shopify.`,
+    `Customer: ${order.customerName || "—"}`,
     `Items: ${order.items || "—"}`,
-    `Total: ${order.totalPaid || "—"}`,
     `Payment: ${order.paymentStatus || "—"}`,
     `Fulfilment: ${order.fulfillmentStatus || "—"}`,
-    `Tracking: ${order.trackingNumber || "—"} ${order.courier ? `(${order.courier})` : ""}`,
-    order.trackingUrl ? `Tracking URL: ${order.trackingUrl}` : "",
-    order.adminUrl ? `Shopify admin: ${order.adminUrl}` : "",
-    `الطلب status: ${orderالحالةLabel(order.orderالحالة)}`,
-    `Delivery status: ${orderالحالةLabel(order.deliveryالحالة)}`,
-    order.notes ? `الطلب notes: ${order.notes}` : ""
+    `Tracking: ${order.trackingNumber || "—"}${order.courier ? ` (${order.courier})` : ""}`
   ].filter(Boolean).join("\n");
 }
 
@@ -659,21 +761,30 @@ function renderTicketDetail() {
   if (info) {
     const orderData = t.orderData || {};
     info.innerHTML = `
-      <div><strong>العميل:</strong> ${escapeHtml(t.customerName || orderData.customerName || "—")}</div>
-      <div><strong>Email:</strong> ${escapeHtml(t.email || orderData.email || "—")}</div>
-      <div><strong>Phone:</strong> ${escapeHtml(orderData.phone || "—")}</div>
-      <div><strong>Total:</strong> ${escapeHtml(orderData.totalPaid || "—")}</div>
-      <div><strong>Items:</strong> ${escapeHtml(orderData.items || "—")}</div>
-      <div><strong>Tracking:</strong> ${escapeHtml(orderData.trackingNumber || "—")} ${orderData.courier ? `(${escapeHtml(orderData.courier)})` : ""}</div>
-      <div><strong>Payment:</strong> ${escapeHtml(orderData.paymentStatus || "—")}</div>
-      <div><strong>Fulfilment:</strong> ${escapeHtml(orderData.fulfillmentStatus || "—")}</div>
-      <div><strong>الطلب status:</strong> ${escapeHtml(orderالحالةLabel(orderData.orderالحالة))}</div>
-      <div><strong>Delivery:</strong> ${escapeHtml(orderالحالةLabel(orderData.deliveryالحالة))}</div>
-      <div><strong>تم الإنشاء by:</strong> ${escapeHtml(staffName(t.createdBy))} (${escapeHtml(t.createdBy || "—")})</div>
-      <div><strong>Updated:</strong> ${escapeHtml(fmtDate(t.updatedAt))}</div>
-      <div><strong>Shopify:</strong> ${shopifyStatusPill(t)}</div>
-      <div><strong>Risk:</strong> ${escapeHtml(t.risk || "normal")}</div>
-      ${orderData.adminUrl ? `<div><strong>Admin:</strong> <a href="${escapeHtml(orderData.adminUrl)}" target="_blank" rel="noopener">Open Shopify</a></div>` : ""}
+      <div class="ticket-info-structured">
+        ${orderData.imageUrl ? `<div class="ticket-info-image-wrap"><img class="ticket-info-image" src="${escapeHtml(orderData.imageUrl)}" alt="${escapeHtml(orderData.items || "Order product")}" loading="lazy" referrerpolicy="no-referrer" onerror="this.classList.add('hidden')"></div>` : ""}
+        <div class="structured-order-grid">
+          <div><b>Customer</b><span>${escapeHtml(t.customerName || orderData.customerName || "—")}</span></div>
+          <div><b>Email</b><span>${escapeHtml(t.email || orderData.email || "—")}</span></div>
+          <div><b>Phone</b><span>${escapeHtml(orderData.phone || "—")}</span></div>
+          <div><b>Total</b><span>${escapeHtml(orderData.totalPaid || "—")}</span></div>
+          <div><b>Items</b><span>${escapeHtml(orderData.items || "—")}</span></div>
+          <div><b>Payment</b><span>${escapeHtml(orderData.paymentStatus || "—")}</span></div>
+          <div><b>Fulfilment</b><span>${escapeHtml(orderData.fulfillmentStatus || "—")}</span></div>
+          <div><b>Courier</b><span>${escapeHtml(orderData.courier || "—")}</span></div>
+          <div><b>Tracking number</b><span>${escapeHtml(orderData.trackingNumber || "—")}</span></div>
+          <div><b>Delivery</b><span>${escapeHtml(orderالحالةLabel(orderData.deliveryالحالة))}</span></div>
+          <div><b>Firebase</b><span>${shopifyStatusPill(t)}</span></div>
+          <div><b>Risk</b><span>${escapeHtml(t.risk || "normal")}</span></div>
+        </div>
+        <div class="shopify-actions-line">
+          ${copyButton(orderData.trackingNumber, "Tracking number", "Copy tracking")}
+          ${copyButton(orderData.trackingUrl, "Tracking URL", "Copy tracking URL")}
+          ${orderData.trackingUrl ? `<a class="mini-link" href="${escapeHtml(orderData.trackingUrl)}" target="_blank" rel="noopener">Open tracking</a>` : ""}
+          ${orderData.adminUrl ? `<a class="mini-link" href="${escapeHtml(orderData.adminUrl)}" target="_blank" rel="noopener">Open Shopify</a>` : ""}
+        </div>
+        <div class="ticket-system-line">Created by: ${escapeHtml(staffName(t.createdBy))} (${escapeHtml(t.createdBy || "—")}) • Updated: ${escapeHtml(fmtDate(t.updatedAt))}</div>
+      </div>
     `;
   }
 
@@ -692,6 +803,12 @@ function renderTicketDetail() {
 function hookUI() {
   if (isHooked) return;
   isHooked = true;
+
+  document.addEventListener("click", async (e) => {
+    const btn = e.target?.closest?.("[data-copy]");
+    if (!btn) return;
+    await copyText(btn.dataset.copy || "", btn.dataset.copyLabel || "Text");
+  });
 
   el("ticket-new-toggle")?.addEventListener("click", () => setTicketFormمفتوحة(true));
 
@@ -845,7 +962,7 @@ async function createTicket() {
     createdByName: currentUser.name,
     customerName: el("ticket-customer")?.value?.trim() || cachedالطلب?.customerName || "",
     email: el("ticket-email")?.value?.trim() || cachedالطلب?.email || "",
-    notes: el("ticket-notes")?.value?.trim() || (cachedالطلب ? orderNoteBlock(cachedالطلب) : ""),
+    notes: el("ticket-notes")?.value?.trim() || "",
     resolution: "",
     customerMood: inferMood(type, priority),
     risk: riskFromTypeAndالطلب(type, cachedالطلب),
@@ -857,6 +974,8 @@ async function createTicket() {
       email: cachedالطلب.email || "",
       phone: cachedالطلب.phone || "",
       items: cachedالطلب.items || "",
+      itemsList: cachedالطلب.itemsList || [],
+      imageUrl: cachedالطلب.imageUrl || "",
       totalPaid: cachedالطلب.totalPaid || "",
       orderDate: cachedالطلب.orderDate || "",
       courier: cachedالطلب.courier || "",
@@ -883,7 +1002,7 @@ async function createTicket() {
     renderالطلبPreview(null);
     fillAssigneeSelect(el("ticket-assigned"), true);
     setTicketFormمفتوحة(false);
-    showTicketAlert(cachedالطلب ? "تم إنشاء التذكرة وربطها ببيانات Shopify." : "تم إنشاء التذكرة، لكن لم يتم العثور على بيانات Shopify لهذا الطلب.", !cachedالطلب);
+    showTicketAlert(cachedالطلب ? `✅ Ticket saved to Firebase and linked with Shopify order #${orderNumber}.` : "تم إنشاء التذكرة، لكن لم يتم العثور على بيانات Shopify لهذا الطلب.", !cachedالطلب);
   } catch (err) {
     console.error("createTicket failed", err);
     showTicketAlert(`Ticket could not be created: ${err?.code || err?.message || "check Firestore permissions/internet"}`, true);
@@ -996,7 +1115,8 @@ function initTickets() {
   hookUI();
   fillAssigneeSelect(el("ticket-assigned"), true);
   fillAssigneeSelect(el("ticket-detail-assigned"), true);
-  el("order-admin-panel")?.classList.toggle("hidden", !canManageالطلبCache(currentUser));
+  // Legacy manual order cache is intentionally hidden now. Live Shopify lookup + Firestore sync is the main workflow.
+  el("order-admin-panel")?.classList.add("hidden");
 
   if (!currentUser) {
     allTickets = [];

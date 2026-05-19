@@ -321,14 +321,14 @@
             <div class="shopify-live-head">
               <div>
                 <h3>Shopify Live Order Lookup</h3>
-                <p>Search real Shopify orders from the Render backend, then fill a ticket instantly.</p>
+                <p>Search once here, confirm Firebase save, then use the structured order details inside the ticket.</p>
               </div>
               <button id="shopify-live-settings" type="button" class="btn-secondary">API key</button>
             </div>
             <div class="shopify-live-row">
-              <input id="shopify-live-query" type="text" placeholder="Order #, email, phone, customer name" />
+              <input id="shopify-live-query" type="text" placeholder="Order # only recommended, or email / phone / customer name" />
               <button id="shopify-live-search" type="button" class="btn-primary">Search Shopify</button>
-              <button id="shopify-live-use-ticket" type="button" class="btn-secondary" disabled>Use in ticket</button>
+              <button id="shopify-live-use-ticket" type="button" class="btn-secondary" disabled>Use structured order in ticket</button>
             </div>
             <div id="shopify-live-result" class="shopify-live-result muted">No Shopify order loaded yet.</div>
           </div>
@@ -457,8 +457,8 @@
             </label>
 
             <div class="ticket-form-footer">
-              <button type="button" id="ticket-shopify-autofill-btn" class="btn-secondary">جلب من Shopify</button>
-              <button type="button" id="ticket-autofill-btn" class="btn-secondary">ملء تلقائي من رقم الطلب</button>
+              <button type="button" id="ticket-shopify-autofill-btn" class="btn-secondary">جلب/تحديث من Shopify</button>
+              <button type="button" id="ticket-autofill-btn" class="btn-secondary">استخدام الطلب المحفوظ</button>
               <button type="submit" class="btn-primary" style="width:auto">إنشاء التذكرة</button>
             </div>
           </form>

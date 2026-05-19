@@ -4004,3 +4004,151 @@ body[data-bg-tone="dark"] .notes-app{
   .shopify-live-row{ grid-template-columns:1fr; }
   .shopify-live-grid-result{ grid-template-columns:1fr; }
 }
+
+/* Shopify live lookup v1.1: product image + Firebase sync indicator */
+.shopify-live-result-inner{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+}
+.shopify-live-image{
+  width:76px;
+  height:76px;
+  object-fit:contain;
+  border-radius:14px;
+  background:#f8fafc;
+  border:1px solid rgba(15,23,42,.10);
+  flex:0 0 auto;
+}
+.shopify-live-copy{ flex:1; min-width:0; }
+.shopify-live-firebase{
+  margin-top:8px;
+  font-size:.82rem;
+  color:#0f766e;
+}
+.ticket-order-image,
+.ticket-info-image{
+  width:82px;
+  height:82px;
+  object-fit:contain;
+  border-radius:14px;
+  background:#fff;
+  border:1px solid rgba(15,23,42,.12);
+  margin:0 0 10px;
+}
+.ticket-info-image-wrap{
+  grid-column:1 / -1;
+}
+.hidden{ display:none !important; }
+@media(max-width:760px){
+  .shopify-live-result-inner{ flex-direction:column; }
+  .shopify-live-image,.ticket-order-image,.ticket-info-image{ width:68px; height:68px; }
+}
+
+/* Shopify order lookup v1.2 — structured order data + copy actions */
+.shopify-live-save-line{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  margin:4px 0 10px;
+  padding:5px 9px;
+  border-radius:999px;
+  font-size:.78rem;
+  font-weight:800;
+  background:rgba(15,118,110,.10);
+  color:#0f766e;
+}
+.shopify-live-save-line.warn{ background:rgba(245,158,11,.12); color:#92400e; }
+.shopify-live-save-line.ok{ background:rgba(16,185,129,.12); color:#047857; }
+.shopify-actions-line{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  margin-top:10px;
+}
+.tiny-copy-btn,.mini-link{
+  border:1px solid rgba(15,23,42,.12);
+  background:rgba(255,255,255,.9);
+  color:#1e293b;
+  border-radius:999px;
+  padding:7px 10px;
+  font-size:.78rem;
+  font-weight:850;
+  text-decoration:none;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:32px;
+}
+.tiny-copy-btn:hover,.mini-link:hover{ transform:translateY(-1px); box-shadow:0 8px 18px rgba(15,23,42,.08); }
+.tiny-copy-btn:disabled{ opacity:.45; cursor:not-allowed; transform:none; box-shadow:none; }
+.structured-order-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  margin-top:8px;
+}
+.structured-order-grid>div{
+  border:1px solid rgba(15,23,42,.08);
+  background:rgba(255,255,255,.70);
+  border-radius:12px;
+  padding:8px 10px;
+  min-width:0;
+}
+.structured-order-grid b{
+  display:block;
+  font-size:.72rem;
+  color:#64748b;
+  margin-bottom:2px;
+}
+.structured-order-grid span{
+  display:block;
+  color:#0f172a;
+  font-weight:750;
+  overflow-wrap:anywhere;
+}
+.status-chip{
+  display:inline-flex;
+  gap:4px;
+  align-items:center;
+  border-radius:999px;
+  padding:4px 8px;
+  background:rgba(37,99,235,.08);
+  color:#1e40af;
+  font-size:.78rem;
+}
+.status-chip.status-paid,.status-chip.status-fulfilled{ background:rgba(16,185,129,.12); color:#047857; }
+.status-chip.status-unfulfilled{ background:rgba(245,158,11,.12); color:#92400e; }
+.order-preview-card,.ticket-info-structured{
+  display:block;
+  width:100%;
+}
+.order-preview-card{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+}
+.order-preview-main{ flex:1; min-width:0; }
+.order-preview-title{ font-weight:950; color:#0f172a; margin-bottom:4px; }
+.shopify-live-image.empty,.ticket-order-image.empty{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#94a3b8;
+  font-size:.72rem;
+  text-align:center;
+}
+.ticket-system-line{
+  margin-top:10px;
+  color:#64748b;
+  font-size:.78rem;
+}
+#order-admin-panel{ display:none !important; }
+@media(max-width:760px){
+  .structured-order-grid{ grid-template-columns:1fr; }
+  .order-preview-card{ flex-direction:column; }
+  .shopify-actions-line{ align-items:stretch; }
+  .tiny-copy-btn,.mini-link{ width:100%; }
+}
