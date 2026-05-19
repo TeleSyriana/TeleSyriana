@@ -373,7 +373,7 @@ async function searchShopifyLive({ useInTicket = false } = {}) {
     if (!data.orders?.length) {
       currentLiveOrder = null;
       currentLiveOrderFirebaseStatus = "none";
-      liveStatus(`No Shopify order found for ${q}.`, "warn");
+      liveStatus(ticketLang && ticketLang() === "ar" ? `لم يتم العثور على طلب Shopify لـ ${q}.` : `No Shopify order found for ${q}.`, "warn");
       renderShopifyLiveResult(null);
       return null;
     }

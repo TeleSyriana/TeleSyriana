@@ -781,6 +781,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("mobile-menu-toggle")?.addEventListener("click", () => {
+    if (document.body.classList.contains("auth-screen") || !document.body.classList.contains("dashboard-ready")) {
+      closeMobileMenu();
+      return;
+    }
     document.body.classList.toggle("menu-open");
     document.getElementById("mobile-menu-backdrop")?.classList.toggle("hidden", !document.body.classList.contains("menu-open"));
   });
@@ -1910,6 +1914,7 @@ function ensureProfilePhotoControls() {
 /* --------------------------- View switching ----------------------------- */
 
 function showLogin() {
+  closeMobileMenu();
   document.body.classList.add("auth-screen");
   document.body.classList.remove("dashboard-ready");
   document.getElementById("dashboard-screen")?.classList.add("hidden");
@@ -1928,6 +1933,7 @@ function showLogin() {
 }
 
 function showDashboard() {
+  closeMobileMenu();
   document.body.classList.remove("auth-screen");
   document.body.classList.add("dashboard-ready");
   document.getElementById("login-screen")?.classList.add("hidden");
@@ -2007,7 +2013,7 @@ function translateFeaturePages(lang = 'en') {
     refresh: 'تحديث',
     newTicket: '+ تذكرة جديدة',
     shopifyMemory: 'بيانات الطلب / ذاكرة Shopify',
-    shopifyMemorySub: 'حفظ يدوي لبيانات الطلب حالياً لاستخدام الملء التلقائي. يمكن ربط Shopify API لاحقاً.',
+    shopifyMemorySub: 'ابحث عن رقم الطلب أو البريد أو الهاتف أو اسم العميل لجلب بيانات Shopify وربطها بالتذكرة.',
     addUpdateOrder: 'إضافة / تحديث طلب',
     open: 'مفتوحة',
     emergency: 'طارئ',
@@ -2089,7 +2095,7 @@ function translateFeaturePages(lang = 'en') {
     refresh: 'Refresh',
     newTicket: '+ New ticket',
     shopifyMemory: 'Shopify order memory',
-    shopifyMemorySub: 'Manual order storage for autofill right now. Shopify API can be connected later.',
+    shopifyMemorySub: 'Search by order number, email, phone, or customer name to load Shopify order details and link them to the ticket.',
     addUpdateOrder: 'Add / update order',
     open: 'Open',
     emergency: 'Emergency',
@@ -2255,8 +2261,8 @@ function translateFeaturePages(lang = 'en') {
   if (statusLabelBox) statusLabelBox.textContent = isAr ? 'الحالة الحالية:' : 'Current status:';
   const statusNote = document.querySelector('#page-home .status-note');
   if (statusNote) statusNote.innerHTML = isAr
-    ? 'مدة الاستراحة المسموحة: <strong>45 دقيقة</strong>. يتم تحديث الوقت تلقائياً، ويتم حفظ الرواتب في Firestore عند تفعيل قاعدة البيانات.'
-    : 'Allowed break time: <strong>45 minutes</strong>. Time updates automatically and payroll is saved to Firestore when enabled.';
+    ? 'مدة الاستراحة المسموحة: <strong>45 دقيقة</strong>. يتم تحديث الوقت تلقائياً حسب حالة الموظف الحالية.'
+    : 'Allowed break time: <strong>45 minutes</strong>. Time updates automatically based on the current staff status.';
   const breakBox = Array.from(document.querySelectorAll('#page-home .break-box > div'));
   if (breakBox[0]) breakBox[0].childNodes[0].nodeValue = isAr ? 'الاستراحة المستخدمة: ' : 'Break used: ';
   if (breakBox[1]) breakBox[1].childNodes[0].nodeValue = isAr ? 'المتبقي: ' : 'Remaining: ';
@@ -2284,7 +2290,7 @@ function translateFeaturePages(lang = 'en') {
 
   setText('#shopify-live-search-btn', isAr ? 'بحث Shopify' : 'Search Shopify');
   setText('#shopify-live-use-btn', isAr ? 'استخدام في التذكرة' : 'Use in ticket');
-  setText('#shopify-live-status', isAr ? 'لا يوجد طلب Shopify محمّل بعد.' : 'No Shopify order loaded yet.');
+  setText('#shopify-live-status', isAr ? 'لم يتم تحميل أي طلب Shopify بعد.' : 'No Shopify order has been loaded yet.');
   const ticketLabels = Array.from(document.querySelectorAll('#ticket-form .ticket-form-grid > label'));
   if (ticketLabels[0]) ticketLabels[0].childNodes[0].nodeValue = isAr ? 'رقم الطلب #' : 'Order number #';
   if (ticketLabels[1]) ticketLabels[1].childNodes[0].nodeValue = isAr ? 'الفئة' : 'Category';

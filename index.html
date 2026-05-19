@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>TeleSyriana – Support OS</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f868b8" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16.png" />
   <link rel="shortcut icon" href="images/favicon.ico" />
-  <link rel="stylesheet" href="style.css?v=webapp-icon-v1" />
+  <link rel="stylesheet" href="style.css?v=text-cleanup-v1" />
 </head>
 
 <body data-build-version="phase3-shifts">
@@ -68,7 +68,7 @@
           <form id="login-form">
             <label>
               رقم الموظف CCMS
-              <input type="text" id="ccmsId" placeholder="e.g. 0101" required />
+              <input type="text" id="ccmsId" placeholder="e.g. 1001" required />
             </label>
 
             <label>
@@ -119,7 +119,7 @@
                 <button type="button" data-quick-status="meeting">اجتماع</button>
                 <button type="button" data-quick-status="unavailable">إنهاء الدوام</button>
               </div>
-              <small class="status-note">مدة الاستراحة المسموحة: <strong>45 دقيقة</strong>. يتم تحديث الوقت تلقائياً، ويتم حفظ الرواتب في Firestore عند تفعيل قاعدة البيانات.</small>
+              <small class="status-note">مدة الاستراحة المسموحة: <strong>45 دقيقة</strong>. يتم تحديث الوقت تلقائياً حسب حالة الموظف الحالية.</small>
             </div>
 
             <div class="break-box">
@@ -366,7 +366,7 @@
                 <button id="shopify-live-search-btn" type="button" class="btn-primary">Search Shopify</button>
                 <button id="shopify-live-use-btn" type="button" class="btn-secondary" disabled>Use in ticket</button>
               </div>
-              <div id="shopify-live-status" class="shopify-live-status">No Shopify order loaded yet.</div>
+              <div id="shopify-live-status" class="shopify-live-status">No Shopify order has been loaded yet.</div>
               <div id="shopify-live-result" class="shopify-live-result hidden"></div>
             </div>
 
@@ -1268,14 +1268,14 @@
 
 
   <!-- scripts -->
-  <script type="module" src="app.js?v=chat-header-photo-v2"></script>
-  <script type="module" src="tasks.js?v=chat-header-photo-v2"></script>
-  <script type="module" src="tickets.js?v=chat-header-photo-v2"></script>
-  <script type="module" src="reports.js?v=chat-header-photo-v2"></script>
-  <script type="module" src="payroll.js?v=chat-header-photo-v2"></script>
-  <script type="module" src="messages.js?v=chat-header-photo-v2"></script>
-  <script type="module" src="groups.js?v=chat-header-photo-v2"></script>
-  <script type="module" src="meetings.js?v=chat-header-photo-v2"></script>
+  <script type="module" src="app.js?v=text-cleanup-v1"></script>
+  <script type="module" src="tasks.js?v=text-cleanup-v1"></script>
+  <script type="module" src="tickets.js?v=text-cleanup-v1"></script>
+  <script type="module" src="reports.js?v=text-cleanup-v1"></script>
+  <script type="module" src="payroll.js?v=text-cleanup-v1"></script>
+  <script type="module" src="messages.js?v=text-cleanup-v1"></script>
+  <script type="module" src="groups.js?v=text-cleanup-v1"></script>
+  <script type="module" src="meetings.js?v=text-cleanup-v1"></script>
 
 </body>
 </html>
