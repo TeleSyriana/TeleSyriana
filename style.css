@@ -4600,3 +4600,212 @@ body[data-language="ar"] #page-messages .chat-message.me{
     font-size:15px !important;
   }
 }
+
+
+/* =========================
+   v2.1 — Messages layout rescue
+   Goal: keep the working message logic from v2.0, but restore clean desktop layout
+   and make mobile chat true full-screen with only the chat back button.
+========================= */
+#page-messages{
+  height:auto !important;
+  min-height:calc(100vh - var(--header-offset)) !important;
+  overflow:visible !important;
+}
+#page-messages .messages-card{
+  height:calc(100vh - 132px) !important;
+  min-height:620px !important;
+  padding:14px !important;
+  border-radius:30px !important;
+  overflow:hidden !important;
+}
+#page-messages .messages-layout{
+  display:grid !important;
+  grid-template-columns:minmax(300px, 380px) minmax(0, 1fr) !important;
+  gap:16px !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  overflow:hidden !important;
+  padding:0 !important;
+}
+#page-messages .messages-sidebar{
+  width:auto !important;
+  max-width:none !important;
+  height:100% !important;
+  max-height:none !important;
+  min-height:0 !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  border-radius:24px !important;
+}
+#page-messages .messages-main{
+  position:relative !important;
+  inset:auto !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  max-height:none !important;
+  margin-top:0 !important;
+  border-radius:24px !important;
+  display:flex !important;
+  flex-direction:column !important;
+  overflow:hidden !important;
+  transform:none !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
+#page-messages .chat-header{
+  flex:0 0 auto !important;
+  min-height:64px !important;
+  padding:12px 16px !important;
+  position:relative !important;
+  top:auto !important;
+  z-index:2 !important;
+}
+#chat-back{
+  display:none !important;
+}
+#page-messages .chat-empty{
+  flex:1 1 auto !important;
+  display:grid;
+  place-items:center;
+  min-height:0 !important;
+}
+#page-messages .chat-message-list{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  height:auto !important;
+  max-height:none !important;
+  display:flex;
+  flex-direction:column;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  padding:16px 18px !important;
+  gap:12px !important;
+}
+#page-messages .chat-input-row{
+  flex:0 0 auto !important;
+  position:relative !important;
+  bottom:auto !important;
+  padding:12px 16px !important;
+}
+#page-messages .chat-message{
+  max-width:min(72%, 720px) !important;
+}
+#page-messages .msg-body{
+  max-width:none !important;
+}
+#page-messages .chat-message.me{
+  margin-left:auto !important;
+  margin-right:0 !important;
+  flex-direction:row-reverse !important;
+}
+html[dir="rtl"] #page-messages .chat-message.me,
+body[data-language="ar"] #page-messages .chat-message.me{
+  margin-left:0 !important;
+  margin-right:auto !important;
+}
+
+@media (max-width: 860px){
+  body.chat-open{
+    overflow:hidden !important;
+  }
+  body.chat-open .app-header{
+    display:none !important;
+  }
+  body.chat-open .app-wrapper{
+    padding:0 !important;
+    max-width:none !important;
+    width:100vw !important;
+    min-height:100dvh !important;
+  }
+  #page-messages{
+    min-height:calc(100dvh - 92px) !important;
+  }
+  #page-messages .messages-card{
+    height:calc(100dvh - 110px) !important;
+    min-height:0 !important;
+    padding:12px !important;
+    border-radius:28px !important;
+  }
+  #page-messages .messages-layout{
+    display:block !important;
+    height:100% !important;
+    min-height:0 !important;
+  }
+  #page-messages .messages-sidebar{
+    height:100% !important;
+    max-height:100% !important;
+    border-radius:24px !important;
+    padding-bottom:90px !important;
+  }
+  #page-messages .messages-main{
+    position:fixed !important;
+    inset:0 !important;
+    width:100vw !important;
+    height:100dvh !important;
+    max-height:100dvh !important;
+    min-height:100dvh !important;
+    border-radius:0 !important;
+    z-index:100020 !important;
+    background:rgba(255,255,255,.98) !important;
+    transform:translateX(100%) !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+    transition:transform .22s ease, opacity .18s ease !important;
+    box-shadow:none !important;
+  }
+  body.chat-open #page-messages .messages-main,
+  html[dir="rtl"] body.chat-open #page-messages .messages-main,
+  body[data-language="ar"].chat-open #page-messages .messages-main{
+    transform:translateX(0) !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+  }
+  #chat-back{
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    min-width:70px !important;
+    height:42px !important;
+    border-radius:999px !important;
+  }
+  #page-messages .chat-header{
+    min-height:78px !important;
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 12px !important;
+    border-radius:0 !important;
+    box-shadow:0 8px 22px rgba(15,23,42,.08) !important;
+  }
+  #page-messages .chat-room-name{
+    font-size:22px !important;
+    line-height:1.15 !important;
+  }
+  #page-messages .chat-room-desc{
+    font-size:14px !important;
+  }
+  #page-messages .chat-message-list{
+    padding:14px 14px 18px !important;
+    background:linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.94)) !important;
+  }
+  #page-messages .chat-message{
+    max-width:88% !important;
+  }
+  #page-messages .chat-input-row{
+    padding:12px 14px calc(env(safe-area-inset-bottom) + 12px) !important;
+    box-shadow:0 -10px 26px rgba(15,23,42,.08) !important;
+  }
+  #page-messages .chat-input{
+    min-height:52px !important;
+    font-size:16px !important;
+  }
+  #page-messages .chat-send-btn{
+    min-width:78px !important;
+    min-height:52px !important;
+    font-size:15px !important;
+  }
+  body.chat-open #float-chat-toggle,
+  body.chat-open #float-chat-panel{
+    display:none !important;
+  }
+}

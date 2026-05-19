@@ -659,7 +659,7 @@ function setEmpty(on) {
   const listEl = document.getElementById("chat-message-list");
   if (!emptyEl || !listEl) return;
   emptyEl.style.display = on ? "block" : "none";
-  listEl.style.display = on ? "none" : "block";
+  listEl.style.display = on ? "none" : "flex";
 }
 
 function setInputEnabled(enabled) {
