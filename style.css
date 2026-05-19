@@ -3225,7 +3225,7 @@ body[data-language="ar"] input[id*="tracking" i] { direction: ltr; text-align: l
 #page-messages .messages-main{ background:rgba(255,255,255,.86); }
 #page-messages .chat-header{ padding:16px 18px; }
 #page-messages .chat-room-name{ font-size:19px; }
-#page-messages .chat-room-desc{ font-size:13px; }
+#page-messages .chat-room-desc{ font-size:13px; margin-top: 8px; }
 #page-messages .chat-message-list{ padding:18px; }
 #page-messages .chat-input-row{ padding:14px 16px; gap:10px; }
 #page-messages .chat-input{ min-height:46px; }
@@ -3253,6 +3253,7 @@ body[data-language="ar"] input[id*="tracking" i] { direction: ltr; text-align: l
     transform:translateX(100%) !important;
     transition:transform .22s ease !important;
     background:rgba(255,255,255,.98) !important;
+     margin-top: 0px;
   }
   body.chat-open #page-messages .messages-main{ transform:translateX(0) !important; }
   body[data-language="ar"].chat-open #page-messages .messages-main,
