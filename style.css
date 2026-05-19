@@ -4915,3 +4915,304 @@ html[dir="rtl"] .birthday-cake{
   0%,100%{ transform:scale(1); box-shadow:0 0 0 0 rgba(239,68,68,.38),0 10px 24px rgba(15,23,42,.16); }
   50%{ transform:scale(1.08); box-shadow:0 0 0 8px rgba(239,68,68,0),0 12px 30px rgba(239,68,68,.28); }
 }
+
+/* =========================
+   Phase 2 — Notes Pro only
+   Baseline: Phase 1 calendar ZIP
+========================= */
+#page-tasks .notes-pro-card{
+  padding:0 !important;
+  overflow:hidden !important;
+  min-height:calc(100vh - 150px) !important;
+}
+#page-tasks .notes-pro{
+  display:grid !important;
+  grid-template-columns:minmax(300px, 380px) minmax(0, 1fr) !important;
+  min-height:calc(100vh - 150px) !important;
+  background:linear-gradient(135deg, rgba(255,255,255,.84), rgba(255,255,255,.64)) !important;
+}
+#page-tasks .notes-pro-sidebar{
+  display:flex !important;
+  flex-direction:column !important;
+  gap:14px !important;
+  padding:22px !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  border-right:1px solid rgba(15,23,42,.08) !important;
+  background:linear-gradient(180deg, rgba(255,255,255,.82), rgba(248,250,252,.72)) !important;
+}
+body[dir="rtl"] #page-tasks .notes-pro-sidebar,
+html[dir="rtl"] #page-tasks .notes-pro-sidebar{
+  border-right:0 !important;
+  border-left:1px solid rgba(15,23,42,.08) !important;
+}
+#page-tasks .notes-pro-head{
+  display:flex !important;
+  justify-content:space-between !important;
+  align-items:flex-start !important;
+  gap:14px !important;
+  margin:0 !important;
+}
+#page-tasks .notes-pro-head h2{
+  margin:0 !important;
+  color:var(--ts-navy, #101b36) !important;
+  font-size:clamp(28px, 3vw, 42px) !important;
+  line-height:1 !important;
+}
+#page-tasks .notes-pro-head .subtitle{
+  margin:8px 0 0 !important;
+  max-width:230px !important;
+  line-height:1.35 !important;
+}
+#page-tasks .notes-new-btn{
+  width:auto !important;
+  min-width:150px !important;
+  padding:12px 16px !important;
+  border-radius:999px !important;
+  white-space:nowrap !important;
+}
+#page-tasks .notes-toolbar{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
+  align-items:center !important;
+  gap:10px !important;
+}
+#page-tasks .notes-search{
+  width:100% !important;
+  margin:0 !important;
+  border-radius:18px !important;
+  min-height:48px !important;
+}
+#page-tasks .notes-count{
+  display:grid !important;
+  place-items:center !important;
+  min-width:46px !important;
+  height:46px !important;
+  border-radius:16px !important;
+  font-weight:900 !important;
+  color:var(--ts-navy, #101b36) !important;
+  background:rgba(255,255,255,.75) !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+}
+#page-tasks .notes-pro-list{
+  display:grid !important;
+  gap:10px !important;
+  overflow:auto !important;
+  max-height:none !important;
+  min-height:0 !important;
+  padding:2px 4px 18px !important;
+}
+#page-tasks .note-pro-row{
+  text-align:initial !important;
+  width:100% !important;
+  display:block !important;
+  padding:14px !important;
+  border-radius:20px !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+  background:rgba(255,255,255,.82) !important;
+  box-shadow:0 10px 22px rgba(15,23,42,.06) !important;
+  cursor:pointer !important;
+}
+#page-tasks .note-pro-row.active{
+  background:color-mix(in srgb, var(--brand, #2488ff) 18%, white) !important;
+  border-color:color-mix(in srgb, var(--brand, #2488ff) 38%, white) !important;
+  box-shadow:0 14px 34px color-mix(in srgb, var(--brand, #2488ff) 16%, transparent) !important;
+}
+#page-tasks .note-row-top{
+  display:flex !important;
+  align-items:flex-start !important;
+  justify-content:space-between !important;
+  gap:12px !important;
+}
+#page-tasks .note-row-top strong{
+  font-size:15px !important;
+  line-height:1.25 !important;
+  color:var(--ts-navy, #101b36) !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  display:-webkit-box !important;
+  -webkit-line-clamp:2 !important;
+  -webkit-box-orient:vertical !important;
+}
+#page-tasks .note-row-top time{
+  flex:0 0 auto !important;
+  font-size:11px !important;
+  font-weight:800 !important;
+  color:var(--ts-muted, #6b7280) !important;
+}
+#page-tasks .note-pro-row span{
+  margin-top:8px !important;
+  color:var(--ts-muted, #6b7280) !important;
+  font-size:13px !important;
+  line-height:1.35 !important;
+  white-space:normal !important;
+  overflow:hidden !important;
+  display:-webkit-box !important;
+  -webkit-line-clamp:2 !important;
+  -webkit-box-orient:vertical !important;
+}
+#page-tasks .notes-empty-list{
+  border:1px dashed rgba(15,23,42,.14) !important;
+  border-radius:22px !important;
+  padding:20px !important;
+  color:var(--ts-muted, #6b7280) !important;
+  background:rgba(255,255,255,.55) !important;
+}
+#page-tasks .notes-empty-list strong{ display:block !important; color:var(--ts-navy, #101b36) !important; margin-bottom:6px !important; }
+#page-tasks .notes-pro-editor{
+  min-width:0 !important;
+  padding:0 !important;
+  background:rgba(255,255,255,.72) !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+#page-tasks .notes-mobile-bar{ display:none !important; }
+#page-tasks .notes-empty-state{
+  flex:1 !important;
+  min-height:520px !important;
+  display:grid !important;
+  place-content:center !important;
+  justify-items:center !important;
+  text-align:center !important;
+  padding:30px !important;
+  color:var(--ts-muted, #6b7280) !important;
+}
+#page-tasks .notes-empty-state.hidden{ display:none !important; }
+#page-tasks .notes-empty-icon{ font-size:54px !important; margin-bottom:14px !important; }
+#page-tasks .notes-empty-state h3{ margin:0 0 8px !important; color:var(--ts-navy, #101b36) !important; font-size:26px !important; }
+#page-tasks .notes-empty-state p{ margin:0 0 20px !important; max-width:380px !important; line-height:1.5 !important; }
+#page-tasks .notes-editor-pane{
+  flex:1 !important;
+  min-height:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  gap:12px !important;
+  padding:34px 42px 26px !important;
+}
+#page-tasks .notes-editor-pane.hidden{ display:none !important; }
+#page-tasks .note-title-input{
+  width:100% !important;
+  border:0 !important;
+  box-shadow:none !important;
+  background:transparent !important;
+  font-size:clamp(30px, 4vw, 54px) !important;
+  line-height:1.08 !important;
+  font-weight:950 !important;
+  padding:2px 0 12px !important;
+  color:var(--ts-navy, #101b36) !important;
+}
+#page-tasks .note-body-input{
+  flex:1 !important;
+  min-height:420px !important;
+  width:100% !important;
+  border:0 !important;
+  box-shadow:none !important;
+  background:transparent !important;
+  resize:none !important;
+  font-size:18px !important;
+  line-height:1.75 !important;
+  padding:0 !important;
+  color:#16213a !important;
+}
+#page-tasks .notes-editor-footer{
+  border-top:1px solid rgba(15,23,42,.08) !important;
+  padding-top:16px !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:16px !important;
+}
+#page-tasks .note-status-wrap{
+  display:flex !important;
+  flex-direction:column !important;
+  gap:3px !important;
+  color:var(--ts-muted, #6b7280) !important;
+  font-weight:800 !important;
+}
+#page-tasks #note-save-status.is-saving::before,
+#page-tasks #note-mobile-status.is-saving::before{
+  content:"";
+  display:inline-block;
+  width:12px;
+  height:12px;
+  margin-inline-end:7px;
+  border-radius:50%;
+  border:2px solid currentColor;
+  border-top-color:transparent;
+  animation:tsNoteSpin .75s linear infinite;
+  vertical-align:-1px;
+}
+#page-tasks #note-save-status.is-saved,
+#page-tasks #note-mobile-status.is-saved{ color:#047857 !important; }
+#page-tasks #note-save-status.is-error,
+#page-tasks #note-mobile-status.is-error{ color:#b91c1c !important; }
+#page-tasks #note-save-status.is-typing,
+#page-tasks #note-mobile-status.is-typing{ color:#b45309 !important; }
+#page-tasks .notes-editor-actions{ display:flex !important; gap:10px !important; align-items:center !important; }
+#page-tasks .notes-editor-actions button{ width:auto !important; min-width:120px !important; border-radius:999px !important; }
+@keyframes tsNoteSpin{ to{ transform:rotate(360deg); } }
+
+@media (max-width: 760px){
+  #page-tasks .notes-pro-card{
+    min-height:calc(100dvh - 24px) !important;
+    border-radius:26px !important;
+  }
+  #page-tasks .notes-pro{
+    grid-template-columns:1fr !important;
+    min-height:calc(100dvh - 24px) !important;
+    position:relative !important;
+  }
+  #page-tasks .notes-pro-sidebar{
+    border:0 !important;
+    padding:18px !important;
+    min-height:calc(100dvh - 24px) !important;
+  }
+  #page-tasks .notes-pro-head{
+    flex-direction:column !important;
+  }
+  #page-tasks .notes-new-btn{ width:100% !important; }
+  #page-tasks .notes-pro-editor{
+    position:absolute !important;
+    inset:0 !important;
+    z-index:5 !important;
+    transform:translateX(105%) !important;
+    transition:transform .22s ease !important;
+    background:rgba(255,255,255,.96) !important;
+  }
+  body[dir="rtl"] #page-tasks .notes-pro-editor,
+  html[dir="rtl"] #page-tasks .notes-pro-editor{
+    transform:translateX(-105%) !important;
+  }
+  #page-tasks .notes-pro.mobile-editor-open .notes-pro-editor{
+    transform:translateX(0) !important;
+  }
+  #page-tasks .notes-mobile-bar{
+    display:flex !important;
+    align-items:center !important;
+    justify-content:space-between !important;
+    padding:14px 16px !important;
+    border-bottom:1px solid rgba(15,23,42,.08) !important;
+    background:rgba(255,255,255,.88) !important;
+  }
+  #page-tasks .notes-mobile-bar .btn-secondary{ width:auto !important; border-radius:999px !important; }
+  #page-tasks .notes-editor-pane{
+    padding:18px !important;
+    min-height:0 !important;
+  }
+  #page-tasks .note-title-input{
+    font-size:30px !important;
+  }
+  #page-tasks .note-body-input{
+    min-height:0 !important;
+    font-size:17px !important;
+  }
+  #page-tasks .notes-editor-footer{
+    flex-direction:column !important;
+    align-items:stretch !important;
+  }
+  #page-tasks .notes-editor-actions{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+  }
+  #page-tasks .notes-editor-actions button{ width:100% !important; min-width:0 !important; }
+}

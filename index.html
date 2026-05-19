@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <title>TeleSyriana – Support OS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="style.css?v=phase1-calendar" />
+  <link rel="stylesheet" href="style.css?v=phase2-notes" />
 </head>
 
 <body data-build-version="1.8.0">
@@ -267,25 +267,52 @@
 
       <!-- NOTES PAGE -->
       <section id="page-tasks" class="page-section hidden">
-        <section class="card notes-app-card">
-          <div class="notes-app">
-            <aside class="notes-sidebar">
-              <div class="notes-head">
+        <section class="card notes-app-card notes-pro-card">
+          <div class="notes-app notes-pro" id="notes-app">
+            <aside class="notes-sidebar notes-pro-sidebar">
+              <div class="notes-head notes-pro-head">
                 <div>
                   <h2>الملاحظات</h2>
-                  <p class="subtitle">ملاحظات شخصية بأسلوب بسيط للمتابعة والأفكار.</p>
+                  <p class="subtitle">ملاحظات شخصية، متابعة أفكار، وقوائم عمل سريعة.</p>
                 </div>
-                <button id="note-new-btn" class="btn-primary" type="button">+ ملاحظة جديدة</button>
+                <button id="note-new-btn" class="btn-primary notes-new-btn" type="button">+ ملاحظة جديدة</button>
               </div>
-              <input id="notes-search" class="notes-search" type="text" placeholder="البحث في الملاحظات..." />
-              <div id="notes-list" class="notes-list"></div>
+
+              <div class="notes-toolbar">
+                <input id="notes-search" class="notes-search" type="text" placeholder="البحث في الملاحظات..." autocomplete="off" />
+                <span id="notes-count" class="notes-count">0</span>
+              </div>
+
+              <div id="notes-list" class="notes-list notes-pro-list"></div>
             </aside>
-            <main class="notes-editor">
-              <input id="note-title" class="note-title-input" type="text" placeholder="عنوان الملاحظة" />
-              <textarea id="note-body" class="note-body-input" placeholder="ابدأ الكتابة..."></textarea>
-              <div class="notes-editor-footer">
-                <span id="note-save-status">Ready</span>
-                <button id="note-delete-btn" class="btn-secondary danger" type="button">حذف</button>
+
+            <main class="notes-editor notes-pro-editor">
+              <div class="notes-mobile-bar">
+                <button id="notes-back-btn" class="btn-secondary" type="button">رجوع</button>
+                <span id="note-mobile-status">Saved</span>
+              </div>
+
+              <div id="notes-empty-state" class="notes-empty-state">
+                <div class="notes-empty-icon">📝</div>
+                <h3>اختر ملاحظة أو ابدأ واحدة جديدة</h3>
+                <p>الملاحظات محفوظة تلقائياً ومربوطة بحساب الموظف.</p>
+                <button id="note-empty-new-btn" class="btn-primary" type="button">+ ملاحظة جديدة</button>
+              </div>
+
+              <div id="notes-editor-pane" class="notes-editor-pane hidden">
+                <input id="note-title" class="note-title-input" type="text" placeholder="عنوان الملاحظة" autocomplete="off" />
+                <textarea id="note-body" class="note-body-input" placeholder="ابدأ الكتابة..."></textarea>
+
+                <div class="notes-editor-footer">
+                  <div class="note-status-wrap">
+                    <span id="note-save-status">Ready</span>
+                    <small id="note-updated-at">—</small>
+                  </div>
+                  <div class="notes-editor-actions">
+                    <button id="note-save-btn" class="btn-secondary" type="button">حفظ الآن</button>
+                    <button id="note-delete-btn" class="btn-secondary danger" type="button">حذف</button>
+                  </div>
+                </div>
               </div>
             </main>
           </div>
@@ -1181,8 +1208,8 @@
 
 
   <!-- scripts -->
-  <script type="module" src="app.js?v=phase1-calendar"></script>
-  <script type="module" src="tasks.js?v=2.2.0"></script>
+  <script type="module" src="app.js?v=phase2-notes"></script>
+  <script type="module" src="tasks.js?v=phase2-notes"></script>
   <script type="module" src="tickets.js?v=2.2.0"></script>
   <script type="module" src="reports.js?v=2.2.0"></script>
   <script type="module" src="payroll.js?v=2.2.0"></script>
