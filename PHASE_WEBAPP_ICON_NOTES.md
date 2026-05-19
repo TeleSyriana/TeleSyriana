@@ -1,0 +1,11 @@
+PHASE WEB APP ICON
+- Added iPhone/iPad Home Screen icon support using the provided TeleSyriana logo.
+- Added apple-touch-icon, manifest, theme color, favicon set, and standalone web-app meta tags.
+- Added generated icon files:
+  - images/icon-180.png
+  - images/icon-192.png
+  - images/icon-512.png
+  - images/favicon-32.png
+  - images/favicon-16.png
+  - images/favicon.ico
+  - site.webmanifest
