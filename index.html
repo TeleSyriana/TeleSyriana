@@ -317,69 +317,41 @@
 
           <div id="ticket-alert" class="alert hidden"></div>
 
-          <div id="shopify-live-panel" class="shopify-live-panel">
-            <div class="shopify-live-head">
-              <div>
-                <h3>Shopify Live Order Lookup</h3>
-                <p>Search once here, confirm Firebase save, then use the structured order details inside the ticket.</p>
-              </div>
-              <button id="shopify-live-settings" type="button" class="btn-secondary">API key</button>
-            </div>
-            <div class="shopify-live-row">
-              <input id="shopify-live-query" type="text" placeholder="Order # only recommended, or email / phone / customer name" />
-              <button id="shopify-live-search" type="button" class="btn-primary">Search Shopify</button>
-              <button id="shopify-live-use-ticket" type="button" class="btn-secondary" disabled>Use structured order in ticket</button>
-            </div>
-            <div id="shopify-live-result" class="shopify-live-result muted">No Shopify order loaded yet.</div>
-          </div>
-
-          <div id="order-admin-panel" class="order-admin-panel hidden">
+          <div id="order-admin-panel" class="order-admin-panel">
             <div class="order-admin-head">
               <div>
-                <h3>بيانات الطلب / ذاكرة Shopify</h3>
-                <p>حفظ يدوي لبيانات الطلب حالياً لاستخدام الملء التلقائي. يمكن ربط Shopify API لاحقاً.</p>
+                <h3>Shopify Live Order Lookup</h3>
+                <p>Search real Shopify orders from the Render backend, save them to Firebase, then use the structured order inside a ticket.</p>
               </div>
-              <button id="order-admin-toggle" type="button" class="btn-secondary">إضافة / تحديث طلب</button>
+              <button id="shopify-api-key-btn" type="button" class="btn-secondary">API key</button>
             </div>
 
-            <form id="order-cache-form" class="order-cache-form hidden">
-              <div class="order-cache-grid">
-                <label>رقم الطلب #<input id="order-cache-number" type="text" placeholder="2515" required /></label>
-                <label>اسم العميل<input id="order-cache-customer" type="text" placeholder="اسم العميل" /></label>
-                <label>البريد الإلكتروني<input id="order-cache-email" type="email" placeholder="customer@email.com" /></label>
-                <label>رقم الهاتف<input id="order-cache-phone" type="text" placeholder="اختياري" /></label>
-                <label>الإجمالي المدفوع<input id="order-cache-total" type="text" placeholder="£34.99" /></label>
-                <label>تاريخ الطلب<input id="order-cache-date" type="date" /></label>
-                <label>شركة الشحن<input id="order-cache-courier" type="text" placeholder="Royal Mail / EVRI / YunExpress" /></label>
-                <label>رقم التتبع<input id="order-cache-tracking" type="text" placeholder="رقم التتبع" /></label>
-                <label>حالة الطلب
-                  <select id="order-cache-status">
-                    <option value="unknown">غير معروف</option>
-                    <option value="unfulfilled">غير منفذ</option>
-                    <option value="processing">قيد المعالجة</option>
-                    <option value="fulfilled">تم التنفيذ</option>
-                    <option value="cancelled">ملغي</option>
-                    <option value="refunded">تم الاسترداد</option>
-                  </select>
-                </label>
-                <label>حالة التوصيل
-                  <select id="order-cache-delivery">
-                    <option value="unknown">غير معروف</option>
-                    <option value="label_created">تم إنشاء الملصق</option>
-                    <option value="in_transit">قيد الشحن</option>
-                    <option value="delivered">تم التوصيل</option>
-                    <option value="delayed">متأخر</option>
-                    <option value="lost">مفقود / قيد التحقيق</option>
-                  </select>
-                </label>
+            <div class="shopify-live-box">
+              <div class="shopify-live-search-row">
+                <input id="shopify-live-query" type="text" placeholder="Order #, email, phone, customer name" />
+                <button id="shopify-live-search-btn" type="button" class="btn-primary">Search Shopify</button>
+                <button id="shopify-live-use-btn" type="button" class="btn-secondary" disabled>Use in ticket</button>
               </div>
-              <label>المنتجات<textarea id="order-cache-items" rows="2" placeholder="iرقم الهاتف 14 Silicone Case - Olive + Screen Protector 2D"></textarea></label>
-              <label>عنوان الشحن<textarea id="order-cache-address" rows="2" placeholder="اختياري"></textarea></label>
-              <label>ملاحظات داخلية للطلب<textarea id="order-cache-notes" rows="2" placeholder="أي ملاحظة مفيدة للدعم"></textarea></label>
-              <div class="ticket-form-footer">
-                <button type="button" id="order-cache-load" class="btn-secondary">تحميل الطلب</button>
-                <button type="submit" class="btn-primary" style="width:auto">حفظ بيانات الطلب</button>
-              </div>
+              <div id="shopify-live-status" class="shopify-live-status">No Shopify order loaded yet.</div>
+              <div id="shopify-live-result" class="shopify-live-result hidden"></div>
+            </div>
+
+            <form id="order-cache-form" class="order-cache-form hidden" aria-hidden="true">
+              <input id="order-cache-number" type="hidden" />
+              <input id="order-cache-customer" type="hidden" />
+              <input id="order-cache-email" type="hidden" />
+              <input id="order-cache-phone" type="hidden" />
+              <input id="order-cache-total" type="hidden" />
+              <input id="order-cache-date" type="hidden" />
+              <input id="order-cache-courier" type="hidden" />
+              <input id="order-cache-tracking" type="hidden" />
+              <select id="order-cache-status" class="hidden"><option value="unknown">unknown</option></select>
+              <select id="order-cache-delivery" class="hidden"><option value="unknown">unknown</option></select>
+              <textarea id="order-cache-items" class="hidden"></textarea>
+              <textarea id="order-cache-address" class="hidden"></textarea>
+              <textarea id="order-cache-notes" class="hidden"></textarea>
+              <button id="order-cache-load" type="button" class="hidden">load</button>
+              <button id="order-admin-toggle" type="button" class="hidden">toggle</button>
             </form>
           </div>
 
@@ -457,8 +429,7 @@
             </label>
 
             <div class="ticket-form-footer">
-              <button type="button" id="ticket-shopify-autofill-btn" class="btn-secondary">جلب/تحديث من Shopify</button>
-              <button type="button" id="ticket-autofill-btn" class="btn-secondary">استخدام الطلب المحفوظ</button>
+              <button type="button" id="ticket-autofill-btn" class="btn-secondary">ملء تلقائي من رقم الطلب</button>
               <button type="submit" class="btn-primary" style="width:auto">إنشاء التذكرة</button>
             </div>
           </form>
