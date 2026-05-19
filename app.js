@@ -784,6 +784,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }, true);
   document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
   document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
+  ensureProfilePhotoControls();
 
   document.querySelectorAll("[data-quick-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1132,6 +1133,7 @@ function updateDashboardUI() {
   const statusSelect = document.getElementById("status-select");
 
   if (welcomeTitle) welcomeTitle.textContent = getLanguage() === "ar" ? `مرحباً، ${currentUser.name}` : `Welcome, ${currentUser.name}`;
+  renderHomeProfilePhoto(currentProfileCache().profilePhoto || "");
   if (welcomeSubtitle) {
     welcomeSubtitle.textContent = `Logged in as ${currentUser.role.toUpperCase()} (CCMS: ${currentUser.id})`;
   }
@@ -1236,6 +1238,113 @@ function buildSupervisorTableFromFirestore(rows) {
 
 function profileCacheKey(userId) {
   return `${PROFILE_CACHE_PREFIX}:${userId}`;
+}
+
+
+function getProfileInitial(name) {
+  const parts = String(name || currentUser?.name || currentUser?.id || "U").trim().split(/\s+/).filter(Boolean).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase() || "").join("") || "U";
+}
+
+function currentProfileCache() {
+  if (!currentUser?.id) return {};
+  try { return JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}"); } catch { return {}; }
+}
+
+function saveCurrentProfileCache(patch = {}) {
+  if (!currentUser?.id) return {};
+  const merged = { ...currentProfileCache(), ...patch };
+  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify(merged));
+  return merged;
+}
+
+function setRoundImageOrInitial(container, imgEl, initialEl, imageData, name) {
+  if (initialEl) initialEl.textContent = getProfileInitial(name);
+  if (imgEl) {
+    if (imageData) {
+      imgEl.src = imageData;
+      imgEl.classList.remove("hidden");
+    } else {
+      imgEl.removeAttribute("src");
+      imgEl.classList.add("hidden");
+    }
+  }
+  if (container) container.classList.toggle("has-photo", Boolean(imageData));
+}
+
+function renderSettingsProfilePhoto(imageData = "", name = currentUser?.name) {
+  const picker = document.getElementById("settings-photo-picker");
+  const img = document.getElementById("settings-photo-img");
+  const initial = document.getElementById("settings-photo-initial");
+  const removeBtn = document.getElementById("remove-profile-photo-btn");
+  setRoundImageOrInitial(picker, img, initial, imageData, name);
+  if (removeBtn) removeBtn.classList.toggle("hidden", !imageData);
+}
+
+function renderHomeProfilePhoto(imageData = "") {
+  const img = document.getElementById("home-profile-photo");
+  if (!img) return;
+  if (imageData) {
+    img.src = imageData;
+    img.classList.remove("hidden");
+  } else {
+    img.removeAttribute("src");
+    img.classList.add("hidden");
+  }
+}
+
+function renderProfilePhotosFromCache() {
+  const cached = currentProfileCache();
+  renderSettingsProfilePhoto(cached.profilePhoto || "", cached.name || currentUser?.name);
+  renderHomeProfilePhoto(cached.profilePhoto || "");
+}
+
+function compressProfilePhoto(file, maxSize = 360, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve("");
+    if (!String(file.type || "").startsWith("image/")) return reject(new Error("Please choose an image file."));
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read image."));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Could not load image."));
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width || maxSize, img.height || maxSize));
+        const w = Math.max(1, Math.round((img.width || maxSize) * scale));
+        const h = Math.max(1, Math.round((img.height || maxSize) * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleProfilePhotoSelected(file) {
+  if (!currentUser?.id || !file) return;
+  try {
+    const profilePhoto = await compressProfilePhoto(file);
+    saveCurrentProfileCache({ profilePhoto });
+    currentUser = { ...currentUser, profilePhoto };
+    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+    renderProfilePhotosFromCache();
+    window.dispatchEvent(new CustomEvent("telesyriana:profile-photo-updated", { detail: { userId: currentUser.id, profilePhoto, name: currentUser.name } }));
+    try {
+      await setDoc(doc(collection(db, USER_PROFILE_COL), currentUser.id), { profilePhoto, updatedAt: serverTimestamp() }, { merge: true });
+      showSettingsAlert(getLanguage() === "ar" ? "تم تحديث صورة الحساب." : "Profile photo updated.");
+    } catch (err) {
+      console.warn("profile photo saved locally only", err);
+      showSettingsAlert(getLanguage() === "ar" ? "تم حفظ الصورة محلياً، لكن فشل حفظ Firestore." : "Photo saved locally, but Firestore save failed.", true);
+    }
+  } catch (err) {
+    console.error("profile photo upload failed", err);
+    showSettingsAlert(getLanguage() === "ar" ? "فشل رفع الصورة. جرّب صورة أصغر." : "Photo upload failed. Try a smaller image.", true);
+  }
 }
 
 function showSettingsAlert(message, danger = false) {
@@ -1372,6 +1481,8 @@ const UI_TEXT = {
     menu: "القائمة",
     removeBg: "حذف الخلفية المرفوعة",
     bgHint: "يتم الحفظ محلياً أولاً للتجربة. المزامنة مع Firestore تعمل بعد إنشاء قاعدة البيانات.",
+    profilePhoto: "صورة الحساب",
+    removePhoto: "حذف الصورة",
   },
   en: {
     nav: {
@@ -1400,6 +1511,8 @@ const UI_TEXT = {
     menu: "Menu",
     removeBg: "Remove uploaded background",
     bgHint: "Saved locally first for testing. Firestore sync works after the database is created.",
+    profilePhoto: "Profile photo",
+    removePhoto: "Remove photo",
   }
 };
 
@@ -1534,6 +1647,8 @@ function applyLanguage(language = "ar") {
   setLabelFor("set-background", dict.background);
   setLabelFor("set-bg-upload", dict.uploadBg, dict.bgHint);
   setText("#remove-bg-btn", dict.removeBg);
+  setText("#remove-profile-photo-btn", dict.removePhoto);
+  setText("#profile-photo-hint", dict.profilePhoto);
   setLabelFor("set-birthday", dict.birthday);
   setLabelFor("set-notes", dict.notes);
   setText('#settings-form button[type="submit"]', dict.save);
@@ -1572,7 +1687,7 @@ async function loadUserProfile() {
   } catch {}
 
   if (cached.name) {
-    currentUser = { ...currentUser, name: cached.name };
+    currentUser = { ...currentUser, name: cached.name, profilePhoto: cached.profilePhoto || currentUser.profilePhoto || "" };
     localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
     if (nameEl) nameEl.value = cached.name;
   }
@@ -1585,6 +1700,8 @@ async function loadUserProfile() {
   applyLanguage(cachedLanguage);
   applyTheme(cached.gender || "");
   applyBackground(cached.background || "default", cached.backgroundImage || "");
+  renderSettingsProfilePhoto(cached.profilePhoto || "", cached.name || currentUser.name);
+  renderHomeProfilePhoto(cached.profilePhoto || "");
 
   try {
     const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
@@ -1592,7 +1709,8 @@ async function loadUserProfile() {
     if (snap.exists()) {
       const d = snap.data();
       const savedName = d.name || currentUser.name || currentUser.id;
-      currentUser = { ...currentUser, name: savedName };
+      const savedProfilePhoto = d.profilePhoto || cached.profilePhoto || "";
+      currentUser = { ...currentUser, name: savedName, profilePhoto: savedProfilePhoto };
       localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
       if (nameEl) nameEl.value = savedName;
       if (bdayEl) bdayEl.value = d.birthday || "";
@@ -1604,6 +1722,8 @@ async function loadUserProfile() {
       applyLanguage(savedLanguage);
       applyTheme(d.gender || "");
       applyBackground(d.background || "default", d.backgroundImage || cached.backgroundImage || "");
+      renderSettingsProfilePhoto(d.profilePhoto || cached.profilePhoto || "", savedName);
+      renderHomeProfilePhoto(d.profilePhoto || cached.profilePhoto || "");
       localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({
         name: d.name || currentUser.name || "",
         birthday: d.birthday || "",
@@ -1612,6 +1732,7 @@ async function loadUserProfile() {
         language: d.language || savedLanguage || "ar",
         background: d.background || "default",
         backgroundImage: d.backgroundImage || cached.backgroundImage || "",
+        profilePhoto: d.profilePhoto || cached.profilePhoto || "",
       }));
     }
   } catch (err) {
@@ -1635,14 +1756,18 @@ async function handleSettingsSave(e) {
   let cachedProfileForBg = {};
   try { cachedProfileForBg = JSON.parse(localStorage.getItem(profileCacheKey(currentUser.id)) || "{}"); } catch {}
   const backgroundImage = background === "custom" ? (cachedProfileForBg.backgroundImage || "") : "";
+  const profilePhoto = cachedProfileForBg.profilePhoto || "";
 
   applyLanguage(language);
   applyTheme(gender);
   applyBackground(background, backgroundImage);
-  currentUser = { ...currentUser, name };
+  currentUser = { ...currentUser, name, profilePhoto };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
-  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ name, birthday, notes, gender, language, background, backgroundImage }));
+  localStorage.setItem(profileCacheKey(currentUser.id), JSON.stringify({ name, birthday, notes, gender, language, background, backgroundImage, profilePhoto }));
   updateDashboardUI();
+  renderSettingsProfilePhoto(profilePhoto, name);
+  renderHomeProfilePhoto(profilePhoto);
+  window.dispatchEvent(new CustomEvent("telesyriana:profile-photo-updated", { detail: { userId: currentUser.id, profilePhoto, name } }));
   updatePresence(true).catch(() => {});
 
   const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
@@ -1659,6 +1784,7 @@ async function handleSettingsSave(e) {
         language,
         background,
         backgroundImage,
+        profilePhoto,
         updatedAt: serverTimestamp(),
       },
       { merge: true }
@@ -1726,6 +1852,42 @@ function ensureBackgroundRemoveControl() {
   if (!btn || btn.dataset.bound === "1") return;
   btn.dataset.bound = "1";
   btn.addEventListener("click", () => removeUploadedBackground());
+}
+
+
+function ensureProfilePhotoControls() {
+  const picker = document.getElementById("settings-photo-picker");
+  const input = document.getElementById("set-profile-photo");
+  const removeBtn = document.getElementById("remove-profile-photo-btn");
+  if (picker && input && picker.dataset.bound !== "1") {
+    picker.dataset.bound = "1";
+    picker.addEventListener("click", () => input.click());
+  }
+  if (input && input.dataset.bound !== "1") {
+    input.dataset.bound = "1";
+    input.addEventListener("change", () => handleProfilePhotoSelected(input.files?.[0]));
+  }
+  if (removeBtn && removeBtn.dataset.bound !== "1") {
+    removeBtn.dataset.bound = "1";
+    removeBtn.addEventListener("click", () => {
+      if (!currentUser?.id) return;
+      saveCurrentProfileCache({ profilePhoto: "" });
+      if (currentUser) {
+        currentUser = { ...currentUser, profilePhoto: "" };
+        localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+      }
+      renderProfilePhotosFromCache();
+      window.dispatchEvent(new CustomEvent("telesyriana:profile-photo-updated", { detail: { userId: currentUser.id, profilePhoto: "", name: currentUser.name } }));
+      try {
+        setDoc(doc(collection(db, USER_PROFILE_COL), currentUser.id), { profilePhoto: "", updatedAt: serverTimestamp() }, { merge: true })
+          .then(() => showSettingsAlert(getLanguage() === "ar" ? "تم حذف صورة الحساب." : "Profile photo removed."))
+          .catch((err) => { console.warn("profile photo remove firestore failed", err); showSettingsAlert(getLanguage() === "ar" ? "تم الحذف محلياً، لكن فشل حفظ Firestore." : "Removed locally, but Firestore save failed.", true); });
+      } catch (err) {
+        console.warn("profile photo remove local only", err);
+        showSettingsAlert(getLanguage() === "ar" ? "تم حذف الصورة محلياً." : "Photo removed locally.", true);
+      }
+    });
+  }
 }
 
 /* --------------------------- View switching ----------------------------- */

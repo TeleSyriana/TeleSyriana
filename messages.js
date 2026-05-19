@@ -24,6 +24,7 @@ const {
 } = fs;
 
 const USER_KEY = "telesyrianaUser";
+const PROFILE_CACHE_PREFIX = "telesyrianaProfile";
 
 const MESSAGES_COL = "globalالرسائل";
 const AGENT_DAYS_COL = "agentDays";
@@ -350,7 +351,14 @@ function getUserFromStorage() {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
     const u = JSON.parse(raw);
-    if (u?.id && u?.name && u?.role) return u;
+    if (u?.id && u?.name && u?.role) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(`${PROFILE_CACHE_PREFIX}:${u.id}`) || "{}");
+        if (cached?.profilePhoto) u.profilePhoto = cached.profilePhoto;
+        if (cached?.name) u.name = cached.name;
+      } catch {}
+      return u;
+    }
   } catch {}
   return null;
 }
@@ -511,6 +519,7 @@ function subscribeProfilesSidebar() {
       profileCache.set(String(d.id), { id: d.id, ...d.data() });
     });
     applyBirthdayBadges();
+    applyProfileAvatars();
   }, (err) => console.warn("profile listener failed", err));
 }
 function translateMessagesUI() {
@@ -589,6 +598,42 @@ function getInitials(name = "") {
   return parts.map((p) => p[0]?.toUpperCase() || "").join("") || "U";
 }
 
+
+function getProfilePhoto(userId) {
+  const id = String(userId || "");
+  if (!id) return "";
+  if (currentUser && String(currentUser.id) === id && currentUser.profilePhoto) return currentUser.profilePhoto;
+  const p = profileCache.get(id) || {};
+  return p.profilePhoto || p.photoURL || p.avatarUrl || p.avatar || "";
+}
+
+function setAvatarVisual(el, userId, fallbackName = "") {
+  if (!el) return;
+  const id = String(userId || el.dataset.avatar || el.dataset.userId || "");
+  const initial = el.dataset.initial || getInitials(fallbackName || el.textContent || "User");
+  if (!el.dataset.initial) el.dataset.initial = initial;
+  const photo = getProfilePhoto(id);
+  el.classList.toggle("has-photo", Boolean(photo));
+  el.innerHTML = "";
+  if (photo) {
+    const img = document.createElement("img");
+    img.src = photo;
+    img.alt = "Profile photo";
+    el.appendChild(img);
+  } else {
+    el.textContent = initial;
+  }
+}
+
+function applyProfileAvatars(userId = "") {
+  const selector = userId ? `[data-avatar="${CSS.escape(String(userId))}"], .msg-avatar[data-user-id="${CSS.escape(String(userId))}"]` : '[data-avatar], .msg-avatar[data-user-id]';
+  document.querySelectorAll(selector).forEach((el) => {
+    const id = el.dataset.avatar || el.dataset.userId;
+    const name = profileCache.get(String(id))?.name || document.querySelector(`[data-name="${CSS.escape(String(id || ""))}"]`)?.textContent || el.dataset.initial || el.textContent;
+    setAvatarVisual(el, id, name);
+  });
+}
+
 function ensureTopLoader(listEl) {
   if (!listEl) return null;
   let loader = listEl.querySelector("#chat-top-loader");
@@ -665,7 +710,9 @@ function createMessageNode(m, showRole) {
 
   const avatar = document.createElement("div");
   avatar.className = "msg-avatar";
-  avatar.textContent = getInitials(m.name || "User");
+  avatar.dataset.userId = String(m.userId || "");
+  avatar.dataset.initial = getInitials(m.name || "User");
+  setAvatarVisual(avatar, m.userId, m.name || "User");
 
   const body = document.createElement("div");
   body.className = "msg-body";
@@ -720,6 +767,7 @@ function renderFresh(listEl, msgs, showRole) {
   listEl.appendChild(frag);
   scrollMessagesToBottom();
   updateMessageReadIndicators();
+  applyProfileAvatars();
 }
 
 function renderChunkToTop(listEl, items, showRole) {
@@ -1060,11 +1108,12 @@ function renderRecentsList() {
     btn.dataset.recentId = r.id;
 
     const badge = r.type === "dm" ? "DM" : (r.type === "group" ? "G" : "#");
-    const avatarLetter = String(r.title || badge).trim().slice(0, 1).toUpperCase();
+    const otherId = r.type === "dm" ? String(r.otherId || String(r.id || "").replace(/^dm:/, "")) : "";
+    const avatarLetter = getInitials(r.title || badge);
 
     btn.innerHTML = `
       <div class="chat-row">
-        <div class="chat-avatar role-room">${avatarLetter}</div>
+        <div class="chat-avatar role-room" ${otherId ? `data-avatar="${otherId}" data-initial="${avatarLetter}"` : ""}>${avatarLetter}</div>
         <div class="chat-row-text">
           <div class="chat-room-title">${r.title || "Chat"}</div>
           <div class="chat-room-sub">${r.desc || ""}</div>
@@ -1365,6 +1414,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setCurrentUser();
   subscribePresenceSidebar();
   subscribeProfilesSidebar();
+  applyProfileAvatars();
 
   makeCollapsible("Rooms", "rooms-list");
   makeCollapsible("Groups", "groups-list");
@@ -1535,7 +1585,9 @@ window.addEventListener("telesyriana:user-changed", () => {
   subscribeRecentsCloud();
   subscribeالحالةDots();
   subscribeProfilesSidebar();
+  applyProfileAvatars();
   applyBirthdayBadges();
+  applyProfileAvatars();
 
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1561,4 +1613,13 @@ window.addEventListener("telesyriana:user-changed", () => {
 });
 
 
-try { window.addEventListener("telesyriana:language-changed", () => { translateMessagesUI(); applyBirthdayBadges(); }); } catch {}
+try { window.addEventListener("telesyriana:profile-photo-updated", (e) => {
+  const d = e.detail || {};
+  const id = String(d.userId || "");
+  if (id) {
+    profileCache.set(id, { ...(profileCache.get(id) || {}), id, name: d.name || profileCache.get(id)?.name || "", profilePhoto: d.profilePhoto || "" });
+    if (currentUser && String(currentUser.id) === id) currentUser = { ...currentUser, profilePhoto: d.profilePhoto || "", name: d.name || currentUser.name };
+    applyProfileAvatars(id);
+  }
+}); } catch {}
+try { window.addEventListener("telesyriana:language-changed", () => { translateMessagesUI(); applyBirthdayBadges(); applyProfileAvatars(); }); } catch {}

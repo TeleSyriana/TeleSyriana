@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <title>TeleSyriana – Support OS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="style.css?v=phase3-payroll-fontfix2" />
+  <link rel="stylesheet" href="style.css?v=profile-photo-v1" />
 </head>
 
 <body data-build-version="phase3-shifts">
@@ -80,7 +80,10 @@
         <div class="dashboard-layout">
 
           <section class="card dashboard-main">
-            <h1 id="welcome-title">مرحباً</h1>
+            <div class="welcome-line">
+              <img id="home-profile-photo" class="home-profile-photo hidden" alt="Profile photo" />
+              <h1 id="welcome-title">مرحباً</h1>
+            </div>
             <p id="welcome-subtitle" class="subtitle"></p>
 
             <div class="status-box">
@@ -1164,8 +1167,21 @@
       <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
         <div class="card">
-          <h2>الإعدادات</h2>
-          <p class="subtitle">تحديث المعلومات الشخصية</p>
+          <div class="settings-head">
+            <div>
+              <h2>الإعدادات</h2>
+              <p class="subtitle">تحديث المعلومات الشخصية</p>
+            </div>
+            <div class="settings-photo-box">
+              <button type="button" id="settings-photo-picker" class="settings-photo-preview" aria-label="Upload profile photo">
+                <span id="settings-photo-initial">U</span>
+                <img id="settings-photo-img" class="hidden" alt="Profile photo preview" />
+              </button>
+              <input type="file" id="set-profile-photo" accept="image/*" hidden />
+              <button type="button" id="remove-profile-photo-btn" class="btn-secondary profile-photo-remove hidden">Remove photo</button>
+              <small class="hint" id="profile-photo-hint">Profile photo</small>
+            </div>
+          </div>
 
           <div id="settings-alert" class="alert hidden"></div>
           <form id="settings-form">
@@ -1237,14 +1253,14 @@
 
 
   <!-- scripts -->
-  <script type="module" src="app.js?v=phase3-payroll-fontfix2"></script>
-  <script type="module" src="tasks.js?v=phase3-payroll-fontfix2"></script>
-  <script type="module" src="tickets.js?v=phase3-payroll-fontfix2"></script>
-  <script type="module" src="reports.js?v=phase3-payroll-fontfix2"></script>
-  <script type="module" src="payroll.js?v=phase3-payroll-fontfix2"></script>
-  <script type="module" src="messages.js?v=phase3-payroll-fontfix2"></script>
-  <script type="module" src="groups.js?v=phase3-payroll-fontfix2"></script>
-  <script type="module" src="meetings.js?v=phase3-payroll-fontfix2"></script>
+  <script type="module" src="app.js?v=profile-photo-v1"></script>
+  <script type="module" src="tasks.js?v=profile-photo-v1"></script>
+  <script type="module" src="tickets.js?v=profile-photo-v1"></script>
+  <script type="module" src="reports.js?v=profile-photo-v1"></script>
+  <script type="module" src="payroll.js?v=profile-photo-v1"></script>
+  <script type="module" src="messages.js?v=profile-photo-v1"></script>
+  <script type="module" src="groups.js?v=profile-photo-v1"></script>
+  <script type="module" src="meetings.js?v=profile-photo-v1"></script>
 
 </body>
 </html>
