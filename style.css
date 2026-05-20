@@ -6096,3 +6096,80 @@ body[data-bg-tone="dark"] .ticket-access-note{
   .ticket-access-note{ font-size:.86rem; padding:11px 12px; border-radius:16px; }
   .ticket-global-badge{ width:100%; margin-top:2px; }
 }
+
+/* Tickets v3.4 — Chargeback visibility */
+.chargeback-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:max-content;
+  max-width:100%;
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+  line-height:1;
+  margin:4px 6px 4px 0;
+  border:1px solid rgba(148,163,184,.25);
+  background:rgba(241,245,249,.9);
+  color:#334155;
+}
+.chargeback-badge.active{
+  background:#fee2e2;
+  color:#b91c1c;
+  border-color:#fecaca;
+  box-shadow:0 0 0 0 rgba(239,68,68,.35);
+  animation:chargebackPulse 1.35s ease-in-out infinite;
+}
+.chargeback-badge.lost{
+  background:#ffe4e6;
+  color:#9f1239;
+  border-color:#fecdd3;
+}
+.chargeback-badge.won{
+  background:#dcfce7;
+  color:#166534;
+  border-color:#bbf7d0;
+}
+.chargeback-badge.info{
+  background:#dbeafe;
+  color:#1e40af;
+  border-color:#bfdbfe;
+}
+.ticket-row.chargeback-active,
+.ticket-shopify-card.chargeback-active,
+.shopify-order-card.chargeback-active{
+  border-color:rgba(239,68,68,.75) !important;
+  box-shadow:0 0 0 3px rgba(239,68,68,.12), 0 18px 42px rgba(185,28,28,.16) !important;
+}
+.ticket-row.chargeback-active{
+  background:linear-gradient(135deg,rgba(254,242,242,.98),rgba(255,255,255,.96)) !important;
+}
+.ticket-shopify-card.chargeback-active,
+.shopify-order-card.chargeback-active{
+  background:linear-gradient(180deg,rgba(255,245,245,.98),rgba(255,255,255,.96)) !important;
+}
+.chargeback-field.active{
+  border-color:#fecaca !important;
+  background:#fff1f2 !important;
+}
+.chargeback-field.lost{
+  border-color:#fecdd3 !important;
+  background:#fff1f2 !important;
+}
+.chargeback-field.won{
+  border-color:#bbf7d0 !important;
+  background:#f0fdf4 !important;
+}
+.chargeback-field.info{
+  border-color:#bfdbfe !important;
+  background:#eff6ff !important;
+}
+@keyframes chargebackPulse{
+  0%{ box-shadow:0 0 0 0 rgba(239,68,68,.38); }
+  70%{ box-shadow:0 0 0 10px rgba(239,68,68,0); }
+  100%{ box-shadow:0 0 0 0 rgba(239,68,68,0); }
+}
+@media (max-width: 700px){
+  .chargeback-badge{ font-size:11px; padding:5px 8px; }
+}

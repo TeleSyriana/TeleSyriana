@@ -179,6 +179,114 @@ function fmtPurchaseAge(v) {
   return tt(`تم الشراء منذ أكثر من ${years} سنة`, `Bought ${years}+ years ago`);
 }
 
+const ACTIVE_DISPUTE_STATUSES = new Set(["needs_response", "under_review", "open", "submitted", "accepted"]);
+const WON_DISPUTE_STATUSES = new Set(["won", "prevented"]);
+const LOST_DISPUTE_STATUSES = new Set(["lost"]);
+
+function disputeLabel() { return tt("النزاع البنكي", "Chargeback"); }
+function disputeStatusLabel(status) {
+  const s = String(status || "").toLowerCase();
+  const ar = {
+    needs_response: "يحتاج رد",
+    under_review: "قيد المراجعة",
+    open: "مفتوح",
+    submitted: "تم الإرسال",
+    accepted: "نشط",
+    won: "ربحنا النزاع",
+    lost: "خسرنا النزاع",
+    prevented: "تم منعه",
+  };
+  const en = {
+    needs_response: "Needs response",
+    under_review: "Under review",
+    open: "Open",
+    submitted: "Submitted",
+    accepted: "Active",
+    won: "Won",
+    lost: "Lost",
+    prevented: "Prevented",
+  };
+  return (ticketLang() === "ar" ? ar[s] : en[s]) || (status || "—");
+}
+function normalizeDisputeStatus(status) {
+  return String(status || "").trim().toLowerCase().replace(/\s+/g, "_");
+}
+function normalizeDispute(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const status = normalizeDisputeStatus(raw.status || raw.dispute_status || raw.disputeStatus || raw.outcome || raw.state);
+  const type = String(raw.type || raw.disputeType || raw.kind || "chargeback").toLowerCase();
+  const amount = raw.amount || raw.amount_money?.amount || raw.amountMoney?.amount || raw.total || "";
+  const currency = raw.currency || raw.amount_money?.currency || raw.amountMoney?.currency || "";
+  return {
+    id: raw.id || raw.dispute_id || raw.disputeId || "",
+    type,
+    status,
+    reason: raw.reason || raw.network_reason_code || raw.networkReasonCode || "",
+    amount: amount ? `${amount} ${currency}`.trim() : "",
+    evidenceDueBy: raw.evidence_due_by || raw.evidenceDueBy || raw.evidence_deadline || "",
+    evidenceSentOn: raw.evidence_sent_on || raw.evidenceSentOn || "",
+    finalizedOn: raw.finalized_on || raw.finalizedOn || "",
+    initiatedAt: raw.initiated_at || raw.initiatedAt || raw.created_at || raw.createdAt || "",
+  };
+}
+function collectDisputes(source) {
+  if (!source) return [];
+  const raw = source.rawShopify || source.raw || source;
+  const candidates = [];
+  [source.disputes, source.chargebacks, raw.disputes, raw.chargebacks, raw.order?.disputes, raw.order?.chargebacks].forEach((arr) => {
+    if (Array.isArray(arr)) candidates.push(...arr);
+  });
+  [source.dispute, source.chargeback, source.disputeSummary, source.orderDisputeSummary, raw.dispute, raw.chargeback, raw.disputeSummary, raw.orderDisputeSummary, raw.order?.disputeSummary].forEach((one) => {
+    if (one && typeof one === "object") candidates.push(one);
+  });
+  if (source.chargebackStatus || source.disputeStatus || raw.chargeback_status || raw.dispute_status) {
+    candidates.push({
+      status: source.chargebackStatus || source.disputeStatus || raw.chargeback_status || raw.dispute_status,
+      type: source.chargebackType || raw.chargeback_type || "chargeback",
+      reason: source.chargebackReason || raw.chargeback_reason || "",
+    });
+  }
+  return candidates.map(normalizeDispute).filter(Boolean);
+}
+function disputeRank(d) {
+  const s = normalizeDisputeStatus(d?.status);
+  if (ACTIVE_DISPUTE_STATUSES.has(s)) return 4;
+  if (LOST_DISPUTE_STATUSES.has(s)) return 3;
+  if (WON_DISPUTE_STATUSES.has(s)) return 2;
+  return 1;
+}
+function chargebackSummary(source) {
+  const disputes = collectDisputes(source);
+  if (!disputes.length) return { has: false, active: false, cls: "none", status: "", label: tt("لا يوجد", "None"), disputes: [] };
+  const sorted = disputes.slice().sort((a, b) => disputeRank(b) - disputeRank(a));
+  const top = sorted[0];
+  const status = normalizeDisputeStatus(top.status);
+  const active = ACTIVE_DISPUTE_STATUSES.has(status);
+  const won = WON_DISPUTE_STATUSES.has(status);
+  const lost = LOST_DISPUTE_STATUSES.has(status);
+  const cls = active ? "active" : lost ? "lost" : won ? "won" : "info";
+  return { has: true, active, won, lost, cls, status, label: disputeStatusLabel(status), top, disputes: sorted };
+}
+function chargebackBadge(source, compact = false) {
+  const cb = chargebackSummary(source);
+  if (!cb.has) return "";
+  const text = compact ? (cb.active ? "CHARGEBACK" : cb.label) : `${disputeLabel()}: ${cb.label}`;
+  return `<span class="chargeback-badge ${cb.cls}">${escapeHtml(text)}</span>`;
+}
+function chargebackDetailsHtml(source) {
+  const cb = chargebackSummary(source);
+  if (!cb.has) return `<strong>${escapeHtml(tt("لا يوجد نزاع بنكي", "No chargeback"))}</strong>`;
+  const d = cb.top || {};
+  const parts = [
+    cb.active ? tt("نشط", "Active") : cb.label,
+    d.amount,
+    d.reason ? `${tt("السبب", "Reason")}: ${d.reason}` : "",
+    d.evidenceDueBy ? `${tt("آخر موعد للرد", "Evidence due")}: ${fmtDate(d.evidenceDueBy)}` : "",
+    d.initiatedAt ? `${tt("بدأ", "Started")}: ${fmtDate(d.initiatedAt)}` : "",
+  ].filter(Boolean);
+  return `<strong>${escapeHtml(parts.join(" • "))}</strong>`;
+}
+
 function todayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -355,6 +463,8 @@ function mapShopifyOrder(raw) {
     billingAddress: formatAddress(raw.billing_address),
     adminUrl: raw.admin_url || raw.adminUrl || "",
     refunds: Array.isArray(raw.refunds) ? raw.refunds : [],
+    disputes: collectDisputes(raw),
+    chargebackStatus: raw.chargeback_status || raw.dispute_status || raw.disputeSummary?.status || raw.orderDisputeSummary?.status || raw.order?.disputeSummary?.status || "",
     rawShopify: raw,
     source: "live_shopify",
   };
@@ -386,18 +496,19 @@ function renderShopifyLiveResult(order, firebaseStatus = currentLiveOrderFirebas
   if (el("shopify-live-use-btn")) el("shopify-live-use-btn").disabled = false;
   const img = order.imageUrl ? `<img class="shopify-product-thumb" src="${escapeHtml(order.imageUrl)}" alt="Product image" loading="lazy" />` : `<div class="shopify-product-thumb placeholder">No image</div>`;
   box.innerHTML = `
-    <div class="shopify-order-card">
+    <div class="shopify-order-card ${chargebackSummary(order).active ? 'chargeback-active' : ''}">
       <div class="shopify-order-card-head">
         ${img}
         <div>
           <h4>#${escapeHtml(order.orderNumber || "—")} • ${escapeHtml(order.customerName || "No customer")}</h4>
-          <div class="shopify-muted">${escapeHtml(order.email || "—")} • ${escapeHtml(order.phone || "—")}</div>
+          <div class="shopify-muted">${chargebackBadge(order)} ${escapeHtml(order.email || "—")} • ${escapeHtml(order.phone || "—")}</div>
           <div class="shopify-muted">${firebaseStatusBadge(firebaseStatus)}</div>
         </div>
       </div>
       <div class="shopify-order-grid">
         <div><b>Total</b><span>${escapeHtml(order.totalPaid || "—")}</span></div>
         <div><b>Payment</b><span>${escapeHtml(order.paymentStatus || "—")}</span></div>
+        <div class="chargeback-field ${chargebackSummary(order).cls}"><b>${escapeHtml(disputeLabel())}</b><span>${chargebackDetailsHtml(order)}</span></div>
         <div><b>${escapeHtml(purchaseDateLabel())}</b><span>${escapeHtml(fmtPurchaseDate(order.orderDate))}</span></div>
         <div><b>${escapeHtml(purchaseAgeLabel())}</b><span>${escapeHtml(fmtPurchaseAge(order.orderDate))}</span></div>
         <div><b>Fulfilment</b><span>${escapeHtml(order.orderالحالة || "—")}</span></div>
@@ -552,6 +663,7 @@ function orderNoteBlock(order) {
     `Postcode: ${order.postcode || "—"}`,
     `Items: ${order.items || "—"}`,
     `Total: ${order.totalPaid || "—"}`,
+    `${tt("النزاع البنكي", "Chargeback")}: ${chargebackSummary(order).has ? chargebackSummary(order).label : tt("لا يوجد", "None")}`,
     `Tracking: ${order.trackingNumber || "—"} ${order.courier ? `(${order.courier})` : ""}`,
     `الطلب status: ${orderالحالةLabel(order.orderالحالة)}`,
     `Delivery status: ${orderالحالةLabel(order.deliveryالحالة)}`,
@@ -560,7 +672,7 @@ function orderNoteBlock(order) {
 }
 
 function riskFromTypeAndالطلب(type, order) {
-  if (type === "chargeback_risk" || type === "item_not_genuine") return "chargeback";
+  if (chargebackSummary(order).active || chargebackSummary(order).lost || type === "chargeback_risk" || type === "item_not_genuine") return "chargeback";
   if (order?.deliveryالحالة === "lost" || order?.deliveryالحالة === "delayed") return "high";
   if (EMERGENCY_TYPES.has(type)) return "medium";
   return "normal";
@@ -1003,7 +1115,8 @@ function renderTicketList() {
   filtered.forEach((t) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = `ticket-row priority-${t.priority || "normal"}`;
+    const cb = chargebackSummary(t.orderData || t);
+    btn.className = `ticket-row priority-${t.priority || "normal"} ${cb.active ? "chargeback-active" : ""}`;
     const globalHit = isTicketGlobalSearchHit(t);
     btn.classList.toggle("active", t.id === selectedTicketId);
     btn.classList.toggle("global-hit", globalHit);
@@ -1012,6 +1125,7 @@ function renderTicketList() {
         <strong>#${escapeHtml(t.orderNumber || "—")}</strong>
         <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(priorityLabelText(t.priority))}</span>
         ${globalHit ? `<span class="ticket-global-badge">${escapeHtml(tt('بحث الفريق', 'Team search'))}</span>` : ""}
+        ${chargebackBadge(t.orderData || t, true)}
         ${shopifyStatusPill(t)}
       </div>
       <div class="ticket-row-title">${escapeHtml(typeLabel(t.type) || t.type || "Ticket")}</div>
@@ -1226,7 +1340,7 @@ function renderTicketDetail() {
       info.innerHTML = `<div class="ticket-shopify-empty">No linked Shopify order yet.</div>`;
     } else {
       info.innerHTML = `
-        <section class="ticket-shopify-card">
+        <section class="ticket-shopify-card ${chargebackSummary(orderData).active ? 'chargeback-active' : ''}">
           <div class="ticket-shopify-head">
             ${img}
             <div class="ticket-shopify-title-block">
@@ -1234,6 +1348,7 @@ function renderTicketDetail() {
               <h3>#${escapeHtml(t.orderNumber || orderData.orderNumber || "—")}</h3>
               <p>${escapeHtml(t.type ? (typeLabel(t.type) || t.type) : tt("تذكرة دعم", "Support ticket"))}</p>
               ${shopifyStatusPill(t)}
+              ${chargebackBadge(orderData)}
             </div>
           </div>
 
@@ -1244,6 +1359,7 @@ function renderTicketDetail() {
             <div class="field-card"><span>Postcode</span><strong>${escapeHtml(orderData.postcode || "—")}</strong></div>
             <div class="field-card"><span>Total</span><strong>${escapeHtml(orderData.totalPaid || "—")}</strong></div>
             <div class="field-card"><span>Payment</span><strong>${escapeHtml(orderData.paymentStatus || "—")}</strong></div>
+            <div class="field-card chargeback-field ${chargebackSummary(orderData).cls}"><span>${escapeHtml(disputeLabel())}</span>${chargebackDetailsHtml(orderData)}</div>
             <div class="field-card"><span>${escapeHtml(purchaseDateLabel())}</span><strong>${escapeHtml(fmtPurchaseDate(orderData.orderDate || t.orderDate))}</strong></div>
             <div class="field-card"><span>${escapeHtml(purchaseAgeLabel())}</span><strong>${escapeHtml(fmtPurchaseAge(orderData.orderDate || t.orderDate))}</strong></div>
             <div class="field-card"><span>Fulfilment</span><strong>${escapeHtml(orderData.orderالحالة || "—")}</strong></div>
@@ -1495,6 +1611,8 @@ async function createTicket() {
       adminUrl: cachedالطلب.adminUrl || "",
       itemList: cachedالطلب.itemList || [],
       refunds: cachedالطلب.refunds || [],
+      disputes: cachedالطلب.disputes || [],
+      chargebackStatus: cachedالطلب.chargebackStatus || "",
     } : {},
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
