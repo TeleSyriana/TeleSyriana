@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16.png" />
   <link rel="shortcut icon" href="images/favicon.ico" />
-  <link rel="stylesheet" href="style.css?v=text-cleanup-v1" />
+  <link rel="stylesheet" href="style.css?v=tickets-delete-v1" />
 </head>
 
 <body data-build-version="phase3-shifts">
@@ -344,6 +344,7 @@
               <p class="subtitle" style="margin:6px 0 0">الطوارئ • مشاكل الطلبات • الإرجاع • ملاحظات داخلية</p>
             </div>
             <div class="tickets-actions">
+              <button id="ticket-deleted-toggle" class="btn-secondary ticket-deleted-toggle hidden" type="button">المحذوفات</button>
               <button id="ticket-refresh-btn" class="btn-secondary" type="button">تحديث</button>
               <button id="ticket-new-toggle" class="btn-primary hidden" type="button" style="width:auto;padding:10px 16px" aria-hidden="true">+ تذكرة جديدة</button>
             </div>
@@ -571,6 +572,7 @@
                 </label>
 
                 <div class="ticket-detail-actions">
+                  <button id="ticket-delete-btn" class="btn-secondary danger hidden" type="button">حذف</button>
                   <button id="ticket-escalate-btn" class="btn-secondary danger" type="button">Escalate</button>
                   <button id="ticket-save-btn" class="btn-primary" type="button" style="width:auto">حفظ التعديلات</button>
                 </div>
@@ -1268,14 +1270,14 @@
 
 
   <!-- scripts -->
-  <script type="module" src="app.js?v=text-cleanup-v1"></script>
-  <script type="module" src="tasks.js?v=text-cleanup-v1"></script>
-  <script type="module" src="tickets.js?v=text-cleanup-v1"></script>
-  <script type="module" src="reports.js?v=text-cleanup-v1"></script>
-  <script type="module" src="payroll.js?v=text-cleanup-v1"></script>
-  <script type="module" src="messages.js?v=text-cleanup-v1"></script>
-  <script type="module" src="groups.js?v=text-cleanup-v1"></script>
-  <script type="module" src="meetings.js?v=text-cleanup-v1"></script>
+  <script type="module" src="app.js?v=tickets-delete-v1"></script>
+  <script type="module" src="tasks.js?v=tickets-delete-v1"></script>
+  <script type="module" src="tickets.js?v=tickets-delete-v1"></script>
+  <script type="module" src="reports.js?v=tickets-delete-v1"></script>
+  <script type="module" src="payroll.js?v=tickets-delete-v1"></script>
+  <script type="module" src="messages.js?v=tickets-delete-v1"></script>
+  <script type="module" src="groups.js?v=tickets-delete-v1"></script>
+  <script type="module" src="meetings.js?v=tickets-delete-v1"></script>
 
 </body>
 </html>

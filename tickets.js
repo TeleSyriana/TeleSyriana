@@ -7,18 +7,22 @@ import { db, fs } from "./firebase.js";
 const {
   collection,
   addDoc,
+  getDocs,
   query,
+  where,
   orderBy,
   onSnapshot,
   serverTimestamp,
   doc,
   updateDoc,
+  deleteDoc,
   setDoc,
   getDoc,
 } = fs;
 
 const USER_KEY = "telesyrianaUser";
 const TICKETS_COL = "tickets";
+const DELETED_TICKETS_COL = "deletedTickets";
 const ORDER_RECORDS_COL = "orderRecords";
 
 const ROLE_LEVELS = { agent: 1, supervisor: 2, hr: 3, manager: 3, admin: 4 };
@@ -71,8 +75,10 @@ const PRIORITY_LABELS = {
 
 let currentUser = null;
 let allTickets = [];
+let deletedTickets = [];
 let selectedTicketId = null;
 let unsubTickets = null;
+let unsubDeletedTickets = null;
 let isHooked = false;
 let currentLiveOrder = null;
 let currentLiveOrderFirebaseStatus = "none";
@@ -100,11 +106,25 @@ function translateTicketsStatic() {
   if (statSpans[1]) statSpans[1].textContent = tt('طارئ', 'Emergency');
   if (statSpans[2]) statSpans[2].textContent = tt('مصعّدة', 'Escalated');
   if (statSpans[3]) statSpans[3].textContent = tt('محلولة اليوم', 'Resolved today');
+  if (el("ticket-deleted-toggle")) el("ticket-deleted-toggle").textContent = deletedFolderLabel();
+  if (el("ticket-delete-btn")) el("ticket-delete-btn").textContent = tt("حذف", "Delete");
+  if (el("deleted-tickets-close")) el("deleted-tickets-close").textContent = tt("إغلاق", "Close");
+  if (el("deleted-tickets-title")) el("deleted-tickets-title").textContent = deletedFolderLabel();
 }
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
 function canSeeAll(u) { return roleLevel(u) >= ROLE_LEVELS.manager; }
 function canSupervise(u) { return roleLevel(u) >= ROLE_LEVELS.supervisor; }
 function canEditAll(u) { return roleLevel(u) >= ROLE_LEVELS.supervisor; }
+function canAccessDeletedTickets(u) {
+  const role = String(u?.role || "").toLowerCase();
+  return ["supervisor", "manager", "admin"].includes(role);
+}
+function canSoftDeleteTicket(ticket) {
+  if (!currentUser || !ticket) return false;
+  return canAccessDeletedTickets(currentUser) || ticket.createdBy === currentUser.id;
+}
+function deletedFolderLabel() { return tt("المحذوفات", "Deleted tickets"); }
+
 
 function getCurrentUser() {
   try {
@@ -148,7 +168,20 @@ function visibleStaffForAssignment() {
   return [currentUser];
 }
 
-function canViewTicket(ticket) {
+function ticketSearchText(ticket) {
+  return [
+    ticket.orderNumber,
+    ticket.customerName,
+    ticket.email,
+    ticket.notes,
+    ticket.resolution,
+    typeLabel(ticket.type),
+    statusLabelText(ticket.status),
+    staffName(ticket.assignedTo),
+  ].join(" ").toLowerCase();
+}
+function currentTicketSearchTerm() { return (el("ticket-search")?.value || "").trim().toLowerCase(); }
+function canViewTicketBase(ticket) {
   if (!currentUser) return false;
   if (canSeeAll(currentUser)) return true;
   if (currentUser.role === "supervisor") {
@@ -157,6 +190,12 @@ function canViewTicket(ticket) {
     return assigned?.supervisorId === currentUser.id || !ticket.assignedTo;
   }
   return ticket.assignedTo === currentUser.id || ticket.createdBy === currentUser.id;
+}
+function canViewTicket(ticket) {
+  if (canViewTicketBase(ticket)) return true;
+  const q = currentTicketSearchTerm();
+  // Agents keep a clean queue, but search can find an existing ticket by order/customer/email/notes.
+  return Boolean(q && q.length >= 2 && ticketSearchText(ticket).includes(q));
 }
 
 function normaliseالطلبNumber(v) {
@@ -616,16 +655,7 @@ function ticketMatchesFilters(ticket) {
   if (owner === "unassigned" && ticket.assignedTo) return false;
 
   if (q) {
-    const hay = [
-      ticket.orderNumber,
-      ticket.customerName,
-      ticket.email,
-      ticket.notes,
-      ticket.resolution,
-      typeLabel(ticket.type),
-      statusLabelText(ticket.status),
-      staffName(ticket.assignedTo),
-    ].join(" ").toLowerCase();
+    const hay = ticketSearchText(ticket);
     if (!hay.includes(q)) return false;
   }
   return true;
@@ -662,6 +692,191 @@ function currentLang() {
 function shopifyStatusPill(t) {
   const m = shopifyStatusMeta(t);
   return `<span class="shopify-sync-pill ${m.cls}">${escapeHtml(m[currentLang()] || m.en)}</span>`;
+}
+
+function ensureDeletedTicketsUI() {
+  const actions = document.querySelector('#page-tickets .tickets-actions');
+  if (actions && !el('ticket-deleted-toggle')) {
+    const btn = document.createElement('button');
+    btn.id = 'ticket-deleted-toggle';
+    btn.type = 'button';
+    btn.className = 'btn-secondary ticket-deleted-toggle hidden';
+    btn.textContent = deletedFolderLabel();
+    actions.insertBefore(btn, actions.firstChild);
+    btn.addEventListener('click', openDeletedTicketsFolder);
+  }
+
+  if (!el('deleted-tickets-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'deleted-tickets-modal';
+    modal.className = 'deleted-tickets-modal hidden';
+    modal.innerHTML = `
+      <div class="deleted-tickets-card" role="dialog" aria-modal="true" aria-labelledby="deleted-tickets-title">
+        <div class="deleted-tickets-head">
+          <div>
+            <h3 id="deleted-tickets-title">${deletedFolderLabel()}</h3>
+            <p id="deleted-tickets-subtitle">${tt('هذه القائمة للمشرفين والمدراء فقط. يمكن استعادة التذكرة أو حذفها نهائياً.', 'Only supervisors, managers, and admins can access this folder. Restore or permanently delete tickets here.')}</p>
+          </div>
+          <button id="deleted-tickets-close" class="btn-secondary" type="button">${tt('إغلاق', 'Close')}</button>
+        </div>
+        <div id="deleted-tickets-list" class="deleted-tickets-list"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    el('deleted-tickets-close')?.addEventListener('click', closeDeletedTicketsFolder);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeDeletedTicketsFolder(); });
+  }
+
+  const canAccess = canAccessDeletedTickets(currentUser);
+  el('ticket-deleted-toggle')?.classList.toggle('hidden', !canAccess);
+  translateTicketsStatic();
+}
+
+function renderDeletedTicketsList() {
+  const list = el('deleted-tickets-list');
+  if (!list) return;
+  if (!canAccessDeletedTickets(currentUser)) {
+    list.innerHTML = `<div class="deleted-empty">${tt('لا تملك صلاحية فتح المحذوفات.', 'You do not have access to deleted tickets.')}</div>`;
+    return;
+  }
+  if (!deletedTickets.length) {
+    list.innerHTML = `<div class="deleted-empty">${tt('لا توجد تذاكر محذوفة.', 'No deleted tickets found.')}</div>`;
+    return;
+  }
+  const rows = deletedTickets.slice().sort((a,b) => tsToMs(b.deletedAt || b.updatedAt) - tsToMs(a.deletedAt || a.updatedAt));
+  list.innerHTML = rows.map((t) => `
+    <article class="deleted-ticket-row" data-deleted-id="${escapeHtml(t.id)}">
+      <div class="deleted-ticket-main">
+        <strong>#${escapeHtml(t.orderNumber || '—')}</strong>
+        <span>${escapeHtml(typeLabel(t.type) || t.type || 'Ticket')}</span>
+        <small>${escapeHtml(t.customerName || t.email || tt('بدون بيانات عميل', 'No customer details'))}</small>
+        <small>${tt('حذف بواسطة', 'Deleted by')}: ${escapeHtml(t.deletedByName || staffName(t.deletedBy) || '—')} • ${escapeHtml(fmtDate(t.deletedAt))}</small>
+      </div>
+      <div class="deleted-ticket-actions">
+        <button type="button" class="btn-secondary" data-restore-deleted="${escapeHtml(t.id)}">${tt('استعادة', 'Restore')}</button>
+        <button type="button" class="btn-secondary danger" data-permanent-delete="${escapeHtml(t.id)}">${tt('حذف نهائي', 'Delete forever')}</button>
+      </div>
+    </article>`).join('');
+  list.querySelectorAll('[data-restore-deleted]').forEach((btn) => btn.addEventListener('click', () => restoreDeletedTicket(btn.dataset.restoreDeleted)));
+  list.querySelectorAll('[data-permanent-delete]').forEach((btn) => btn.addEventListener('click', () => permanentlyDeleteTicket(btn.dataset.permanentDelete)));
+}
+
+function openDeletedTicketsFolder() {
+  if (!canAccessDeletedTickets(currentUser)) return showTicketAlert(tt('المحذوفات متاحة فقط للمشرف أو المدير أو الأدمن.', 'Deleted tickets are only available to supervisor, manager, or admin.'), true);
+  ensureDeletedTicketsUI();
+  renderDeletedTicketsList();
+  el('deleted-tickets-modal')?.classList.remove('hidden');
+}
+function closeDeletedTicketsFolder() { el('deleted-tickets-modal')?.classList.add('hidden'); }
+
+async function findActiveDuplicateTicket(orderNumber) {
+  const normalized = normaliseالطلبNumber(orderNumber);
+  if (!normalized) return null;
+  const local = allTickets.find((t) => normaliseالطلبNumber(t.orderNumber) === normalized);
+  if (local) return local;
+  try {
+    const q = query(collection(db, TICKETS_COL), where('orderNumber', '==', normalized));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const d = snap.docs[0];
+      return { id: d.id, ...d.data() };
+    }
+  } catch (err) {
+    console.warn('duplicate active check failed', err);
+  }
+  return null;
+}
+
+async function findDeletedDuplicateTicket(orderNumber) {
+  const normalized = normaliseالطلبNumber(orderNumber);
+  if (!normalized) return null;
+  const local = deletedTickets.find((t) => normaliseالطلبNumber(t.orderNumber) === normalized);
+  if (local) return local;
+  try {
+    const q = query(collection(db, DELETED_TICKETS_COL), where('orderNumber', '==', normalized));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const d = snap.docs[0];
+      return { id: d.id, ...d.data() };
+    }
+  } catch (err) {
+    console.warn('duplicate deleted check failed', err);
+  }
+  return null;
+}
+
+async function softDeleteSelectedTicket() {
+  const t = allTickets.find((x) => x.id === selectedTicketId);
+  if (!t) return showTicketAlert(tt('اختر تذكرة أولاً.', 'Select a ticket first.'), true);
+  if (!canSoftDeleteTicket(t)) return showTicketAlert(tt('لا يمكنك حذف هذه التذكرة.', 'You cannot delete this ticket.'), true);
+  const ok = window.confirm(tt('سيتم نقل التذكرة إلى المحذوفات. يستطيع المشرف/المدير استعادتها أو حذفها نهائياً. هل أنت متأكد؟', 'This ticket will move to Deleted tickets. A supervisor/manager/admin can restore it or delete it forever. Continue?'));
+  if (!ok) return;
+  const btn = el('ticket-delete-btn');
+  const restoreBtn = setButtonSaving(btn, true, tt('جار الحذف...', 'Deleting...'));
+  try {
+    const payload = { ...t };
+    delete payload.id;
+    payload.originalTicketId = t.id;
+    payload.deletedAt = serverTimestamp();
+    payload.deletedBy = currentUser?.id || '';
+    payload.deletedByName = currentUser?.name || '';
+    payload.history = addHistory(t.history, tt('تم نقل التذكرة إلى المحذوفات', 'Moved ticket to deleted folder'), currentUser?.id || '');
+    await setDoc(doc(db, DELETED_TICKETS_COL, t.id), payload);
+    await deleteDoc(doc(db, TICKETS_COL, t.id));
+    selectedTicketId = null;
+    showTicketAlert(tt('تم نقل التذكرة إلى المحذوفات.', 'Ticket moved to Deleted tickets.'));
+    renderTicketList();
+    renderTicketDetail();
+  } catch (err) {
+    console.error('soft delete failed', err);
+    showTicketAlert(`${tt('فشل حذف التذكرة:', 'Failed to delete ticket:')} ${err?.code || err?.message || 'unknown error'}`, true);
+  } finally {
+    restoreBtn();
+  }
+}
+
+async function restoreDeletedTicket(id) {
+  if (!canAccessDeletedTickets(currentUser)) return;
+  const t = deletedTickets.find((x) => x.id === id);
+  if (!t) return;
+  const activeDuplicate = await findActiveDuplicateTicket(t.orderNumber);
+  if (activeDuplicate) return showTicketAlert(tt('لا يمكن الاستعادة لأن هناك تذكرة نشطة بنفس رقم الطلب.', 'Cannot restore because an active ticket already exists with the same order number.'), true);
+  const ok = window.confirm(tt('استعادة هذه التذكرة إلى قائمة التذاكر؟', 'Restore this ticket to the active ticket queue?'));
+  if (!ok) return;
+  try {
+    const payload = { ...t };
+    delete payload.id;
+    delete payload.deletedAt;
+    delete payload.deletedBy;
+    delete payload.deletedByName;
+    payload.restoredAt = serverTimestamp();
+    payload.restoredBy = currentUser?.id || '';
+    payload.updatedAt = serverTimestamp();
+    payload.history = addHistory(t.history, tt('تمت استعادة التذكرة من المحذوفات', 'Restored from deleted folder'), currentUser?.id || '');
+    const restoreId = t.originalTicketId || id;
+    await setDoc(doc(db, TICKETS_COL, restoreId), payload);
+    await deleteDoc(doc(db, DELETED_TICKETS_COL, id));
+    selectedTicketId = restoreId;
+    closeDeletedTicketsFolder();
+    showTicketAlert(tt('تمت استعادة التذكرة.', 'Ticket restored.'));
+  } catch (err) {
+    console.error('restore ticket failed', err);
+    showTicketAlert(`${tt('فشل استعادة التذكرة:', 'Failed to restore ticket:')} ${err?.code || err?.message || 'unknown error'}`, true);
+  }
+}
+
+async function permanentlyDeleteTicket(id) {
+  if (!canAccessDeletedTickets(currentUser)) return;
+  const t = deletedTickets.find((x) => x.id === id);
+  if (!t) return;
+  const ok = window.confirm(tt('حذف نهائي؟ لا يمكن التراجع بعد هذه الخطوة.', 'Delete forever? This cannot be undone.'));
+  if (!ok) return;
+  try {
+    await deleteDoc(doc(db, DELETED_TICKETS_COL, id));
+    showTicketAlert(tt('تم حذف التذكرة نهائياً.', 'Ticket deleted forever.'));
+  } catch (err) {
+    console.error('permanent delete failed', err);
+    showTicketAlert(`${tt('فشل الحذف النهائي:', 'Failed to delete forever:')} ${err?.code || err?.message || 'unknown error'}`, true);
+  }
 }
 
 function renderTicketList() {
@@ -816,11 +1031,17 @@ function renderTicketDetail() {
   });
   if (el("ticket-save-btn")) el("ticket-save-btn").disabled = !editable;
   if (el("ticket-escalate-btn")) el("ticket-escalate-btn").disabled = !editable;
+  if (el("ticket-delete-btn")) {
+    el("ticket-delete-btn").classList.toggle("hidden", !canSoftDeleteTicket(t));
+    el("ticket-delete-btn").disabled = !canSoftDeleteTicket(t);
+    el("ticket-delete-btn").textContent = tt("حذف", "Delete");
+  }
 }
 
 function hookUI() {
   if (isHooked) return;
   isHooked = true;
+  ensureDeletedTicketsUI();
 
   el("ticket-new-toggle")?.addEventListener("click", () => setTicketFormمفتوحة(true));
 
@@ -899,6 +1120,7 @@ function hookUI() {
   });
 
   el("ticket-save-btn")?.addEventListener("click", saveSelectedTicket);
+  el("ticket-delete-btn")?.addEventListener("click", softDeleteSelectedTicket);
   el("ticket-escalate-btn")?.addEventListener("click", async () => {
     if (!selectedTicketId) return;
     const btn = el("ticket-escalate-btn");
@@ -934,6 +1156,23 @@ async function createTicket() {
   const orderNumber = normaliseالطلبNumber(el("ticket-order")?.value);
   if (!orderNumber) {
     showTicketAlert("رقم الطلب مطلوب.", true);
+    restoreCreateBtn();
+    return;
+  }
+
+  const activeDuplicate = await findActiveDuplicateTicket(orderNumber);
+  if (activeDuplicate) {
+    selectedTicketId = activeDuplicate.id;
+    setTicketFormمفتوحة(false);
+    renderTicketList();
+    renderTicketDetail();
+    showTicketAlert(tt("هذه التذكرة موجودة بالفعل. تم فتح التذكرة الموجودة بدلاً من إنشاء تكرار.", "This ticket already exists. The existing ticket was opened instead of creating a duplicate."), true);
+    restoreCreateBtn();
+    return;
+  }
+  const deletedDuplicate = await findDeletedDuplicateTicket(orderNumber);
+  if (deletedDuplicate) {
+    showTicketAlert(tt("توجد تذكرة محذوفة بنفس رقم الطلب. اطلب من المشرف استعادتها بدلاً من إنشاء تكرار.", "A deleted ticket already exists with this order number. Ask a supervisor to restore it instead of creating a duplicate."), true);
     restoreCreateBtn();
     return;
   }
@@ -1104,6 +1343,24 @@ async function saveSelectedTicket() {
   }
 }
 
+function subscribeDeletedTickets() {
+  if (unsubDeletedTickets) unsubDeletedTickets();
+  if (!canAccessDeletedTickets(currentUser)) {
+    deletedTickets = [];
+    renderDeletedTicketsList();
+    return;
+  }
+  const q = query(collection(db, DELETED_TICKETS_COL), orderBy("deletedAt", "desc"));
+  unsubDeletedTickets = onSnapshot(q, (snapshot) => {
+    deletedTickets = [];
+    snapshot.forEach((d) => deletedTickets.push({ id: d.id, ...d.data() }));
+    renderDeletedTicketsList();
+  }, (err) => {
+    console.error("deleted tickets snapshot error", err);
+    showTicketAlert(tt("تعذر تحميل المحذوفات. تحقق من صلاحيات Firestore.", "Could not load deleted tickets. Check Firestore permissions."), true);
+  });
+}
+
 function subscribeTickets() {
   if (unsubTickets) unsubTickets();
   const q = query(collection(db, TICKETS_COL), orderBy("updatedAt", "desc"));
@@ -1132,14 +1389,19 @@ function initTickets() {
     renderTicketList();
     renderTicketDetail();
     if (unsubTickets) unsubTickets();
+    if (unsubDeletedTickets) unsubDeletedTickets();
     unsubTickets = null;
+    unsubDeletedTickets = null;
+    ensureDeletedTicketsUI();
     return;
   }
 
+  ensureDeletedTicketsUI();
   subscribeTickets();
+  subscribeDeletedTickets();
 }
 
 document.addEventListener("DOMContentLoaded", initTickets);
 window.addEventListener("telesyriana:user-changed", initTickets);
 
-try { window.addEventListener("telesyriana:language-changed", () => { translateTicketsStatic(); fillAssigneeSelect(el("ticket-assigned"), true); fillAssigneeSelect(el("ticket-detail-assigned"), true); renderTicketList(); renderTicketDetail(); }); } catch {}
+try { window.addEventListener("telesyriana:language-changed", () => { translateTicketsStatic(); fillAssigneeSelect(el("ticket-assigned"), true); fillAssigneeSelect(el("ticket-detail-assigned"), true); renderTicketList(); renderTicketDetail(); renderDeletedTicketsList(); }); } catch {}

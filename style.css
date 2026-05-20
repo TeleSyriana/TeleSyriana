@@ -5841,3 +5841,21 @@ body:has(#login-screen:not(.hidden)) .app-wrapper{
     font-size:17px !important;
   }
 }
+
+/* Tickets v2: deleted folder + safe delete */
+.ticket-deleted-toggle{border:1px solid rgba(239,68,68,.25);}
+.deleted-tickets-modal.hidden{display:none!important;}
+.deleted-tickets-modal{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.36);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:22px;}
+.deleted-tickets-card{width:min(920px,96vw);max-height:88vh;overflow:hidden;background:rgba(255,255,255,.94);border:1px solid rgba(255,255,255,.75);border-radius:28px;box-shadow:0 28px 70px rgba(15,23,42,.22);padding:22px;display:flex;flex-direction:column;gap:16px;}
+.deleted-tickets-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:1px solid rgba(15,23,42,.08);padding-bottom:14px;}
+.deleted-tickets-head h3{margin:0;font-size:24px;font-weight:900;color:#14213d;}
+.deleted-tickets-head p{margin:6px 0 0;color:#64748b;font-weight:700;}
+.deleted-tickets-list{overflow:auto;display:grid;gap:12px;padding:4px;}
+.deleted-ticket-row{display:flex;align-items:center;justify-content:space-between;gap:14px;border-radius:22px;background:linear-gradient(135deg,rgba(248,250,252,.98),rgba(239,246,255,.95));border:1px solid rgba(148,163,184,.22);padding:16px;box-shadow:0 10px 28px rgba(15,23,42,.06);}
+.deleted-ticket-main{display:grid;gap:4px;min-width:0;}
+.deleted-ticket-main strong{font-size:20px;color:#101a36;}
+.deleted-ticket-main span{font-weight:850;color:#101a36;}
+.deleted-ticket-main small{color:#64748b;font-weight:700;}
+.deleted-ticket-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+.deleted-empty{border:1px dashed rgba(100,116,139,.3);border-radius:20px;padding:22px;text-align:center;color:#64748b;font-weight:850;background:rgba(248,250,252,.75);}
+@media (max-width:720px){.deleted-tickets-modal{padding:10px;align-items:flex-end}.deleted-tickets-card{width:100%;max-height:92vh;border-radius:24px 24px 0 0}.deleted-ticket-row{align-items:stretch;flex-direction:column}.deleted-ticket-actions{justify-content:stretch}.deleted-ticket-actions button{flex:1 1 140px}}
