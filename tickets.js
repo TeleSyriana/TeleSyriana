@@ -391,6 +391,14 @@ function chargebackBadge(source, compact = false) {
     : `${disputeLabel()}: ${cb.label}`;
   return `<span class="chargeback-badge ${cb.cls}">${escapeHtml(text)}</span>`;
 }
+
+function chargebackCardClass(source) {
+  const cb = chargebackSummary(source);
+  if (cb.alert) return "chargeback-active";
+  if (cb.riskOnly) return "chargeback-risk-warning";
+  return "";
+}
+
 function chargebackDetailsHtml(source) {
   const cb = chargebackSummary(source);
   if (!cb.has) return `<strong>${escapeHtml(tt("لا يوجد نزاع بنكي", "No chargeback"))}</strong>`;
@@ -617,7 +625,7 @@ function renderShopifyLiveResult(order, firebaseStatus = currentLiveOrderFirebas
   if (el("shopify-live-use-btn")) el("shopify-live-use-btn").disabled = false;
   const img = order.imageUrl ? `<img class="shopify-product-thumb" src="${escapeHtml(order.imageUrl)}" alt="Product image" loading="lazy" />` : `<div class="shopify-product-thumb placeholder">No image</div>`;
   box.innerHTML = `
-    <div class="shopify-order-card ${chargebackSummary(order).alert ? 'chargeback-active' : ''}">
+    <div class="shopify-order-card ${chargebackCardClass(order)}">
       <div class="shopify-order-card-head">
         ${img}
         <div>
@@ -1237,7 +1245,7 @@ function renderTicketList() {
     const btn = document.createElement("button");
     btn.type = "button";
     const cb = chargebackSummary(ticketChargebackSource(t));
-    btn.className = `ticket-row priority-${t.priority || "normal"} ${cb.alert ? "chargeback-active" : ""}`;
+    btn.className = `ticket-row priority-${t.priority || "normal"} ${cb.alert ? "chargeback-active" : cb.riskOnly ? "chargeback-risk-warning" : ""}`;
     const globalHit = isTicketGlobalSearchHit(t);
     btn.classList.toggle("active", t.id === selectedTicketId);
     btn.classList.toggle("global-hit", globalHit);
@@ -1461,7 +1469,7 @@ function renderTicketDetail() {
       info.innerHTML = `<div class="ticket-shopify-empty">No linked Shopify order yet.</div>`;
     } else {
       info.innerHTML = `
-        <section class="ticket-shopify-card ${chargebackSummary(ticketChargebackSource(t)).alert ? 'chargeback-active' : ''}">
+        <section class="ticket-shopify-card ${chargebackCardClass(ticketChargebackSource(t))}">
           <div class="ticket-shopify-head">
             ${img}
             <div class="ticket-shopify-title-block">
