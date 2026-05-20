@@ -179,51 +179,107 @@ function fmtPurchaseAge(v) {
   return tt(`تم الشراء منذ أكثر من ${years} سنة`, `Bought ${years}+ years ago`);
 }
 
-const ACTIVE_DISPUTE_STATUSES = new Set(["needs_response", "under_review", "open", "submitted", "accepted"]);
-const WON_DISPUTE_STATUSES = new Set(["won", "prevented"]);
-const LOST_DISPUTE_STATUSES = new Set(["lost"]);
+const ACTIVE_DISPUTE_STATUSES = new Set(["needs_response", "under_review", "open", "submitted", "accepted", "active", "pending", "requires_response"]);
+const WON_DISPUTE_STATUSES = new Set(["won", "prevented", "resolved_won"]);
+const LOST_DISPUTE_STATUSES = new Set(["lost", "resolved_lost"]);
 
 function disputeLabel() { return tt("النزاع البنكي", "Chargeback"); }
 function disputeStatusLabel(status) {
-  const s = String(status || "").toLowerCase();
+  const s = normalizeDisputeStatus(status);
   const ar = {
     needs_response: "يحتاج رد",
+    requires_response: "يحتاج رد",
     under_review: "قيد المراجعة",
     open: "مفتوح",
     submitted: "تم الإرسال",
     accepted: "نشط",
+    active: "نشط",
+    pending: "قيد المتابعة",
     won: "ربحنا النزاع",
+    resolved_won: "ربحنا النزاع",
     lost: "خسرنا النزاع",
+    resolved_lost: "خسرنا النزاع",
     prevented: "تم منعه",
+    detected: "تم رصد نزاع بنكي",
   };
   const en = {
     needs_response: "Needs response",
+    requires_response: "Needs response",
     under_review: "Under review",
     open: "Open",
     submitted: "Submitted",
     accepted: "Active",
+    active: "Active",
+    pending: "Pending",
     won: "Won",
+    resolved_won: "Won",
     lost: "Lost",
+    resolved_lost: "Lost",
     prevented: "Prevented",
+    detected: "Chargeback detected",
   };
   return (ticketLang() === "ar" ? ar[s] : en[s]) || (status || "—");
 }
 function normalizeDisputeStatus(status) {
-  return String(status || "").trim().toLowerCase().replace(/\s+/g, "_");
+  const raw = String(status || "").trim();
+  if (!raw || raw === "—" || raw === "-") return "";
+  const snake = raw
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const aliases = {
+    needs_response: "needs_response",
+    needs_respond: "needs_response",
+    need_response: "needs_response",
+    require_response: "requires_response",
+    requires_response: "requires_response",
+    under_review: "under_review",
+    in_review: "under_review",
+    review: "under_review",
+    accepted: "accepted",
+    active: "active",
+    pending: "pending",
+    open: "open",
+    submitted: "submitted",
+    won: "won",
+    win: "won",
+    lost: "lost",
+    lose: "lost",
+    prevented: "prevented",
+  };
+  return aliases[snake] || snake;
+}
+function sourceHasChargebackRisk(source) {
+  if (!source) return false;
+  const fields = [source.risk, source.customerMood, source.type, source.title, source.subject, source.chargebackStatus, source.disputeStatus]
+    .map((v) => String(v || "").toLowerCase());
+  return fields.some((v) =>
+    v === "chargeback" ||
+    v === "chargeback_risk" ||
+    v.includes("chargeback") ||
+    v.includes("dispute") ||
+    v.includes("نزاع بنكي") ||
+    v.includes("خطر نزاع")
+  );
 }
 function normalizeDispute(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const status = normalizeDisputeStatus(raw.status || raw.dispute_status || raw.disputeStatus || raw.outcome || raw.state);
-  const type = String(raw.type || raw.disputeType || raw.kind || "chargeback").toLowerCase();
-  const amount = raw.amount || raw.amount_money?.amount || raw.amountMoney?.amount || raw.total || "";
-  const currency = raw.currency || raw.amount_money?.currency || raw.amountMoney?.currency || "";
+  const statusSource = raw.status || raw.dispute_status || raw.disputeStatus || raw.outcome || raw.state || raw.current_status || raw.currentStatus;
+  let status = normalizeDisputeStatus(statusSource);
+  const activeFlag = raw.active === true || raw.is_active === true || raw.isActive === true || raw.found === true || raw.dispute_found === true || raw.disputeFound === true;
+  if (!status && activeFlag) status = "active";
+  const type = String(raw.type || raw.disputeType || raw.kind || raw.category || "chargeback").toLowerCase();
+  const amount = raw.amount || raw.amount_money?.amount || raw.amountMoney?.amount || raw.total || raw.disputed_amount || raw.disputedAmount || "";
+  const currency = raw.currency || raw.amount_money?.currency || raw.amountMoney?.currency || raw.disputed_currency || raw.disputedCurrency || "";
   return {
     id: raw.id || raw.dispute_id || raw.disputeId || "",
     type,
     status,
-    reason: raw.reason || raw.network_reason_code || raw.networkReasonCode || "",
+    activeFlag,
+    reason: raw.reason || raw.network_reason_code || raw.networkReasonCode || raw.dispute_reason || raw.disputeReason || "",
     amount: amount ? `${amount} ${currency}`.trim() : "",
-    evidenceDueBy: raw.evidence_due_by || raw.evidenceDueBy || raw.evidence_deadline || "",
+    evidenceDueBy: raw.evidence_due_by || raw.evidenceDueBy || raw.evidence_deadline || raw.evidenceDeadline || "",
     evidenceSentOn: raw.evidence_sent_on || raw.evidenceSentOn || "",
     finalizedOn: raw.finalized_on || raw.finalizedOn || "",
     initiatedAt: raw.initiated_at || raw.initiatedAt || raw.created_at || raw.createdAt || "",
@@ -232,53 +288,91 @@ function normalizeDispute(raw) {
 function collectDisputes(source) {
   if (!source) return [];
   const raw = source.rawShopify || source.raw || source;
+  const orderData = source.orderData || raw.orderData || {};
   const candidates = [];
-  [source.disputes, source.chargebacks, raw.disputes, raw.chargebacks, raw.order?.disputes, raw.order?.chargebacks].forEach((arr) => {
+  [
+    source.disputes, source.chargebacks,
+    orderData.disputes, orderData.chargebacks,
+    raw.disputes, raw.chargebacks,
+    raw.order?.disputes, raw.order?.chargebacks,
+    raw.chargeback?.disputes, raw.chargeback?.chargebacks,
+    raw.disputeSummary?.disputes, raw.orderDisputeSummary?.disputes,
+  ].forEach((arr) => {
     if (Array.isArray(arr)) candidates.push(...arr);
   });
-  [source.dispute, source.chargeback, source.disputeSummary, source.orderDisputeSummary, raw.dispute, raw.chargeback, raw.disputeSummary, raw.orderDisputeSummary, raw.order?.disputeSummary].forEach((one) => {
+  [
+    source.dispute, source.chargeback, source.disputeSummary, source.orderDisputeSummary,
+    orderData.dispute, orderData.chargeback, orderData.disputeSummary, orderData.orderDisputeSummary,
+    raw.dispute, raw.chargeback, raw.disputeSummary, raw.orderDisputeSummary, raw.order?.disputeSummary,
+    raw.chargeback?.top, raw.chargeback?.topDispute, raw.disputeSummary?.top, raw.orderDisputeSummary?.top,
+  ].forEach((one) => {
     if (one && typeof one === "object") candidates.push(one);
   });
-  if (source.chargebackStatus || source.disputeStatus || raw.chargeback_status || raw.dispute_status) {
+  const status = source.chargebackStatus || source.disputeStatus || orderData.chargebackStatus || orderData.disputeStatus || raw.chargeback_status || raw.dispute_status || raw.chargebackStatus || raw.disputeStatus;
+  if (status) {
     candidates.push({
-      status: source.chargebackStatus || source.disputeStatus || raw.chargeback_status || raw.dispute_status,
-      type: source.chargebackType || raw.chargeback_type || "chargeback",
-      reason: source.chargebackReason || raw.chargeback_reason || "",
+      status,
+      type: source.chargebackType || orderData.chargebackType || raw.chargeback_type || raw.chargebackType || "chargeback",
+      reason: source.chargebackReason || orderData.chargebackReason || raw.chargeback_reason || raw.chargebackReason || "",
+      active: source.chargebackActive || orderData.chargebackActive || raw.chargebackActive,
     });
   }
   return candidates.map(normalizeDispute).filter(Boolean);
 }
 function disputeRank(d) {
   const s = normalizeDisputeStatus(d?.status);
-  if (ACTIVE_DISPUTE_STATUSES.has(s)) return 4;
+  if (ACTIVE_DISPUTE_STATUSES.has(s) || d?.activeFlag) return 4;
   if (LOST_DISPUTE_STATUSES.has(s)) return 3;
   if (WON_DISPUTE_STATUSES.has(s)) return 2;
   return 1;
 }
 function chargebackSummary(source) {
+  const riskFlag = sourceHasChargebackRisk(source);
   const disputes = collectDisputes(source);
-  if (!disputes.length) return { has: false, active: false, cls: "none", status: "", label: tt("لا يوجد", "None"), disputes: [] };
+  if (!disputes.length && !riskFlag) return { has: false, riskOnly: false, active: false, alert: false, cls: "none", status: "", label: tt("لا يوجد", "None"), disputes: [] };
   const sorted = disputes.slice().sort((a, b) => disputeRank(b) - disputeRank(a));
-  const top = sorted[0];
-  const status = normalizeDisputeStatus(top.status);
-  const active = ACTIVE_DISPUTE_STATUSES.has(status);
+  const top = sorted[0] || (riskFlag ? { status: "detected", type: "chargeback", activeFlag: true } : null);
+  const status = normalizeDisputeStatus(top?.status || (riskFlag ? "detected" : ""));
+  const active = ACTIVE_DISPUTE_STATUSES.has(status) || top?.activeFlag === true || (riskFlag && !WON_DISPUTE_STATUSES.has(status));
   const won = WON_DISPUTE_STATUSES.has(status);
   const lost = LOST_DISPUTE_STATUSES.has(status);
-  const cls = active ? "active" : lost ? "lost" : won ? "won" : "info";
-  return { has: true, active, won, lost, cls, status, label: disputeStatusLabel(status), top, disputes: sorted };
+  const riskOnly = riskFlag && !disputes.length;
+  const alert = active || lost || riskOnly || status === "detected";
+  const cls = lost ? "lost" : active || riskOnly || status === "detected" ? "active" : won ? "won" : "info";
+  const label = riskOnly ? tt("تم رصد خطر نزاع بنكي", "Chargeback risk detected") : disputeStatusLabel(status);
+  return { has: true, riskOnly, active, won, lost, alert, cls, status, label, top, disputes: sorted };
+}
+function ticketChargebackSource(ticket) {
+  if (!ticket) return null;
+  return {
+    ...(ticket.orderData || {}),
+    risk: ticket.risk,
+    type: ticket.type,
+    title: ticket.title,
+    customerMood: ticket.customerMood,
+    chargebackStatus: ticket.chargebackStatus || ticket.disputeStatus || ticket.orderData?.chargebackStatus || ticket.orderData?.disputeStatus,
+    disputes: ticket.disputes || ticket.orderData?.disputes || [],
+    chargebacks: ticket.chargebacks || ticket.orderData?.chargebacks || [],
+    disputeSummary: ticket.disputeSummary || ticket.orderData?.disputeSummary,
+    chargeback: ticket.chargeback || ticket.orderData?.chargeback,
+    rawShopify: ticket.orderData?.rawShopify || ticket.rawShopify,
+  };
 }
 function chargebackBadge(source, compact = false) {
   const cb = chargebackSummary(source);
   if (!cb.has) return "";
-  const text = compact ? (cb.active ? "CHARGEBACK" : cb.label) : `${disputeLabel()}: ${cb.label}`;
+  const text = compact ? (cb.alert ? "CHARGEBACK" : cb.label) : `${disputeLabel()}: ${cb.label}`;
   return `<span class="chargeback-badge ${cb.cls}">${escapeHtml(text)}</span>`;
 }
 function chargebackDetailsHtml(source) {
   const cb = chargebackSummary(source);
   if (!cb.has) return `<strong>${escapeHtml(tt("لا يوجد نزاع بنكي", "No chargeback"))}</strong>`;
+  if (cb.riskOnly) {
+    return `<strong>${escapeHtml(tt("تم رصد خطر نزاع بنكي — لم يرجع Shopify حالة النزاع بعد.", "Chargeback risk detected — Shopify has not returned a dispute status yet."))}</strong>`;
+  }
   const d = cb.top || {};
   const parts = [
-    cb.active ? tt("نشط", "Active") : cb.label,
+    cb.label,
     d.amount,
     d.reason ? `${tt("السبب", "Reason")}: ${d.reason}` : "",
     d.evidenceDueBy ? `${tt("آخر موعد للرد", "Evidence due")}: ${fmtDate(d.evidenceDueBy)}` : "",
@@ -496,7 +590,7 @@ function renderShopifyLiveResult(order, firebaseStatus = currentLiveOrderFirebas
   if (el("shopify-live-use-btn")) el("shopify-live-use-btn").disabled = false;
   const img = order.imageUrl ? `<img class="shopify-product-thumb" src="${escapeHtml(order.imageUrl)}" alt="Product image" loading="lazy" />` : `<div class="shopify-product-thumb placeholder">No image</div>`;
   box.innerHTML = `
-    <div class="shopify-order-card ${chargebackSummary(order).active ? 'chargeback-active' : ''}">
+    <div class="shopify-order-card ${chargebackSummary(order).alert ? 'chargeback-active' : ''}">
       <div class="shopify-order-card-head">
         ${img}
         <div>
@@ -1115,8 +1209,8 @@ function renderTicketList() {
   filtered.forEach((t) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    const cb = chargebackSummary(t.orderData || t);
-    btn.className = `ticket-row priority-${t.priority || "normal"} ${cb.active ? "chargeback-active" : ""}`;
+    const cb = chargebackSummary(ticketChargebackSource(t));
+    btn.className = `ticket-row priority-${t.priority || "normal"} ${cb.alert ? "chargeback-active" : ""}`;
     const globalHit = isTicketGlobalSearchHit(t);
     btn.classList.toggle("active", t.id === selectedTicketId);
     btn.classList.toggle("global-hit", globalHit);
@@ -1125,7 +1219,7 @@ function renderTicketList() {
         <strong>#${escapeHtml(t.orderNumber || "—")}</strong>
         <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(priorityLabelText(t.priority))}</span>
         ${globalHit ? `<span class="ticket-global-badge">${escapeHtml(tt('بحث الفريق', 'Team search'))}</span>` : ""}
-        ${chargebackBadge(t.orderData || t, true)}
+        ${chargebackBadge(ticketChargebackSource(t), true)}
         ${shopifyStatusPill(t)}
       </div>
       <div class="ticket-row-title">${escapeHtml(typeLabel(t.type) || t.type || "Ticket")}</div>
@@ -1340,7 +1434,7 @@ function renderTicketDetail() {
       info.innerHTML = `<div class="ticket-shopify-empty">No linked Shopify order yet.</div>`;
     } else {
       info.innerHTML = `
-        <section class="ticket-shopify-card ${chargebackSummary(orderData).active ? 'chargeback-active' : ''}">
+        <section class="ticket-shopify-card ${chargebackSummary(ticketChargebackSource(t)).alert ? 'chargeback-active' : ''}">
           <div class="ticket-shopify-head">
             ${img}
             <div class="ticket-shopify-title-block">
@@ -1348,7 +1442,7 @@ function renderTicketDetail() {
               <h3>#${escapeHtml(t.orderNumber || orderData.orderNumber || "—")}</h3>
               <p>${escapeHtml(t.type ? (typeLabel(t.type) || t.type) : tt("تذكرة دعم", "Support ticket"))}</p>
               ${shopifyStatusPill(t)}
-              ${chargebackBadge(orderData)}
+              ${chargebackBadge(ticketChargebackSource(t))}
             </div>
           </div>
 
@@ -1359,7 +1453,7 @@ function renderTicketDetail() {
             <div class="field-card"><span>Postcode</span><strong>${escapeHtml(orderData.postcode || "—")}</strong></div>
             <div class="field-card"><span>Total</span><strong>${escapeHtml(orderData.totalPaid || "—")}</strong></div>
             <div class="field-card"><span>Payment</span><strong>${escapeHtml(orderData.paymentStatus || "—")}</strong></div>
-            <div class="field-card chargeback-field ${chargebackSummary(orderData).cls}"><span>${escapeHtml(disputeLabel())}</span>${chargebackDetailsHtml(orderData)}</div>
+            <div class="field-card chargeback-field ${chargebackSummary(ticketChargebackSource(t)).cls}"><span>${escapeHtml(disputeLabel())}</span>${chargebackDetailsHtml(ticketChargebackSource(t))}</div>
             <div class="field-card"><span>${escapeHtml(purchaseDateLabel())}</span><strong>${escapeHtml(fmtPurchaseDate(orderData.orderDate || t.orderDate))}</strong></div>
             <div class="field-card"><span>${escapeHtml(purchaseAgeLabel())}</span><strong>${escapeHtml(fmtPurchaseAge(orderData.orderDate || t.orderDate))}</strong></div>
             <div class="field-card"><span>Fulfilment</span><strong>${escapeHtml(orderData.orderالحالة || "—")}</strong></div>

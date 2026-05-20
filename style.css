@@ -6173,3 +6173,40 @@ body[data-bg-tone="dark"] .ticket-access-note{
 @media (max-width: 700px){
   .chargeback-badge{ font-size:11px; padding:5px 8px; }
 }
+
+
+/* Tickets v3.5 — stronger chargeback phase 2 visibility */
+.ticket-row.chargeback-active,
+.ticket-shopify-card.chargeback-active,
+.shopify-order-card.chargeback-active{
+  position:relative;
+  border:2px solid rgba(239,68,68,.92) !important;
+  box-shadow:0 0 0 4px rgba(239,68,68,.16), 0 22px 52px rgba(185,28,28,.24) !important;
+}
+.ticket-row.chargeback-active::after,
+.ticket-shopify-card.chargeback-active::after,
+.shopify-order-card.chargeback-active::after{
+  content:"";
+  position:absolute;
+  inset:-3px;
+  border-radius:inherit;
+  pointer-events:none;
+  border:2px solid rgba(239,68,68,.22);
+  animation:chargebackCardPulse 1.6s ease-in-out infinite;
+}
+.ticket-row.chargeback-active .ticket-priority-pill,
+.chargeback-badge.active{
+  text-transform:none;
+}
+@keyframes chargebackCardPulse{
+  0%{ opacity:.2; transform:scale(1); }
+  50%{ opacity:.75; transform:scale(1.006); }
+  100%{ opacity:.2; transform:scale(1); }
+}
+@media(max-width:700px){
+  .ticket-row.chargeback-active,
+  .ticket-shopify-card.chargeback-active,
+  .shopify-order-card.chargeback-active{
+    box-shadow:0 0 0 3px rgba(239,68,68,.16), 0 16px 36px rgba(185,28,28,.2) !important;
+  }
+}
