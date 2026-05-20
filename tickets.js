@@ -789,7 +789,14 @@ function ensureDeletedTicketsUI() {
   }
 
   const canAccess = canAccessDeletedTickets(currentUser);
-  el('ticket-deleted-toggle')?.classList.toggle('hidden', !canAccess);
+  const toggle = el('ticket-deleted-toggle');
+  if (toggle) {
+    toggle.classList.toggle('hidden', !canAccess);
+    if (!toggle.dataset.deletedHooked) {
+      toggle.dataset.deletedHooked = '1';
+      toggle.addEventListener('click', openDeletedTicketsFolder);
+    }
+  }
   translateTicketsStatic();
 }
 
@@ -1252,6 +1259,7 @@ function hookUI() {
   if (isHooked) return;
   isHooked = true;
   ensureDeletedTicketsUI();
+  el('ticket-deleted-toggle')?.addEventListener('click', openDeletedTicketsFolder);
   ensureTicketGlobalSearchUI();
 
   el("ticket-new-toggle")?.addEventListener("click", () => setTicketFormمفتوحة(true));
