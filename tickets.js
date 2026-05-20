@@ -1,4 +1,4 @@
-// tickets.js — TeleSyriana Phase 2 Ticket System
+// tickets.js — TeleSyriana Phase 3 Ticket System
 // Firestore collection: tickets
 // Small, support-focused workflow: emergency queue, order issues, returns, escalations.
 
@@ -169,12 +169,22 @@ function visibleStaffForAssignment() {
 }
 
 function ticketSearchText(ticket) {
+  const commentsText = (Array.isArray(ticket.comments) ? ticket.comments : [])
+    .map((comment) => [
+      comment?.text,
+      commentTypeMeta(comment?.type).ar,
+      commentTypeMeta(comment?.type).en,
+      comment?.authorName,
+      staffName(comment?.authorId),
+    ].join(" "))
+    .join(" ");
   return [
     ticket.orderNumber,
     ticket.customerName,
     ticket.email,
     ticket.notes,
     ticket.resolution,
+    commentsText,
     typeLabel(ticket.type),
     statusLabelText(ticket.status),
     staffName(ticket.assignedTo),
@@ -196,6 +206,21 @@ function canViewTicket(ticket) {
   const q = currentTicketSearchTerm();
   // Agents keep a clean queue, but search can find an existing ticket by order/customer/email/notes.
   return Boolean(q && q.length >= 2 && ticketSearchText(ticket).includes(q));
+}
+function isTicketGlobalSearchActive() {
+  const q = currentTicketSearchTerm();
+  return Boolean(currentUser && !canSeeAll(currentUser) && q && q.length >= 2);
+}
+function isTicketGlobalSearchHit(ticket) {
+  const q = currentTicketSearchTerm();
+  return Boolean(isTicketGlobalSearchActive() && !canViewTicketBase(ticket) && ticketSearchText(ticket).includes(q));
+}
+function canManageTicketFields(ticket) {
+  if (!currentUser || !ticket) return false;
+  return canEditAll(currentUser) || ticket.assignedTo === currentUser.id || ticket.createdBy === currentUser.id;
+}
+function canAddTicketComment(ticket) {
+  return Boolean(currentUser && ticket && canViewTicket(ticket));
 }
 
 function normaliseالطلبNumber(v) {
@@ -694,6 +719,43 @@ function shopifyStatusPill(t) {
   return `<span class="shopify-sync-pill ${m.cls}">${escapeHtml(m[currentLang()] || m.en)}</span>`;
 }
 
+function ensureTicketGlobalSearchUI() {
+  const filters = document.querySelector('#page-tickets .ticket-filters');
+  if (!filters || el('ticket-global-search-hint')) return;
+  const hint = document.createElement('div');
+  hint.id = 'ticket-global-search-hint';
+  hint.className = 'ticket-global-search-hint hidden';
+  filters.insertAdjacentElement('afterend', hint);
+}
+
+function updateTicketGlobalSearchUI(filteredRows = []) {
+  ensureTicketGlobalSearchUI();
+  const hint = el('ticket-global-search-hint');
+  if (!hint) return;
+  const q = currentTicketSearchTerm();
+  const active = isTicketGlobalSearchActive();
+  if (!active) {
+    hint.classList.add('hidden');
+    hint.textContent = '';
+    return;
+  }
+  const globalHits = filteredRows.filter(isTicketGlobalSearchHit).length;
+  hint.classList.remove('hidden');
+  hint.innerHTML = globalHits
+    ? tt(`تم العثور على ${globalHits} تذكرة من خارج قائمتك. يمكنك فتحها وإضافة تحديثات المتابعة.`, `Found ${globalHits} ticket(s) outside your own queue. You can open them and add handling updates.`)
+    : tt(`البحث يشمل كل تذاكر الفريق. اكتب رقم الطلب أو البريد أو اسم العميل بدقة.`, `Search includes all team tickets. Use order number, email, or customer name for best results.`);
+}
+
+function ensureTicketAccessNotice() {
+  if (el('ticket-access-note')) return;
+  const head = document.querySelector('#ticket-detail .ticket-detail-head');
+  if (!head) return;
+  const note = document.createElement('div');
+  note.id = 'ticket-access-note';
+  note.className = 'ticket-access-note hidden';
+  head.insertAdjacentElement('afterend', note);
+}
+
 function ensureDeletedTicketsUI() {
   const actions = document.querySelector('#page-tickets .tickets-actions');
   if (actions && !el('ticket-deleted-toggle')) {
@@ -890,16 +952,25 @@ function renderTicketList() {
   const filtered = visible.filter(ticketMatchesFilters);
   list.innerHTML = "";
   empty.classList.toggle("hidden", filtered.length > 0);
+  if (!filtered.length) {
+    empty.textContent = isTicketGlobalSearchActive()
+      ? tt("لم يتم العثور على تذكرة بهذا البحث في كل الفريق.", "No matching ticket found across the team.")
+      : tt("لا توجد تذاكر في قائمتك الحالية.", "No tickets found in your current queue.");
+  }
+  updateTicketGlobalSearchUI(filtered);
 
   filtered.forEach((t) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `ticket-row priority-${t.priority || "normal"}`;
+    const globalHit = isTicketGlobalSearchHit(t);
     btn.classList.toggle("active", t.id === selectedTicketId);
+    btn.classList.toggle("global-hit", globalHit);
     btn.innerHTML = `
       <div class="ticket-row-top">
         <strong>#${escapeHtml(t.orderNumber || "—")}</strong>
         <span class="ticket-priority-pill ${t.priority || "normal"}">${escapeHtml(priorityLabelText(t.priority))}</span>
+        ${globalHit ? `<span class="ticket-global-badge">${escapeHtml(tt('بحث الفريق', 'Team search'))}</span>` : ""}
         ${shopifyStatusPill(t)}
       </div>
       <div class="ticket-row-title">${escapeHtml(typeLabel(t.type) || t.type || "Ticket")}</div>
@@ -928,6 +999,130 @@ function selectTicket(id) {
   }
 }
 
+
+function commentTypeMeta(type) {
+  const labels = {
+    customer_response: { ar: "رد العميل", en: "Customer response", cls: "customer" },
+    agent_response: { ar: "رد الموظف", en: "Agent response", cls: "agent" },
+    internal_note: { ar: "ملاحظة داخلية", en: "Internal note", cls: "internal" },
+    decision: { ar: "قرار / الإجراء التالي", en: "Decision / next action", cls: "decision" },
+  };
+  return labels[type] || labels.internal_note;
+}
+
+function normaliseTicketComments(ticket) {
+  const comments = Array.isArray(ticket?.comments) ? ticket.comments.filter(Boolean) : [];
+  if (comments.length) return comments;
+  const legacy = String(ticket?.notes || "").trim();
+  if (!legacy) return [];
+  return [{
+    type: "internal_note",
+    text: legacy,
+    authorId: ticket?.createdBy || "",
+    authorName: ticket?.createdByName || staffName(ticket?.createdBy) || "System",
+    createdAt: ticket?.createdAt || ticket?.updatedAt || Date.now(),
+    legacy: true,
+  }];
+}
+
+function renderTicketComments(ticket) {
+  const list = el("ticket-comments-list");
+  const title = el("ticket-comments-title");
+  const subtitle = el("ticket-comments-subtitle");
+  const addBtn = el("ticket-comment-add-btn");
+  const textBox = el("ticket-comment-text");
+
+  if (title) title.textContent = tt("ملاحظات داخلية / سجل المتابعة", "Internal notes / Handling log");
+  if (subtitle) subtitle.textContent = tt(
+    "سجل كل رد من العميل، رد الموظف، ملاحظة داخلية، أو قرار مطلوب.",
+    "Log every customer response, agent reply, internal note, or required decision."
+  );
+  if (addBtn) addBtn.textContent = tt("إضافة تعليق", "Add comment");
+  if (textBox) textBox.placeholder = tt("اكتب آخر تحديث أو القرار المطلوب...", "Write the latest update or decision...");
+
+  const typeSelect = el("ticket-comment-type");
+  if (typeSelect) {
+    const value = typeSelect.value || "internal_note";
+    const types = ["customer_response", "agent_response", "internal_note", "decision"];
+    typeSelect.innerHTML = types
+      .map((key) => {
+        const meta = commentTypeMeta(key);
+        return `<option value="${key}">${escapeHtml(meta[currentLang()] || meta.en)}</option>`;
+      })
+      .join("");
+    typeSelect.value = types.includes(value) ? value : "internal_note";
+  }
+
+  if (!list) return;
+  const comments = normaliseTicketComments(ticket);
+  if (!comments.length) {
+    list.innerHTML = `<div class="ticket-comments-empty">${tt("لا توجد ملاحظات بعد.", "No comments yet.")}</div>`;
+    return;
+  }
+
+  list.innerHTML = comments
+    .slice()
+    .sort((a, b) => tsToMs(a.createdAt) - tsToMs(b.createdAt))
+    .map((comment) => {
+      const meta = commentTypeMeta(comment.type);
+      const label = meta[currentLang()] || meta.en;
+      const author = comment.authorName || staffName(comment.authorId) || "—";
+      return `
+        <article class="ticket-comment-card ${meta.cls}">
+          <div class="ticket-comment-top">
+            <span class="ticket-comment-type">${escapeHtml(label)}</span>
+            <span class="ticket-comment-meta">${escapeHtml(author)} • ${escapeHtml(fmtDate(comment.createdAt))}</span>
+          </div>
+          <div class="ticket-comment-text">${escapeHtml(comment.text || "").replace(/\n/g, "<br>")}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+async function addTicketComment() {
+  const ticket = allTickets.find((x) => x.id === selectedTicketId);
+  if (!ticket) return showTicketAlert(tt("اختر تذكرة أولاً.", "Select a ticket first."), true);
+  if (!canAddTicketComment(ticket)) return showTicketAlert(tt("لا يمكنك إضافة تعليق على هذه التذكرة.", "You cannot add a comment to this ticket."), true);
+
+  const type = el("ticket-comment-type")?.value || "internal_note";
+  const text = String(el("ticket-comment-text")?.value || "").trim();
+  if (!text) return showTicketAlert(tt("اكتب تعليقاً قبل الحفظ.", "Write a comment before saving."), true);
+
+  const btn = el("ticket-comment-add-btn");
+  const restoreBtn = setButtonSaving(btn, true, tt("جاري الإضافة...", "Adding..."));
+  const newComment = {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    text,
+    authorId: currentUser?.id || "",
+    authorName: currentUser?.name || "",
+    createdAt: Date.now(),
+  };
+  const existing = Array.isArray(ticket.comments) && ticket.comments.length ? ticket.comments : normaliseTicketComments(ticket);
+  const comments = [...existing, newComment];
+
+  try {
+    const update = {
+      comments,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUser?.id || "",
+      history: addHistory(ticket.history, `${commentTypeMeta(type).en}: ${text.slice(0, 60)}`, currentUser?.id || ""),
+    };
+    await updateDoc(doc(db, TICKETS_COL, selectedTicketId), update);
+    allTickets = allTickets.map((row) => row.id === selectedTicketId ? { ...row, ...update, comments, updatedAt: Date.now() } : row);
+    if (el("ticket-comment-text")) el("ticket-comment-text").value = "";
+    renderTicketList();
+    renderTicketDetail();
+    showTicketAlert(tt("تمت إضافة التعليق.", "Comment added."));
+  } catch (err) {
+    console.error("addTicketComment failed", err);
+    showTicketAlert(`Failed to save comment: ${err?.code || err?.message || "unknown error"}`, true);
+  } finally {
+    restoreBtn();
+  }
+}
+
 function renderTicketDetail() {
   const detail = el("ticket-detail");
   const empty = el("ticket-detail-empty");
@@ -942,6 +1137,18 @@ function renderTicketDetail() {
 
   detail.classList.remove("hidden");
   empty.classList.add("hidden");
+  ensureTicketAccessNotice();
+
+  const searchOnlyAccess = isTicketGlobalSearchHit(t);
+  const manageFields = canManageTicketFields(t);
+  const allowComments = canAddTicketComment(t);
+  const accessNote = el('ticket-access-note');
+  if (accessNote) {
+    accessNote.classList.toggle('hidden', !searchOnlyAccess);
+    accessNote.textContent = searchOnlyAccess
+      ? tt('تم فتح هذه التذكرة من بحث الفريق. يمكنك قراءة التفاصيل وإضافة تعليقات متابعة، أما تغيير الحالة أو التعيين يبقى للمسؤول أو صاحب التذكرة.', 'Opened from team search. You can read details and add handling comments; status or assignment changes stay restricted to the owner or supervisor.')
+      : '';
+  }
 
   el("ticket-detail-title").textContent = `Ticket #${t.orderNumber || "—"}`;
   el("ticket-detail-sub").textContent = `${typeLabel(t.type) || t.type} • ${tt("تم الإنشاء", "Created")} ${fmtDate(t.createdAt)}`;
@@ -963,7 +1170,7 @@ function renderTicketDetail() {
   el("ticket-detail-assigned").value = t.assignedTo || "";
   el("ticket-detail-priority-select").value = t.priority || "normal";
   el("ticket-detail-mood").value = t.customerMood || "calm";
-  el("ticket-detail-notes").value = t.notes || "";
+  renderTicketComments(t);
   el("ticket-detail-resolution").value = t.resolution || "";
 
   const info = el("ticket-info-box");
@@ -1024,13 +1231,16 @@ function renderTicketDetail() {
   const history = el("ticket-history-box");
   if (history) history.innerHTML = `${ticketTimelineHtml(t)}${customerHistoryHtml(t)}`;
 
-  const editable = canEditAll(currentUser) || t.assignedTo === currentUser?.id || t.createdBy === currentUser?.id;
-  ["ticket-detail-status", "ticket-detail-assigned", "ticket-detail-priority-select", "ticket-detail-mood", "ticket-detail-notes", "ticket-detail-resolution"].forEach((id) => {
+  ["ticket-detail-status", "ticket-detail-assigned", "ticket-detail-priority-select", "ticket-detail-mood", "ticket-detail-resolution"].forEach((id) => {
     const node = el(id);
-    if (node) node.disabled = !editable;
+    if (node) node.disabled = !manageFields;
   });
-  if (el("ticket-save-btn")) el("ticket-save-btn").disabled = !editable;
-  if (el("ticket-escalate-btn")) el("ticket-escalate-btn").disabled = !editable;
+  ["ticket-comment-type", "ticket-comment-text", "ticket-comment-add-btn"].forEach((id) => {
+    const node = el(id);
+    if (node) node.disabled = !allowComments;
+  });
+  if (el("ticket-save-btn")) el("ticket-save-btn").disabled = !manageFields;
+  if (el("ticket-escalate-btn")) el("ticket-escalate-btn").disabled = !manageFields;
   if (el("ticket-delete-btn")) {
     el("ticket-delete-btn").classList.toggle("hidden", !canSoftDeleteTicket(t));
     el("ticket-delete-btn").disabled = !canSoftDeleteTicket(t);
@@ -1042,6 +1252,7 @@ function hookUI() {
   if (isHooked) return;
   isHooked = true;
   ensureDeletedTicketsUI();
+  ensureTicketGlobalSearchUI();
 
   el("ticket-new-toggle")?.addEventListener("click", () => setTicketFormمفتوحة(true));
 
@@ -1120,6 +1331,13 @@ function hookUI() {
   });
 
   el("ticket-save-btn")?.addEventListener("click", saveSelectedTicket);
+  el("ticket-comment-add-btn")?.addEventListener("click", addTicketComment);
+  el("ticket-comment-text")?.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      addTicketComment();
+    }
+  });
   el("ticket-delete-btn")?.addEventListener("click", softDeleteSelectedTicket);
   el("ticket-escalate-btn")?.addEventListener("click", async () => {
     if (!selectedTicketId) return;
@@ -1185,6 +1403,16 @@ async function createTicket() {
   const cachedFromDb = await getCachedالطلب(orderNumber);
   const cachedالطلب = (currentLiveOrder && currentLiveOrder.orderNumber === orderNumber) ? currentLiveOrder : cachedFromDb;
 
+  const initialNote = el("ticket-notes")?.value?.trim() || "";
+  const initialComments = initialNote ? [{
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    type: "internal_note",
+    text: initialNote,
+    authorId: currentUser.id,
+    authorName: currentUser.name,
+    createdAt: Date.now(),
+  }] : [];
+
   const payload = {
     orderNumber,
     type,
@@ -1195,7 +1423,8 @@ async function createTicket() {
     createdByName: currentUser.name,
     customerName: el("ticket-customer")?.value?.trim() || cachedالطلب?.customerName || "",
     email: el("ticket-email")?.value?.trim() || cachedالطلب?.email || "",
-    notes: el("ticket-notes")?.value?.trim() || "",
+    notes: initialNote,
+    comments: initialComments,
     resolution: "",
     customerMood: inferMood(type, priority),
     risk: riskFromTypeAndالطلب(type, cachedالطلب),
@@ -1225,7 +1454,7 @@ async function createTicket() {
     } : {},
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    history: addHistory([], `تم الإنشاء ticket (${TYPE_LABELS[type] || type})`, currentUser.id),
+    history: addHistory([], `Created ticket (${typeLabel(type) || type})`, currentUser.id),
   };
 
   try {
@@ -1311,18 +1540,16 @@ async function saveSelectedTicket() {
   const assignedTo = el("ticket-detail-assigned")?.value || "";
   const priority = el("ticket-detail-priority-select")?.value || "normal";
   const customerMood = el("ticket-detail-mood")?.value || "calm";
-  const notes = el("ticket-detail-notes")?.value || "";
   const resolution = el("ticket-detail-resolution")?.value || "";
   const update = {
     status,
     assignedTo,
     priority,
     customerMood,
-    notes,
     resolution,
     updatedAt: serverTimestamp(),
     updatedBy: currentUser?.id || "",
-    history: addHistory(t.history, `تم الحفظ changes: status ${STATUS_LABELS[status] || status}, priority ${PRIORITY_LABELS[priority] || priority}`, currentUser?.id || ""),
+    history: addHistory(t.history, `Saved changes: status ${statusLabelText(status) || status}, priority ${priorityLabelText(priority) || priority}`, currentUser?.id || ""),
   };
   if (status === "resolved" || status === "closed") {
     update.resolvedAt = serverTimestamp();
@@ -1363,16 +1590,23 @@ function subscribeDeletedTickets() {
 
 function subscribeTickets() {
   if (unsubTickets) unsubTickets();
-  const q = query(collection(db, TICKETS_COL), orderBy("updatedAt", "desc"));
+  // Read the raw collection, then sort locally. This keeps old/legacy tickets visible
+  // even if a ticket document is missing updatedAt or Firestore has no orderBy index yet.
+  const q = collection(db, TICKETS_COL);
   unsubTickets = onSnapshot(q, (snapshot) => {
     allTickets = [];
     snapshot.forEach((d) => allTickets.push({ id: d.id, ...d.data() }));
+    allTickets.sort((a, b) => {
+      const bm = tsToMs(b.updatedAt || b.createdAt) || Number(String(b.orderNumber || '').replace(/\D/g, '')) || 0;
+      const am = tsToMs(a.updatedAt || a.createdAt) || Number(String(a.orderNumber || '').replace(/\D/g, '')) || 0;
+      return bm - am;
+    });
     if (selectedTicketId && !allTickets.some((t) => t.id === selectedTicketId)) selectedTicketId = null;
     renderTicketList();
     renderTicketDetail();
   }, (err) => {
     console.error("tickets snapshot error", err);
-    showTicketAlert("Could not load tickets. Check Firestore rules/indexes.", true);
+    showTicketAlert(tt("تعذر تحميل التذاكر. تحقق من صلاحيات Firestore أو الاتصال.", "Could not load tickets. Check Firestore rules or connection."), true);
   });
 }
 
@@ -1387,6 +1621,7 @@ function initTickets() {
   if (!currentUser) {
     allTickets = [];
     renderTicketList();
+    updateTicketGlobalSearchUI([]);
     renderTicketDetail();
     if (unsubTickets) unsubTickets();
     if (unsubDeletedTickets) unsubDeletedTickets();

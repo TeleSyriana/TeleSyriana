@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16.png" />
   <link rel="shortcut icon" href="images/favicon.ico" />
-  <link rel="stylesheet" href="style.css?v=tickets-delete-v1" />
+  <link rel="stylesheet" href="style.css?v=tickets-global-search-v3" />
 </head>
 
 <body data-build-version="phase3-shifts">
@@ -561,10 +561,25 @@
 
                 <div class="ticket-history-box" id="ticket-history-box"></div>
 
-                <label>
-                  ملاحظات داخلية / handling log
-                  <textarea id="ticket-detail-notes" rows="6"></textarea>
-                </label>
+                <section class="ticket-comments-panel" id="ticket-comments-panel">
+                  <div class="ticket-comments-head">
+                    <div>
+                      <h3 id="ticket-comments-title">ملاحظات داخلية / Handling log</h3>
+                      <p id="ticket-comments-subtitle">Add customer responses, agent replies, internal notes, or the next decision.</p>
+                    </div>
+                  </div>
+                  <div class="ticket-comments-list" id="ticket-comments-list"></div>
+                  <div class="ticket-comment-composer">
+                    <select id="ticket-comment-type" aria-label="Comment type">
+                      <option value="customer_response">Customer response</option>
+                      <option value="agent_response">Agent response</option>
+                      <option value="internal_note">Internal note</option>
+                      <option value="decision">Decision / next action</option>
+                    </select>
+                    <textarea id="ticket-comment-text" rows="3" placeholder="Write the latest update..."></textarea>
+                    <button type="button" id="ticket-comment-add-btn" class="btn-secondary">Add comment</button>
+                  </div>
+                </section>
 
                 <label>
                   Resolution
@@ -1272,7 +1287,7 @@
   <!-- scripts -->
   <script type="module" src="app.js?v=tickets-delete-v1"></script>
   <script type="module" src="tasks.js?v=tickets-delete-v1"></script>
-  <script type="module" src="tickets.js?v=tickets-delete-v1"></script>
+  <script type="module" src="tickets.js?v=tickets-global-search-v3"></script>
   <script type="module" src="reports.js?v=tickets-delete-v1"></script>
   <script type="module" src="payroll.js?v=tickets-delete-v1"></script>
   <script type="module" src="messages.js?v=tickets-delete-v1"></script>
