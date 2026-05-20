@@ -149,6 +149,36 @@ function fmtDate(v) {
   return new Date(ms).toLocaleString();
 }
 
+function fmtPurchaseDate(v) {
+  return fmtDate(v);
+}
+
+function purchaseDateLabel() {
+  return tt("تاريخ الشراء", "Purchase date");
+}
+
+function purchaseAgeLabel() {
+  return tt("عمر الطلب", "Order age");
+}
+
+function fmtPurchaseAge(v) {
+  const ms = tsToMs(v);
+  if (!ms) return "—";
+  const now = Date.now();
+  const diffMs = Math.max(0, now - ms);
+  const days = Math.floor(diffMs / 86400000);
+
+  if (days < 1) return tt("تم الشراء اليوم", "Bought today");
+  if (days === 1) return tt("تم الشراء منذ يوم واحد", "Bought 1 day ago");
+  if (days < 90) return tt(`تم الشراء منذ ${days} يوم`, `Bought ${days} days ago`);
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return tt(`تم الشراء منذ أكثر من ${months} أشهر`, `Bought ${months}+ months ago`);
+
+  const years = Math.floor(days / 365);
+  return tt(`تم الشراء منذ أكثر من ${years} سنة`, `Bought ${years}+ years ago`);
+}
+
 function todayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -311,7 +341,7 @@ function mapShopifyOrder(raw) {
     phone: customer.phone || "",
     postcode: shipping.zip || shipping.postcode || shipping.postalCode || "",
     totalPaid: totalAmount ? `${totalAmount} ${totalCurrency}`.trim() : "",
-    orderDate: order.created_at || order.createdAt || "",
+    orderDate: order.processed_at || order.processedAt || order.created_at || order.createdAt || raw.processed_at || raw.processedAt || raw.created_at || raw.createdAt || raw.orderCreatedAt || "",
     courier: track.company || "",
     trackingNumber: track.number || "",
     trackingUrl: track.url || "",
@@ -368,6 +398,8 @@ function renderShopifyLiveResult(order, firebaseStatus = currentLiveOrderFirebas
       <div class="shopify-order-grid">
         <div><b>Total</b><span>${escapeHtml(order.totalPaid || "—")}</span></div>
         <div><b>Payment</b><span>${escapeHtml(order.paymentStatus || "—")}</span></div>
+        <div><b>${escapeHtml(purchaseDateLabel())}</b><span>${escapeHtml(fmtPurchaseDate(order.orderDate))}</span></div>
+        <div><b>${escapeHtml(purchaseAgeLabel())}</b><span>${escapeHtml(fmtPurchaseAge(order.orderDate))}</span></div>
         <div><b>Fulfilment</b><span>${escapeHtml(order.orderالحالة || "—")}</span></div>
         <div><b>Courier</b><span>${escapeHtml(order.courier || "—")}</span></div>
         <div><b>Postcode</b><span>${escapeHtml(order.postcode || "—")}</span></div>
@@ -502,6 +534,8 @@ function renderالطلبPreview(order) {
         <div><strong>Items:</strong> ${escapeHtml(order.items || "—")}</div>
         <div><strong>Total:</strong> ${escapeHtml(order.totalPaid || "—")}</div>
         <div><strong>Payment:</strong> ${escapeHtml(order.paymentStatus || "—")}</div>
+        <div><strong>${escapeHtml(purchaseDateLabel())}:</strong> ${escapeHtml(fmtPurchaseDate(order.orderDate))}</div>
+        <div><strong>${escapeHtml(purchaseAgeLabel())}:</strong> ${escapeHtml(fmtPurchaseAge(order.orderDate))}</div>
         <div><strong>Fulfilment:</strong> ${escapeHtml(order.orderالحالة || "—")}</div>
         <div><strong>Tracking:</strong> ${escapeHtml(order.trackingNumber || "—")} ${order.courier ? `(${escapeHtml(order.courier)})` : ""}</div>
       </div>
@@ -1210,6 +1244,8 @@ function renderTicketDetail() {
             <div class="field-card"><span>Postcode</span><strong>${escapeHtml(orderData.postcode || "—")}</strong></div>
             <div class="field-card"><span>Total</span><strong>${escapeHtml(orderData.totalPaid || "—")}</strong></div>
             <div class="field-card"><span>Payment</span><strong>${escapeHtml(orderData.paymentStatus || "—")}</strong></div>
+            <div class="field-card"><span>${escapeHtml(purchaseDateLabel())}</span><strong>${escapeHtml(fmtPurchaseDate(orderData.orderDate || t.orderDate))}</strong></div>
+            <div class="field-card"><span>${escapeHtml(purchaseAgeLabel())}</span><strong>${escapeHtml(fmtPurchaseAge(orderData.orderDate || t.orderDate))}</strong></div>
             <div class="field-card"><span>Fulfilment</span><strong>${escapeHtml(orderData.orderالحالة || "—")}</strong></div>
             <div class="field-card"><span>Courier</span><strong>${escapeHtml(orderData.courier || "—")}</strong></div>
             <div class="field-card"><span>Tracking</span><strong>${escapeHtml(orderData.trackingNumber || "—")}</strong></div>
