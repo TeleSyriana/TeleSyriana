@@ -6136,16 +6136,6 @@ body[data-bg-tone="dark"] .ticket-access-note{
   color:#1e40af;
   border-color:#bfdbfe;
 }
-
-.chargeback-badge.warning{
-  background:#fef3c7;
-  color:#92400e;
-  border-color:#fde68a;
-}
-.chargeback-field.warning{
-  border-color:#fde68a !important;
-  background:#fffbeb !important;
-}
 .ticket-row.chargeback-active,
 .ticket-shopify-card.chargeback-active,
 .shopify-order-card.chargeback-active{
@@ -6218,47 +6208,5 @@ body[data-bg-tone="dark"] .ticket-access-note{
   .ticket-shopify-card.chargeback-active,
   .shopify-order-card.chargeback-active{
     box-shadow:0 0 0 3px rgba(239,68,68,.16), 0 16px 36px rgba(185,28,28,.2) !important;
-  }
-}
-
-/* Tickets v3.7 — possible chargeback risk orange glow */
-.ticket-row.chargeback-risk-warning,
-.ticket-shopify-card.chargeback-risk-warning,
-.shopify-order-card.chargeback-risk-warning{
-  position:relative;
-  border:2px solid rgba(245,158,11,.78) !important;
-  box-shadow:0 0 0 4px rgba(245,158,11,.13), 0 18px 42px rgba(217,119,6,.16) !important;
-  background:linear-gradient(180deg,rgba(255,251,235,.98),rgba(255,255,255,.96)) !important;
-}
-.ticket-row.chargeback-risk-warning::after,
-.ticket-shopify-card.chargeback-risk-warning::after,
-.shopify-order-card.chargeback-risk-warning::after{
-  content:"";
-  position:absolute;
-  inset:-3px;
-  border-radius:inherit;
-  pointer-events:none;
-  border:2px solid rgba(245,158,11,.24);
-  animation:chargebackRiskPulse 1.8s ease-in-out infinite;
-}
-.chargeback-badge.warning{
-  box-shadow:0 0 0 0 rgba(245,158,11,.35);
-  animation:chargebackRiskBadgePulse 1.65s ease-in-out infinite;
-}
-@keyframes chargebackRiskPulse{
-  0%{ opacity:.18; transform:scale(1); }
-  50%{ opacity:.72; transform:scale(1.004); }
-  100%{ opacity:.18; transform:scale(1); }
-}
-@keyframes chargebackRiskBadgePulse{
-  0%{ box-shadow:0 0 0 0 rgba(245,158,11,.34); }
-  70%{ box-shadow:0 0 0 9px rgba(245,158,11,0); }
-  100%{ box-shadow:0 0 0 0 rgba(245,158,11,0); }
-}
-@media(max-width:700px){
-  .ticket-row.chargeback-risk-warning,
-  .ticket-shopify-card.chargeback-risk-warning,
-  .shopify-order-card.chargeback-risk-warning{
-    box-shadow:0 0 0 3px rgba(245,158,11,.14), 0 14px 32px rgba(217,119,6,.14) !important;
   }
 }
