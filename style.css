@@ -6137,15 +6137,30 @@ body[data-bg-tone="dark"] .ticket-access-note{
   border-color:#bfdbfe;
 }
 
-.chargeback-badge.warning{
+.chargeback-badge.risk{
   background:#fef3c7;
   color:#92400e;
-  border-color:#fde68a;
+  border-color:#fcd34d;
+  box-shadow:0 0 0 0 rgba(245,158,11,.24);
 }
-.chargeback-field.warning{
-  border-color:#fde68a !important;
+.ticket-row.chargeback-risk,
+.ticket-shopify-card.chargeback-risk,
+.shopify-order-card.chargeback-risk{
+  border-color:rgba(245,158,11,.78) !important;
+  box-shadow:0 0 0 3px rgba(245,158,11,.13), 0 16px 38px rgba(180,83,9,.13) !important;
+}
+.ticket-row.chargeback-risk{
+  background:linear-gradient(135deg,rgba(255,251,235,.98),rgba(255,255,255,.96)) !important;
+}
+.ticket-shopify-card.chargeback-risk,
+.shopify-order-card.chargeback-risk{
+  background:linear-gradient(180deg,rgba(255,251,235,.98),rgba(255,255,255,.96)) !important;
+}
+.chargeback-field.risk{
+  border-color:#fcd34d !important;
   background:#fffbeb !important;
 }
+
 .ticket-row.chargeback-active,
 .ticket-shopify-card.chargeback-active,
 .shopify-order-card.chargeback-active{
@@ -6186,6 +6201,31 @@ body[data-bg-tone="dark"] .ticket-access-note{
 
 
 /* Tickets v3.5 — stronger chargeback phase 2 visibility */
+
+.chargeback-badge.risk{
+  background:#fef3c7;
+  color:#92400e;
+  border-color:#fcd34d;
+  box-shadow:0 0 0 0 rgba(245,158,11,.24);
+}
+.ticket-row.chargeback-risk,
+.ticket-shopify-card.chargeback-risk,
+.shopify-order-card.chargeback-risk{
+  border-color:rgba(245,158,11,.78) !important;
+  box-shadow:0 0 0 3px rgba(245,158,11,.13), 0 16px 38px rgba(180,83,9,.13) !important;
+}
+.ticket-row.chargeback-risk{
+  background:linear-gradient(135deg,rgba(255,251,235,.98),rgba(255,255,255,.96)) !important;
+}
+.ticket-shopify-card.chargeback-risk,
+.shopify-order-card.chargeback-risk{
+  background:linear-gradient(180deg,rgba(255,251,235,.98),rgba(255,255,255,.96)) !important;
+}
+.chargeback-field.risk{
+  border-color:#fcd34d !important;
+  background:#fffbeb !important;
+}
+
 .ticket-row.chargeback-active,
 .ticket-shopify-card.chargeback-active,
 .shopify-order-card.chargeback-active{
@@ -6214,7 +6254,32 @@ body[data-bg-tone="dark"] .ticket-access-note{
   100%{ opacity:.2; transform:scale(1); }
 }
 @media(max-width:700px){
-  .ticket-row.chargeback-active,
+  
+.chargeback-badge.risk{
+  background:#fef3c7;
+  color:#92400e;
+  border-color:#fcd34d;
+  box-shadow:0 0 0 0 rgba(245,158,11,.24);
+}
+.ticket-row.chargeback-risk,
+.ticket-shopify-card.chargeback-risk,
+.shopify-order-card.chargeback-risk{
+  border-color:rgba(245,158,11,.78) !important;
+  box-shadow:0 0 0 3px rgba(245,158,11,.13), 0 16px 38px rgba(180,83,9,.13) !important;
+}
+.ticket-row.chargeback-risk{
+  background:linear-gradient(135deg,rgba(255,251,235,.98),rgba(255,255,255,.96)) !important;
+}
+.ticket-shopify-card.chargeback-risk,
+.shopify-order-card.chargeback-risk{
+  background:linear-gradient(180deg,rgba(255,251,235,.98),rgba(255,255,255,.96)) !important;
+}
+.chargeback-field.risk{
+  border-color:#fcd34d !important;
+  background:#fffbeb !important;
+}
+
+.ticket-row.chargeback-active,
   .ticket-shopify-card.chargeback-active,
   .shopify-order-card.chargeback-active{
     box-shadow:0 0 0 3px rgba(239,68,68,.16), 0 16px 36px rgba(185,28,28,.2) !important;
