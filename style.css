@@ -6136,6 +6136,16 @@ body[data-bg-tone="dark"] .ticket-access-note{
   color:#1e40af;
   border-color:#bfdbfe;
 }
+
+.chargeback-badge.warning{
+  background:#fef3c7;
+  color:#92400e;
+  border-color:#fde68a;
+}
+.chargeback-field.warning{
+  border-color:#fde68a !important;
+  background:#fffbeb !important;
+}
 .ticket-row.chargeback-active,
 .ticket-shopify-card.chargeback-active,
 .shopify-order-card.chargeback-active{

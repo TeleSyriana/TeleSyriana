@@ -328,19 +328,44 @@ function disputeRank(d) {
 }
 function chargebackSummary(source) {
   const riskFlag = sourceHasChargebackRisk(source);
-  const disputes = collectDisputes(source);
-  if (!disputes.length && !riskFlag) return { has: false, riskOnly: false, active: false, alert: false, cls: "none", status: "", label: tt("لا يوجد", "None"), disputes: [] };
+  const disputes = collectDisputes(source).filter((d) => {
+    const st = normalizeDisputeStatus(d?.status);
+    return Boolean(st || d?.activeFlag || d?.id || d?.amount || d?.reason || d?.evidenceDueBy || d?.initiatedAt);
+  });
+
+  if (!disputes.length && !riskFlag) {
+    return { has: false, riskOnly: false, real: false, active: false, alert: false, cls: "none", status: "", label: tt("لا يوجد", "None"), disputes: [] };
+  }
+
+  // Manual/user-selected chargeback risk is only a warning.
+  // It must NOT behave like a confirmed Shopify dispute.
+  if (!disputes.length && riskFlag) {
+    return {
+      has: true,
+      riskOnly: true,
+      real: false,
+      active: false,
+      won: false,
+      lost: false,
+      alert: false,
+      cls: "warning",
+      status: "risk",
+      label: tt("خطر نزاع بنكي محتمل", "Possible chargeback risk"),
+      top: null,
+      disputes: []
+    };
+  }
+
   const sorted = disputes.slice().sort((a, b) => disputeRank(b) - disputeRank(a));
-  const top = sorted[0] || (riskFlag ? { status: "detected", type: "chargeback", activeFlag: true } : null);
-  const status = normalizeDisputeStatus(top?.status || (riskFlag ? "detected" : ""));
-  const active = ACTIVE_DISPUTE_STATUSES.has(status) || top?.activeFlag === true || (riskFlag && !WON_DISPUTE_STATUSES.has(status));
+  const top = sorted[0];
+  const status = normalizeDisputeStatus(top?.status || "");
   const won = WON_DISPUTE_STATUSES.has(status);
   const lost = LOST_DISPUTE_STATUSES.has(status);
-  const riskOnly = riskFlag && !disputes.length;
-  const alert = active || lost || riskOnly || status === "detected";
-  const cls = lost ? "lost" : active || riskOnly || status === "detected" ? "active" : won ? "won" : "info";
-  const label = riskOnly ? tt("تم رصد خطر نزاع بنكي", "Chargeback risk detected") : disputeStatusLabel(status);
-  return { has: true, riskOnly, active, won, lost, alert, cls, status, label, top, disputes: sorted };
+  const active = !won && !lost && (ACTIVE_DISPUTE_STATUSES.has(status) || top?.activeFlag === true);
+  const alert = active || lost;
+  const cls = lost ? "lost" : active ? "active" : won ? "won" : "info";
+  const label = disputeStatusLabel(status || (top?.activeFlag ? "active" : ""));
+  return { has: true, riskOnly: false, real: true, active, won, lost, alert, cls, status, label, top, disputes: sorted };
 }
 function ticketChargebackSource(ticket) {
   if (!ticket) return null;
@@ -361,14 +386,16 @@ function ticketChargebackSource(ticket) {
 function chargebackBadge(source, compact = false) {
   const cb = chargebackSummary(source);
   if (!cb.has) return "";
-  const text = compact ? (cb.alert ? "CHARGEBACK" : cb.label) : `${disputeLabel()}: ${cb.label}`;
+  const text = compact
+    ? (cb.riskOnly ? tt("خطر محتمل", "Risk") : cb.alert ? "CHARGEBACK" : cb.label)
+    : `${disputeLabel()}: ${cb.label}`;
   return `<span class="chargeback-badge ${cb.cls}">${escapeHtml(text)}</span>`;
 }
 function chargebackDetailsHtml(source) {
   const cb = chargebackSummary(source);
   if (!cb.has) return `<strong>${escapeHtml(tt("لا يوجد نزاع بنكي", "No chargeback"))}</strong>`;
   if (cb.riskOnly) {
-    return `<strong>${escapeHtml(tt("تم رصد خطر نزاع بنكي — لم يرجع Shopify حالة النزاع بعد.", "Chargeback risk detected — Shopify has not returned a dispute status yet."))}</strong>`;
+    return `<strong>${escapeHtml(tt("خطر نزاع بنكي محتمل — لم يؤكد Shopify وجود نزاع فعلي.", "Possible chargeback risk — Shopify has not confirmed a real dispute."))}</strong>`;
   }
   const d = cb.top || {};
   const parts = [
