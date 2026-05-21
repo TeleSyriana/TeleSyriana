@@ -179,7 +179,7 @@ function fmtPurchaseAge(v) {
   return tt(`تم الشراء منذ أكثر من ${years} سنة`, `Bought ${years}+ years ago`);
 }
 
-const ACTIVE_DISPUTE_STATUSES = new Set(["needs_response", "under_review", "open", "submitted", "accepted", "active", "pending", "requires_response"]);
+const ACTIVE_DISPUTE_STATUSES = new Set(["needs_response", "under_review", "open", "submitted", "accepted", "active", "pending", "requires_response", "detected", "chargeback_detected"]);
 const WON_DISPUTE_STATUSES = new Set(["won", "prevented", "resolved_won"]);
 const LOST_DISPUTE_STATUSES = new Set(["lost", "resolved_lost"]);
 
@@ -247,12 +247,16 @@ function normalizeDisputeStatus(status) {
     lost: "lost",
     lose: "lost",
     prevented: "prevented",
+    detected: "detected",
+    chargeback_detected: "detected",
   };
   return aliases[snake] || snake;
 }
 function sourceHasChargebackRisk(source) {
   if (!source) return false;
-  const fields = [source.risk, source.customerMood, source.type, source.title, source.subject, source.chargebackStatus, source.disputeStatus]
+  // Manual risk detection only checks ticket/customer wording.
+  // Real Shopify dispute detection is handled separately through explicit chargeback/dispute fields.
+  const fields = [source.risk, source.customerMood, source.type, source.title, source.subject]
     .map((v) => String(v || "").toLowerCase());
   return fields.some((v) =>
     v === "chargeback" ||
@@ -265,7 +269,7 @@ function sourceHasChargebackRisk(source) {
 }
 function isRealDisputeStatus(status) {
   const st = normalizeDisputeStatus(status);
-  if (!st || st === "risk" || st === "detected" || st === "chargeback_risk" || st === "possible") return false;
+  if (!st || st === "risk" || st === "chargeback_risk" || st === "possible") return false;
   return ACTIVE_DISPUTE_STATUSES.has(st) || WON_DISPUTE_STATUSES.has(st) || LOST_DISPUTE_STATUSES.has(st) || ["accepted", "resolved", "closed"].includes(st);
 }
 
@@ -286,7 +290,7 @@ function normalizeDispute(raw) {
     status,
     activeFlag,
     hasDisputeFlag,
-    confirmedByShopify: hasDisputeFlag || activeFlag || isRealDisputeStatus(status) || Boolean(raw.id || raw.dispute_id || raw.disputeId || raw.order_id || raw.orderId || raw.evidence_due_by || raw.evidenceDueBy || raw.initiated_at || raw.initiatedAt),
+    confirmedByShopify: raw._explicitChargebackStatus === true || hasDisputeFlag || activeFlag || isRealDisputeStatus(status) || Boolean(raw.id || raw.dispute_id || raw.disputeId || raw.order_id || raw.orderId || raw.evidence_due_by || raw.evidenceDueBy || raw.initiated_at || raw.initiatedAt),
     reason: raw.reason || raw.network_reason_code || raw.networkReasonCode || raw.dispute_reason || raw.disputeReason || "",
     amount: amount ? `${amount} ${currency}`.trim() : "",
     evidenceDueBy: raw.evidence_due_by || raw.evidenceDueBy || raw.evidence_deadline || raw.evidenceDeadline || "",
@@ -326,7 +330,9 @@ function collectDisputes(source) {
       status,
       type: source.chargebackType || orderData.chargebackType || raw.chargeback_type || raw.chargebackType || "chargeback",
       reason: source.chargebackReason || orderData.chargebackReason || raw.chargeback_reason || raw.chargebackReason || "",
-      active: source.chargebackActive || orderData.chargebackActive || raw.chargebackActive,
+      active: source.chargebackActive || orderData.chargebackActive || raw.chargebackActive || normalizeDisputeStatus(status) === "detected",
+      hasDispute: true,
+      _explicitChargebackStatus: true,
     });
   }
   return candidates.map(normalizeDispute).filter(Boolean);
