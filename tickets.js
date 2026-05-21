@@ -263,20 +263,30 @@ function sourceHasChargebackRisk(source) {
     v.includes("خطر نزاع")
   );
 }
+function isRealDisputeStatus(status) {
+  const st = normalizeDisputeStatus(status);
+  if (!st || st === "risk" || st === "detected" || st === "chargeback_risk" || st === "possible") return false;
+  return ACTIVE_DISPUTE_STATUSES.has(st) || WON_DISPUTE_STATUSES.has(st) || LOST_DISPUTE_STATUSES.has(st) || ["accepted", "resolved", "closed"].includes(st);
+}
+
 function normalizeDispute(raw) {
   if (!raw || typeof raw !== "object") return null;
   const statusSource = raw.status || raw.dispute_status || raw.disputeStatus || raw.outcome || raw.state || raw.current_status || raw.currentStatus;
   let status = normalizeDisputeStatus(statusSource);
-  const activeFlag = raw.active === true || raw.is_active === true || raw.isActive === true || raw.found === true || raw.dispute_found === true || raw.disputeFound === true;
+  const hasDisputeFlag = raw.has_dispute === true || raw.hasDispute === true || raw.hasChargeback === true || raw.has_chargeback === true;
+  const activeFlag = raw.active === true || raw.is_active === true || raw.isActive === true || raw.found === true || raw.dispute_found === true || raw.disputeFound === true || hasDisputeFlag;
   if (!status && activeFlag) status = "active";
   const type = String(raw.type || raw.disputeType || raw.kind || raw.category || "chargeback").toLowerCase();
   const amount = raw.amount || raw.amount_money?.amount || raw.amountMoney?.amount || raw.total || raw.disputed_amount || raw.disputedAmount || "";
   const currency = raw.currency || raw.amount_money?.currency || raw.amountMoney?.currency || raw.disputed_currency || raw.disputedCurrency || "";
-  return {
+  const normalised = {
     id: raw.id || raw.dispute_id || raw.disputeId || "",
+    orderId: raw.order_id || raw.orderId || "",
     type,
     status,
     activeFlag,
+    hasDisputeFlag,
+    confirmedByShopify: hasDisputeFlag || activeFlag || isRealDisputeStatus(status) || Boolean(raw.id || raw.dispute_id || raw.disputeId || raw.order_id || raw.orderId || raw.evidence_due_by || raw.evidenceDueBy || raw.initiated_at || raw.initiatedAt),
     reason: raw.reason || raw.network_reason_code || raw.networkReasonCode || raw.dispute_reason || raw.disputeReason || "",
     amount: amount ? `${amount} ${currency}`.trim() : "",
     evidenceDueBy: raw.evidence_due_by || raw.evidenceDueBy || raw.evidence_deadline || raw.evidenceDeadline || "",
@@ -284,6 +294,8 @@ function normalizeDispute(raw) {
     finalizedOn: raw.finalized_on || raw.finalizedOn || "",
     initiatedAt: raw.initiated_at || raw.initiatedAt || raw.created_at || raw.createdAt || "",
   };
+  if (!normalised.confirmedByShopify && !normalised.status && !normalised.amount && !normalised.reason && !normalised.evidenceDueBy && !normalised.initiatedAt) return null;
+  return normalised;
 }
 function collectDisputes(source) {
   if (!source) return [];
@@ -330,7 +342,9 @@ function chargebackSummary(source) {
   const riskFlag = sourceHasChargebackRisk(source);
   const disputes = collectDisputes(source).filter((d) => {
     const st = normalizeDisputeStatus(d?.status);
-    return Boolean(st || d?.activeFlag || d?.id || d?.amount || d?.reason || d?.evidenceDueBy || d?.initiatedAt);
+    // Only confirmed Shopify dispute signals count as a real chargeback.
+    // Manual ticket risk/title text stays in the orange warning lane.
+    return Boolean(d?.confirmedByShopify || d?.hasDisputeFlag || isRealDisputeStatus(st));
   });
 
   if (!disputes.length && !riskFlag) {
@@ -365,7 +379,7 @@ function chargebackSummary(source) {
   const alert = active || lost;
   const cls = lost ? "lost" : active ? "active" : won ? "won" : "info";
   const label = disputeStatusLabel(status || (top?.activeFlag ? "active" : ""));
-  return { has: true, riskOnly: false, real: true, active, won, lost, alert, cls, status, label, top, disputes: sorted };
+  return { has: true, riskOnly: false, real: true, confirmed: true, active, won, lost, alert, cls, status, label, top, disputes: sorted };
 }
 function ticketChargebackSource(ticket) {
   if (!ticket) return null;
@@ -407,7 +421,7 @@ function chargebackDetailsHtml(source) {
   }
   const d = cb.top || {};
   const parts = [
-    cb.label,
+    `${tt("مؤكد من Shopify", "Confirmed by Shopify")}: ${cb.label}`,
     d.amount,
     d.reason ? `${tt("السبب", "Reason")}: ${d.reason}` : "",
     d.evidenceDueBy ? `${tt("آخر موعد للرد", "Evidence due")}: ${fmtDate(d.evidenceDueBy)}` : "",
