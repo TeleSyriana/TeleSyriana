@@ -179,7 +179,7 @@ function fmtPurchaseAge(v) {
   return tt(`تم الشراء منذ أكثر من ${years} سنة`, `Bought ${years}+ years ago`);
 }
 
-const ACTIVE_DISPUTE_STATUSES = new Set(["needs_response", "under_review", "open", "submitted", "accepted", "active", "pending", "requires_response", "detected"]);
+const ACTIVE_DISPUTE_STATUSES = new Set(["needs_response", "under_review", "open", "submitted", "accepted", "active", "pending", "requires_response"]);
 const WON_DISPUTE_STATUSES = new Set(["won", "prevented", "resolved_won"]);
 const LOST_DISPUTE_STATUSES = new Set(["lost", "resolved_lost"]);
 
@@ -201,6 +201,7 @@ function disputeStatusLabel(status) {
     resolved_lost: "خسرنا النزاع",
     prevented: "تم منعه",
     detected: "تم رصد نزاع بنكي",
+    risk_detected: "تم رصد خطر نزاع بنكي",
   };
   const en = {
     needs_response: "Needs response",
@@ -217,12 +218,19 @@ function disputeStatusLabel(status) {
     resolved_lost: "Lost",
     prevented: "Prevented",
     detected: "Chargeback detected",
+    risk_detected: "Chargeback risk detected",
   };
   return (ticketLang() === "ar" ? ar[s] : en[s]) || (status || "—");
 }
 function normalizeDisputeStatus(status) {
   const raw = String(status || "").trim();
   if (!raw || raw === "—" || raw === "-") return "";
+  const rawLower = raw.toLowerCase();
+  if (rawLower.includes("تم رصد نزاع") || rawLower.includes("نزاع بنكي مرصود") || rawLower.includes("chargeback detected") || rawLower.includes("dispute detected")) return "detected";
+  if (rawLower.includes("خطر نزاع") || rawLower.includes("chargeback risk") || rawLower.includes("dispute risk")) return "risk_detected";
+  if (rawLower.includes("قيد المراجعة") || rawLower.includes("under review")) return "under_review";
+  if (rawLower.includes("ربحنا") || rawLower.includes("won")) return "won";
+  if (rawLower.includes("خسرنا") || rawLower.includes("lost")) return "lost";
   const snake = raw
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .toLowerCase()
@@ -247,68 +255,23 @@ function normalizeDisputeStatus(status) {
     lost: "lost",
     lose: "lost",
     prevented: "prevented",
+    detected: "detected",
+    risk_detected: "risk_detected",
   };
   return aliases[snake] || snake;
 }
 function sourceHasChargebackRisk(source) {
   if (!source) return false;
-  // Manual risk only. Do not use Shopify dispute status fields here.
-  // Those fields are handled separately as confirmed/detected chargebacks.
-  const fields = [
-    source.risk,
-    source.customerMood,
-    source.type,
-    source.title,
-    source.subject,
-  ].map((v) => String(v || "").toLowerCase());
-
+  const fields = [source.risk, source.customerMood, source.type, source.title, source.subject, source.chargebackStatus, source.disputeStatus]
+    .map((v) => String(v || "").toLowerCase());
   return fields.some((v) =>
     v === "chargeback" ||
     v === "chargeback_risk" ||
-    v.includes("chargeback risk") ||
-    v.includes("possible chargeback") ||
-    v.includes("خطر نزاع") ||
-    v.includes("نزاع بنكي محتمل")
+    v.includes("chargeback") ||
+    v.includes("dispute") ||
+    v.includes("نزاع بنكي") ||
+    v.includes("خطر نزاع")
   );
-}
-
-function sourceHasExplicitShopifyDisputeStatus(source) {
-  if (!source) return false;
-  const raw = source.rawShopify || source.raw || source;
-  const orderData = source.orderData || raw.orderData || {};
-  const values = [
-    source.chargebackStatus,
-    source.disputeStatus,
-    orderData.chargebackStatus,
-    orderData.disputeStatus,
-    raw.chargeback_status,
-    raw.dispute_status,
-    raw.chargebackStatus,
-    raw.disputeStatus,
-    raw.disputeSummary?.status,
-    raw.orderDisputeSummary?.status,
-    raw.order?.disputeSummary?.status,
-    orderData.disputeSummary?.status,
-    orderData.orderDisputeSummary?.status,
-  ];
-  return values.some((v) => Boolean(normalizeDisputeStatus(v)));
-}
-
-function sourceHasRealDisputeObject(source) {
-  if (!source) return false;
-  const raw = source.rawShopify || source.raw || source;
-  const orderData = source.orderData || raw.orderData || {};
-  return [
-    source.disputes, source.chargebacks,
-    orderData.disputes, orderData.chargebacks,
-    raw.disputes, raw.chargebacks,
-    raw.order?.disputes, raw.order?.chargebacks,
-  ].some((arr) => Array.isArray(arr) && arr.length > 0) ||
-  [
-    source.dispute, source.chargeback, source.disputeSummary, source.orderDisputeSummary,
-    orderData.dispute, orderData.chargeback, orderData.disputeSummary, orderData.orderDisputeSummary,
-    raw.dispute, raw.chargeback, raw.disputeSummary, raw.orderDisputeSummary, raw.order?.disputeSummary,
-  ].some((one) => one && typeof one === "object" && Object.keys(one).length > 0);
 }
 function normalizeDispute(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -375,45 +338,19 @@ function disputeRank(d) {
 }
 function chargebackSummary(source) {
   const riskFlag = sourceHasChargebackRisk(source);
-  const hasExplicitStatus = sourceHasExplicitShopifyDisputeStatus(source);
-  const hasRealDisputeObject = sourceHasRealDisputeObject(source);
-  const disputes = collectDisputes(source).filter((d) => {
-    // Keep actual Shopify dispute objects/statuses. Avoid converting a manual risk-only
-    // ticket into a fake confirmed dispute.
-    return hasExplicitStatus || hasRealDisputeObject || d?.id || d?.amount || d?.reason || d?.evidenceDueBy || d?.initiatedAt;
-  });
-
-  if (!disputes.length && !riskFlag) {
-    return { has: false, riskOnly: false, manualRisk: false, active: false, alert: false, cls: "none", status: "", label: tt("لا يوجد", "None"), disputes: [] };
-  }
-
-  if (!disputes.length && riskFlag) {
-    return {
-      has: true,
-      riskOnly: true,
-      manualRisk: true,
-      active: false,
-      won: false,
-      lost: false,
-      alert: false,
-      cls: "risk",
-      status: "risk",
-      label: tt("خطر نزاع بنكي محتمل", "Possible chargeback risk"),
-      top: null,
-      disputes: [],
-    };
-  }
-
+  const disputes = collectDisputes(source);
+  if (!disputes.length && !riskFlag) return { has: false, riskOnly: false, active: false, alert: false, cls: "none", status: "", label: tt("لا يوجد", "None"), disputes: [] };
   const sorted = disputes.slice().sort((a, b) => disputeRank(b) - disputeRank(a));
-  const top = sorted[0] || null;
-  const status = normalizeDisputeStatus(top?.status || "");
-  const active = ACTIVE_DISPUTE_STATUSES.has(status) || top?.activeFlag === true;
+  const top = sorted[0] || (riskFlag ? { status: "detected", type: "chargeback", activeFlag: true } : null);
+  const status = normalizeDisputeStatus(top?.status || (riskFlag ? "detected" : ""));
+  const active = ACTIVE_DISPUTE_STATUSES.has(status) || top?.activeFlag === true || (riskFlag && !WON_DISPUTE_STATUSES.has(status));
   const won = WON_DISPUTE_STATUSES.has(status);
   const lost = LOST_DISPUTE_STATUSES.has(status);
-  const alert = active || lost || status === "detected";
-  const cls = lost ? "lost" : alert ? "active" : won ? "won" : "info";
-  const label = disputeStatusLabel(status || "detected");
-  return { has: true, riskOnly: false, manualRisk: false, active, won, lost, alert, cls, status: status || "detected", label, top, disputes: sorted };
+  const riskOnly = riskFlag && !disputes.length;
+  const alert = active || lost || riskOnly || status === "detected";
+  const cls = lost ? "lost" : active || riskOnly || status === "detected" ? "active" : won ? "won" : "info";
+  const label = riskOnly ? tt("تم رصد خطر نزاع بنكي", "Chargeback risk detected") : disputeStatusLabel(status);
+  return { has: true, riskOnly, active, won, lost, alert, cls, status, label, top, disputes: sorted };
 }
 function ticketChargebackSource(ticket) {
   if (!ticket) return null;
@@ -431,28 +368,17 @@ function ticketChargebackSource(ticket) {
     rawShopify: ticket.orderData?.rawShopify || ticket.rawShopify,
   };
 }
-function chargebackCardClass(source) {
-  const cb = chargebackSummary(source);
-  if (!cb.has) return "";
-  if (cb.cls === "risk") return "chargeback-risk";
-  if (cb.alert || cb.cls === "active" || cb.cls === "lost") return "chargeback-active";
-  if (cb.cls === "won") return "chargeback-won";
-  return "";
-}
-
 function chargebackBadge(source, compact = false) {
   const cb = chargebackSummary(source);
   if (!cb.has) return "";
-  const text = compact
-    ? (cb.cls === "risk" ? tt("خطر محتمل", "Risk") : cb.alert ? "CHARGEBACK" : cb.label)
-    : `${disputeLabel()}: ${cb.label}`;
+  const text = compact ? (cb.alert ? "CHARGEBACK" : cb.label) : `${disputeLabel()}: ${cb.label}`;
   return `<span class="chargeback-badge ${cb.cls}">${escapeHtml(text)}</span>`;
 }
 function chargebackDetailsHtml(source) {
   const cb = chargebackSummary(source);
   if (!cb.has) return `<strong>${escapeHtml(tt("لا يوجد نزاع بنكي", "No chargeback"))}</strong>`;
-  if (cb.riskOnly || cb.manualRisk) {
-    return `<strong>${escapeHtml(tt("خطر نزاع بنكي محتمل — لم يؤكد Shopify وجود نزاع فعلي.", "Possible chargeback risk — Shopify has not confirmed an active dispute."))}</strong>`;
+  if (cb.riskOnly) {
+    return `<strong>${escapeHtml(tt("تم رصد خطر نزاع بنكي — لم يرجع Shopify حالة النزاع بعد.", "Chargeback risk detected — Shopify has not returned a dispute status yet."))}</strong>`;
   }
   const d = cb.top || {};
   const parts = [
@@ -674,7 +600,7 @@ function renderShopifyLiveResult(order, firebaseStatus = currentLiveOrderFirebas
   if (el("shopify-live-use-btn")) el("shopify-live-use-btn").disabled = false;
   const img = order.imageUrl ? `<img class="shopify-product-thumb" src="${escapeHtml(order.imageUrl)}" alt="Product image" loading="lazy" />` : `<div class="shopify-product-thumb placeholder">No image</div>`;
   box.innerHTML = `
-    <div class="shopify-order-card ${chargebackCardClass(order)}">
+    <div class="shopify-order-card ${chargebackSummary(order).alert ? 'chargeback-active' : ''}">
       <div class="shopify-order-card-head">
         ${img}
         <div>
@@ -1294,7 +1220,7 @@ function renderTicketList() {
     const btn = document.createElement("button");
     btn.type = "button";
     const cb = chargebackSummary(ticketChargebackSource(t));
-    btn.className = `ticket-row priority-${t.priority || "normal"} ${chargebackCardClass(ticketChargebackSource(t))}`;
+    btn.className = `ticket-row priority-${t.priority || "normal"} ${cb.alert ? "chargeback-active" : ""}`;
     const globalHit = isTicketGlobalSearchHit(t);
     btn.classList.toggle("active", t.id === selectedTicketId);
     btn.classList.toggle("global-hit", globalHit);
@@ -1518,7 +1444,7 @@ function renderTicketDetail() {
       info.innerHTML = `<div class="ticket-shopify-empty">No linked Shopify order yet.</div>`;
     } else {
       info.innerHTML = `
-        <section class="ticket-shopify-card ${chargebackCardClass(ticketChargebackSource(t))}">
+        <section class="ticket-shopify-card ${chargebackSummary(ticketChargebackSource(t)).alert ? 'chargeback-active' : ''}">
           <div class="ticket-shopify-head">
             ${img}
             <div class="ticket-shopify-title-block">
