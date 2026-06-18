@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16.png" />
   <link rel="shortcut icon" href="images/favicon.ico" />
-  <link rel="stylesheet" href="style.css?v=tickets-chargeback-phase2-v3-5" />
+  <link rel="stylesheet" href="style.css?v=comments-payroll-review-v1" />
 </head>
 
 <body data-build-version="phase3-shifts">
@@ -1120,6 +1120,7 @@
             </label>
             <button id="payroll-this-week" type="button" class="btn-secondary">هذا الأسبوع</button>
             <button id="payroll-refresh" type="button" class="btn-primary" style="width:auto">تحديث</button>
+            <button id="payroll-review-toggle" type="button" class="btn-secondary payroll-review-toggle">Press review</button>
           </div>
 
           <div class="payroll-summary-grid">
@@ -1168,8 +1169,15 @@
             </div>
           </div>
 
-          <div class="payroll-table-wrapper">
-            <table class="payroll-table">
+          <div id="payroll-review-section" class="payroll-review-section hidden">
+            <div class="payroll-review-head">
+              <div>
+                <h3 id="payroll-review-title">Daily calendar review</h3>
+                <p id="payroll-review-subtitle" class="subtitle">Press review to see each calendar day worked and the earning for that day.</p>
+              </div>
+            </div>
+            <div class="payroll-table-wrapper">
+              <table class="payroll-table">
               <thead>
                 <tr id="payroll-table-head-row">
                   <th>التاريخ</th>
@@ -1189,9 +1197,10 @@
                   <th>ملاحظة الاستراحة</th>
                 </tr>
               </thead>
-              <tbody id="payroll-table-body"></tbody>
-            </table>
-            <div id="payroll-empty" class="ms-empty hidden">لا توجد سجلات رواتب لهذه الفترة.</div>
+                <tbody id="payroll-table-body"></tbody>
+              </table>
+              <div id="payroll-empty" class="ms-empty hidden">لا توجد سجلات رواتب لهذه الفترة.</div>
+            </div>
           </div>
         </section>
       </section>
@@ -1287,9 +1296,9 @@
   <!-- scripts -->
   <script type="module" src="app.js?v=tickets-delete-v1"></script>
   <script type="module" src="tasks.js?v=tickets-delete-v1"></script>
-  <script type="module" src="tickets.js?v=tickets-chargeback-phase2-v3-5"></script>
+  <script type="module" src="tickets.js?v=comments-payroll-review-v1"></script>
   <script type="module" src="reports.js?v=tickets-delete-v1"></script>
-  <script type="module" src="payroll.js?v=tickets-delete-v1"></script>
+  <script type="module" src="payroll.js?v=comments-payroll-review-v1"></script>
   <script type="module" src="messages.js?v=tickets-delete-v1"></script>
   <script type="module" src="groups.js?v=tickets-delete-v1"></script>
   <script type="module" src="meetings.js?v=tickets-delete-v1"></script>

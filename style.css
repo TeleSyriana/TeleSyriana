@@ -6210,3 +6210,109 @@ body[data-bg-tone="dark"] .ticket-access-note{
     box-shadow:0 0 0 3px rgba(239,68,68,.16), 0 16px 36px rgba(185,28,28,.2) !important;
   }
 }
+
+/* TeleSyriana task patch — editable ticket comments + collapsed payroll review */
+.ticket-comment-titleline,
+.ticket-comment-actions-line{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.ticket-comment-actions-line{
+  justify-content:flex-end;
+  margin-inline-start:auto;
+}
+.ticket-comment-edit-btn{
+  width:32px;
+  height:32px;
+  border:1px solid rgba(15,23,42,.12);
+  border-radius:999px;
+  background:rgba(255,255,255,.92);
+  color:#0f172a;
+  display:inline-grid;
+  place-items:center;
+  font-size:15px;
+  font-weight:1000;
+  cursor:pointer;
+  box-shadow:0 8px 18px rgba(15,23,42,.08);
+}
+.ticket-comment-edit-btn:hover{
+  transform:translateY(-1px);
+  border-color:rgba(59,130,246,.35);
+  background:rgba(239,246,255,.98);
+}
+.ticket-comment-edited{
+  color:#64748b;
+  font-size:.74rem;
+  font-weight:900;
+}
+.ticket-comment-edit-input{
+  width:100%;
+  border:1px solid rgba(59,130,246,.22);
+  background:rgba(255,255,255,.96);
+  color:#111c3a;
+  border-radius:16px;
+  padding:12px 14px;
+  font-weight:750;
+  font-size:15px;
+  line-height:1.5;
+  resize:vertical;
+  outline:none;
+}
+.ticket-comment-edit-input:focus{
+  border-color:rgba(59,130,246,.55);
+  box-shadow:0 0 0 4px rgba(59,130,246,.12);
+}
+.ticket-comment-edit-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:10px;
+  flex-wrap:wrap;
+}
+.ticket-comment-edit-actions button{
+  width:auto;
+  min-height:36px;
+  padding:8px 12px;
+}
+.payroll-filters{
+  grid-template-columns:repeat(3,minmax(160px,1fr)) auto auto auto !important;
+}
+.payroll-review-section{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.payroll-review-section.hidden{
+  display:none !important;
+}
+.payroll-review-head{
+  border:1px solid rgba(15,23,42,.08);
+  background:rgba(248,250,252,.82);
+  border-radius:18px;
+  padding:14px 16px;
+}
+.payroll-review-head h3{
+  margin:0 0 4px;
+  font-size:1rem;
+}
+.payroll-review-toggle{
+  white-space:nowrap;
+  font-weight:900;
+}
+body[data-bg-tone="dark"] .ticket-comment-edit-btn,
+body[data-bg-tone="dark"] .ticket-comment-edit-input,
+body[data-bg-tone="dark"] .payroll-review-head{
+  background:rgba(15,23,42,.82);
+  color:#f8fafc;
+  border-color:rgba(148,163,184,.22);
+}
+@media(max-width:1100px){
+  .payroll-filters{ grid-template-columns:1fr 1fr !important; }
+}
+@media(max-width:720px){
+  .ticket-comment-top{ align-items:flex-start; }
+  .ticket-comment-actions-line{ width:100%; justify-content:space-between; }
+  .payroll-filters{ grid-template-columns:1fr !important; }
+}

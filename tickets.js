@@ -82,6 +82,7 @@ let unsubDeletedTickets = null;
 let isHooked = false;
 let currentLiveOrder = null;
 let currentLiveOrderFirebaseStatus = "none";
+let editingTicketCommentId = null;
 
 const SHOPIFY_BACKEND_URL = "https://telesyriana-backend.onrender.com";
 const SHOPIFY_API_KEY_STORAGE = "telesyrianaShopifyBackendApiKey";
@@ -1284,6 +1285,17 @@ function normaliseTicketComments(ticket) {
   }];
 }
 
+function ticketCommentKey(comment, index = 0) {
+  return String(comment?.id || `${tsToMs(comment?.createdAt) || 0}_${comment?.authorId || "unknown"}_${index}`);
+}
+
+function canEditTicketComment(ticket, comment) {
+  if (!currentUser || !ticket || !comment || comment.legacy) return false;
+  if (canEditAll(currentUser)) return true;
+  if (comment.authorId && comment.authorId === currentUser.id) return true;
+  return Boolean(canManageTicketFields(ticket));
+}
+
 function renderTicketComments(ticket) {
   const list = el("ticket-comments-list");
   const title = el("ticket-comments-title");
@@ -1315,29 +1327,110 @@ function renderTicketComments(ticket) {
   if (!list) return;
   const comments = normaliseTicketComments(ticket);
   if (!comments.length) {
+    editingTicketCommentId = null;
     list.innerHTML = `<div class="ticket-comments-empty">${tt("لا توجد ملاحظات بعد.", "No comments yet.")}</div>`;
     return;
   }
 
   list.innerHTML = comments
-    .slice()
-    .sort((a, b) => tsToMs(a.createdAt) - tsToMs(b.createdAt))
-    .map((comment) => {
+    .map((comment, originalIndex) => ({ comment, originalIndex, key: ticketCommentKey(comment, originalIndex) }))
+    .sort((a, b) => tsToMs(a.comment.createdAt) - tsToMs(b.comment.createdAt))
+    .map(({ comment, key }) => {
       const meta = commentTypeMeta(comment.type);
       const label = meta[currentLang()] || meta.en;
       const author = comment.authorName || staffName(comment.authorId) || "—";
-      return `
-        <article class="ticket-comment-card ${meta.cls}">
-          <div class="ticket-comment-top">
-            <span class="ticket-comment-type">${escapeHtml(label)}</span>
-            <span class="ticket-comment-meta">${escapeHtml(author)} • ${escapeHtml(fmtDate(comment.createdAt))}</span>
+      const isEditing = editingTicketCommentId === key;
+      const editable = canEditTicketComment(ticket, comment);
+      const editedLabel = comment.editedAt
+        ? `<span class="ticket-comment-edited">${escapeHtml(tt("تم التعديل", "Edited"))} • ${escapeHtml(fmtDate(comment.editedAt))}</span>`
+        : "";
+      const editButton = editable && !isEditing
+        ? `<button type="button" class="ticket-comment-edit-btn" data-comment-edit="${escapeHtml(key)}" aria-label="${escapeHtml(tt('تعديل التعليق', 'Edit comment'))}" title="${escapeHtml(tt('تعديل التعليق', 'Edit comment'))}">✎</button>`
+        : "";
+      const body = isEditing
+        ? `
+          <textarea class="ticket-comment-edit-input" rows="4">${escapeHtml(comment.text || "")}</textarea>
+          <div class="ticket-comment-edit-actions">
+            <button type="button" class="btn-primary" data-comment-save="${escapeHtml(key)}">${escapeHtml(tt("حفظ التعديل", "Save edit"))}</button>
+            <button type="button" class="btn-secondary" data-comment-cancel="${escapeHtml(key)}">${escapeHtml(tt("إلغاء", "Cancel"))}</button>
           </div>
-          <div class="ticket-comment-text">${escapeHtml(comment.text || "").replace(/\n/g, "<br>")}</div>
+        `
+        : `<div class="ticket-comment-text">${escapeHtml(comment.text || "").replace(/\n/g, "<br>")}</div>`;
+      return `
+        <article class="ticket-comment-card ${meta.cls}" data-comment-card="${escapeHtml(key)}">
+          <div class="ticket-comment-top">
+            <div class="ticket-comment-titleline">
+              <span class="ticket-comment-type">${escapeHtml(label)}</span>
+              ${editedLabel}
+            </div>
+            <div class="ticket-comment-actions-line">
+              <span class="ticket-comment-meta">${escapeHtml(author)} • ${escapeHtml(fmtDate(comment.createdAt))}</span>
+              ${editButton}
+            </div>
+          </div>
+          ${body}
         </article>
       `;
     })
     .join("");
 }
+
+async function saveTicketCommentEdit(commentKey, nextText, btn = null) {
+  const ticket = allTickets.find((x) => x.id === selectedTicketId);
+  if (!ticket) return showTicketAlert(tt("اختر تذكرة أولاً.", "Select a ticket first."), true);
+  if (!canAddTicketComment(ticket)) return showTicketAlert(tt("لا يمكنك تعديل تعليق على هذه التذكرة.", "You cannot edit a comment on this ticket."), true);
+
+  const text = String(nextText || "").trim();
+  if (!text) return showTicketAlert(tt("التعليق لا يمكن أن يكون فارغاً.", "Comment cannot be empty."), true);
+
+  const existing = Array.isArray(ticket.comments) && ticket.comments.length ? ticket.comments : normaliseTicketComments(ticket);
+  let changed = false;
+  let previousText = "";
+  const comments = existing.map((comment, index) => {
+    const key = ticketCommentKey(comment, index);
+    if (key !== String(commentKey)) return comment;
+    if (!canEditTicketComment(ticket, comment)) return comment;
+    changed = true;
+    previousText = comment.text || "";
+    return {
+      ...comment,
+      id: comment.id || key,
+      text,
+      editedAt: Date.now(),
+      editedBy: currentUser?.id || "",
+      editedByName: currentUser?.name || "",
+    };
+  });
+
+  if (!changed) return showTicketAlert(tt("لم يتم العثور على التعليق أو لا تملك صلاحية تعديله.", "Comment was not found or you do not have permission to edit it."), true);
+  if (previousText.trim() === text) {
+    editingTicketCommentId = null;
+    renderTicketComments(ticket);
+    return;
+  }
+
+  const restoreBtn = setButtonSaving(btn, true, tt("جاري الحفظ...", "Saving..."));
+  try {
+    const update = {
+      comments,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUser?.id || "",
+      history: addHistory(ticket.history, `${tt("تعديل تعليق", "Edited comment")}: ${text.slice(0, 60)}`, currentUser?.id || ""),
+    };
+    await updateDoc(doc(db, TICKETS_COL, selectedTicketId), update);
+    allTickets = allTickets.map((row) => row.id === selectedTicketId ? { ...row, ...update, comments, updatedAt: Date.now() } : row);
+    editingTicketCommentId = null;
+    renderTicketList();
+    renderTicketDetail();
+    showTicketAlert(tt("تم تعديل التعليق.", "Comment updated."));
+  } catch (err) {
+    console.error("saveTicketCommentEdit failed", err);
+    showTicketAlert(`Failed to update comment: ${err?.code || err?.message || "unknown error"}`, true);
+  } finally {
+    restoreBtn();
+  }
+}
+
 
 async function addTicketComment() {
   const ticket = allTickets.find((x) => x.id === selectedTicketId);
@@ -1596,6 +1689,30 @@ function hookUI() {
 
   el("ticket-save-btn")?.addEventListener("click", saveSelectedTicket);
   el("ticket-comment-add-btn")?.addEventListener("click", addTicketComment);
+  el("ticket-comments-list")?.addEventListener("click", (e) => {
+    const target = e.target instanceof Element ? e.target : null;
+    if (!target) return;
+    const editBtn = target.closest("[data-comment-edit]");
+    if (editBtn) {
+      editingTicketCommentId = editBtn.getAttribute("data-comment-edit") || "";
+      const ticket = allTickets.find((x) => x.id === selectedTicketId);
+      if (ticket) renderTicketComments(ticket);
+      return;
+    }
+    const cancelBtn = target.closest("[data-comment-cancel]");
+    if (cancelBtn) {
+      editingTicketCommentId = null;
+      const ticket = allTickets.find((x) => x.id === selectedTicketId);
+      if (ticket) renderTicketComments(ticket);
+      return;
+    }
+    const saveBtn = target.closest("[data-comment-save]");
+    if (saveBtn) {
+      const card = saveBtn.closest(".ticket-comment-card");
+      const input = card?.querySelector(".ticket-comment-edit-input");
+      saveTicketCommentEdit(saveBtn.getAttribute("data-comment-save") || "", input?.value || "", saveBtn);
+    }
+  });
   el("ticket-comment-text")?.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();

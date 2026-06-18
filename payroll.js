@@ -31,6 +31,10 @@ const PAYROLL_I18N = {
     allVisibleStaff: "كل الموظفين الظاهرين",
     thisWeek: "هذا الأسبوع",
     refresh: "تحديث",
+    pressReview: "عرض المراجعة",
+    hideReview: "إخفاء المراجعة",
+    reviewTitle: "مراجعة الأيام",
+    reviewSubtitle: "اعرض كل يوم عمل في التقويم مع ساعات العمل والأجر المتوقع لذلك اليوم.",
     totalWorked: "إجمالي العمل",
     shiftTarget: "هدف الدوام",
     difference: "فرق الدوام",
@@ -89,6 +93,10 @@ const PAYROLL_I18N = {
     allVisibleStaff: "All visible staff",
     thisWeek: "This week",
     refresh: "Refresh",
+    pressReview: "Press review",
+    hideReview: "Hide review",
+    reviewTitle: "Daily calendar review",
+    reviewSubtitle: "See every calendar day worked with the worked hours and estimated earning for that day.",
     totalWorked: "Total worked",
     shiftTarget: "Shift target",
     difference: "Difference",
@@ -167,6 +175,7 @@ let staffSettings = {};
 let unsubDays = null;
 let unsubSettings = null;
 let isHooked = false;
+let payrollReviewOpen = false;
 
 function el(id) { return document.getElementById(id); }
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
@@ -188,6 +197,24 @@ function getCurrentUser() {
 
 function todayKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatCalendarDay(dayKey) {
+  const raw = String(dayKey || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "—";
+  const [year, month, day] = raw.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return "—";
+  try {
+    return new Intl.DateTimeFormat(lang() === "ar" ? "ar" : "en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+  } catch {
+    return date.toDateString();
+  }
 }
 
 function startOfWeek(date = new Date()) {
@@ -350,6 +377,9 @@ function translatePayrollStatic() {
   setText("payroll-label-staff-filter", tr("staff"));
   setText("payroll-this-week", tr("thisWeek"));
   setText("payroll-refresh", tr("refresh"));
+  setText("payroll-review-toggle", payrollReviewOpen ? tr("hideReview") : tr("pressReview"));
+  setText("payroll-review-title", tr("reviewTitle"));
+  setText("payroll-review-subtitle", tr("reviewSubtitle"));
   setText("payroll-snap-worked-label", tr("totalWorked"));
   setText("payroll-snap-target-label", tr("shiftTarget"));
   setText("payroll-snap-diff-label", tr("difference"));
@@ -385,6 +415,8 @@ function renderPayroll() {
   translatePayrollStatic();
   const body = el("payroll-table-body");
   const empty = el("payroll-empty");
+  const reviewSection = el("payroll-review-section");
+  if (reviewSection) reviewSection.classList.toggle("hidden", !payrollReviewOpen);
   if (!body || !empty) return;
 
   const rows = getFilteredRows();
@@ -421,7 +453,7 @@ function renderPayroll() {
 
     const rowEl = document.createElement("tr");
     rowEl.innerHTML = `
-      <td>${row.day || "—"}</td>
+      <td><strong>${row.day || "—"}</strong><div class="payroll-sub">${formatCalendarDay(row.day)}</div></td>
       <td>${row.name || staff.name}<div class="payroll-sub">${row.userId || "—"}</div></td>
       <td>${String(row.role || staff.role || "agent").toUpperCase()}</td>
       <td><span class="sup-status-pill status-${row.status || "unavailable"}">${row.status || "unavailable"}</span></td>
@@ -592,6 +624,10 @@ function hookPayroll() {
 
   el("payroll-this-week")?.addEventListener("click", () => { setThisWeekFilters(); renderPayroll(); });
   el("payroll-refresh")?.addEventListener("click", () => renderPayroll());
+  el("payroll-review-toggle")?.addEventListener("click", () => {
+    payrollReviewOpen = !payrollReviewOpen;
+    renderPayroll();
+  });
   el("payroll-staff-filter")?.addEventListener("change", renderPayroll);
   el("payroll-from")?.addEventListener("change", renderPayroll);
   el("payroll-to")?.addEventListener("change", renderPayroll);
