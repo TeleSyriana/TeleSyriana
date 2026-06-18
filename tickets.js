@@ -83,6 +83,8 @@ let isHooked = false;
 let currentLiveOrder = null;
 let currentLiveOrderFirebaseStatus = "none";
 let editingTicketCommentId = null;
+let ticketOpenProgressToken = 0;
+let ticketOpenProgressHideTimer = null;
 
 const SHOPIFY_BACKEND_URL = "https://telesyriana-backend.onrender.com";
 const SHOPIFY_API_KEY_STORAGE = "telesyrianaShopifyBackendApiKey";
@@ -1247,16 +1249,87 @@ function renderTicketList() {
   });
 }
 
-function selectTicket(id) {
+function nextTicketFrame() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 16);
+  });
+}
+
+function ticketProgressDelay(ms = 35) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function ensureTicketOpenProgress() {
+  let panel = el("ticket-open-progress");
+  if (panel) return panel;
+  const host = el("page-tickets") || document.body;
+  panel = document.createElement("div");
+  panel.id = "ticket-open-progress";
+  panel.className = "ticket-open-progress hidden";
+  panel.setAttribute("role", "status");
+  panel.setAttribute("aria-live", "polite");
+  panel.innerHTML = `
+    <div class="ticket-open-progress-head">
+      <span id="ticket-open-progress-label">Opening ticket...</span>
+      <strong id="ticket-open-progress-number">0%</strong>
+    </div>
+    <div class="ticket-open-progress-track"><div id="ticket-open-progress-fill" class="ticket-open-progress-fill"></div></div>
+  `;
+  host.prepend(panel);
+  return panel;
+}
+
+function setTicketOpenProgress(percent, label) {
+  const panel = ensureTicketOpenProgress();
+  const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  panel.classList.remove("hidden", "complete");
+  const fill = el("ticket-open-progress-fill");
+  const number = el("ticket-open-progress-number");
+  const text = el("ticket-open-progress-label");
+  if (fill) fill.style.width = `${safePercent}%`;
+  if (number) number.textContent = `${safePercent}%`;
+  if (text) text.textContent = label || tt("جاري فتح التذكرة...", "Opening ticket...");
+  if (safePercent >= 100) panel.classList.add("complete");
+}
+
+function hideTicketOpenProgress(token) {
+  if (token !== ticketOpenProgressToken) return;
+  if (ticketOpenProgressHideTimer) clearTimeout(ticketOpenProgressHideTimer);
+  ticketOpenProgressHideTimer = setTimeout(() => {
+    if (token !== ticketOpenProgressToken) return;
+    el("ticket-open-progress")?.classList.add("hidden");
+  }, 260);
+}
+
+async function selectTicket(id) {
+  const token = ++ticketOpenProgressToken;
   selectedTicketId = id;
+  if (ticketOpenProgressHideTimer) clearTimeout(ticketOpenProgressHideTimer);
+
+  setTicketOpenProgress(0, tt("بدء فتح التذكرة...", "Starting ticket open..."));
   renderTicketList();
+  setTicketOpenProgress(18, tt("تحديد التذكرة...", "Selecting ticket..."));
+  await nextTicketFrame();
+
+  if (token !== ticketOpenProgressToken) return;
+  setTicketOpenProgress(45, tt("تحميل بيانات الطلب والتعليقات...", "Loading order data and comments..."));
+  await ticketProgressDelay(35);
+
+  if (token !== ticketOpenProgressToken) return;
+  setTicketOpenProgress(72, tt("تجهيز التفاصيل...", "Preparing details..."));
   renderTicketDetail();
+  await nextTicketFrame();
+
+  if (token !== ticketOpenProgressToken) return;
+  setTicketOpenProgress(100, tt("جاهزة", "Ready"));
 
   // Desktop had a horizontal jump when a ticket opened because scrollIntoView
   // tried to bring the detail panel into view inside the RTL grid. Only scroll on mobile.
   if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) {
     el("ticket-detail")?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
   }
+  hideTicketOpenProgress(token);
 }
 
 

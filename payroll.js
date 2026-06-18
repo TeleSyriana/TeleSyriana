@@ -7,6 +7,7 @@ import { db, fs } from "./firebase.js";
 const {
   collection,
   query,
+  where,
   orderBy,
   onSnapshot,
   doc,
@@ -24,12 +25,12 @@ const SHIFT_PRESETS = { part_time: 4 * 60, full_time: 8 * 60, custom: null };
 const PAYROLL_I18N = {
   ar: {
     title: "الساعات والرواتب",
-    subtitle: "متابعة ساعات العمل، الاستراحة 45 دقيقة، التأخير، والأجر المتوقع.",
+    subtitle: "متابعة رواتب الشهر من أول يوم بالشهر، مع إمكانية اختيار أي فترة يدوياً.",
     from: "من",
     to: "إلى",
     staff: "الموظف",
     allVisibleStaff: "كل الموظفين الظاهرين",
-    thisWeek: "هذا الأسبوع",
+    thisWeek: "هذا الشهر",
     refresh: "تحديث",
     pressReview: "عرض المراجعة",
     hideReview: "إخفاء المراجعة",
@@ -86,12 +87,12 @@ const PAYROLL_I18N = {
   },
   en: {
     title: "Payroll & Hours",
-    subtitle: "Track working hours, 45-minute breaks, delays, and estimated pay.",
+    subtitle: "Track month-to-date salary from the first day of the month, with manual date-range control.",
     from: "From",
     to: "To",
     staff: "Staff",
     allVisibleStaff: "All visible staff",
-    thisWeek: "This week",
+    thisWeek: "This month",
     refresh: "Refresh",
     pressReview: "Press review",
     hideReview: "Hide review",
@@ -179,7 +180,10 @@ let payrollReviewOpen = false;
 
 function el(id) { return document.getElementById(id); }
 function roleLevel(u) { return ROLE_LEVELS[String(u?.role || "").toLowerCase()] || 0; }
-function canSeeAll(u) { return roleLevel(u) >= ROLE_LEVELS.manager; }
+function canSeeAll(u) {
+  const role = String(u?.role || "").toLowerCase();
+  return ["admin", "manager", "supervisor"].includes(role);
+}
 function canManageRates(u) { return roleLevel(u) >= ROLE_LEVELS.manager; }
 function canManageShifts(u) { return roleLevel(u) >= ROLE_LEVELS.supervisor; }
 function canSupervise(u) { return roleLevel(u) >= ROLE_LEVELS.supervisor; }
@@ -334,9 +338,18 @@ function populateStaffFilters() {
   }
 }
 
+function startOfMonth(date = new Date()) {
+  const d = new Date(date);
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 function setThisWeekFilters() {
-  const from = startOfWeek();
-  const to = endOfWeek();
+  // Kept function name for compatibility with the existing button ID.
+  // Business behaviour: show salary from the 1st day of the current month to today.
+  const from = startOfMonth();
+  const to = new Date();
   if (el("payroll-from")) el("payroll-from").value = todayKey(from);
   if (el("payroll-to")) el("payroll-to").value = todayKey(to);
 }
@@ -592,7 +605,11 @@ function subscribePayroll() {
   if (unsubDays) unsubDays();
   if (unsubSettings) unsubSettings();
 
-  unsubDays = onSnapshot(query(collection(db, AGENT_DAYS_COL), orderBy("day", "desc")), (snap) => {
+  const daysQuery = canSeeAll(currentUser)
+    ? query(collection(db, AGENT_DAYS_COL), orderBy("day", "desc"))
+    : query(collection(db, AGENT_DAYS_COL), where("userId", "==", currentUser?.id || ""));
+
+  unsubDays = onSnapshot(daysQuery, (snap) => {
     allDays = [];
     snap.forEach((d) => allDays.push({ id: d.id, ...d.data() }));
     renderPayroll();
@@ -601,14 +618,25 @@ function subscribePayroll() {
     showAlert(tr("couldNotLoad"), true);
   });
 
-  unsubSettings = onSnapshot(collection(db, STAFF_SETTINGS_COL), (snap) => {
-    staffSettings = {};
-    snap.forEach((d) => { staffSettings[d.id] = d.data(); });
-    populateStaffFilters();
-    renderPayroll();
-  }, (err) => {
-    console.error("Payroll staffSettings listener failed", err);
-  });
+  if (canSeeAll(currentUser)) {
+    unsubSettings = onSnapshot(collection(db, STAFF_SETTINGS_COL), (snap) => {
+      staffSettings = {};
+      snap.forEach((d) => { staffSettings[d.id] = d.data(); });
+      populateStaffFilters();
+      renderPayroll();
+    }, (err) => {
+      console.error("Payroll staffSettings listener failed", err);
+    });
+  } else {
+    unsubSettings = onSnapshot(doc(db, STAFF_SETTINGS_COL, currentUser?.id || "__none__"), (snap) => {
+      staffSettings = {};
+      if (snap.exists()) staffSettings[snap.id] = snap.data();
+      populateStaffFilters();
+      renderPayroll();
+    }, (err) => {
+      console.error("Payroll own staffSettings listener failed", err);
+    });
+  }
 }
 
 function setPermissionsUI() {
