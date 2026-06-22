@@ -26,6 +26,7 @@ const USERS = {
   "3001": { password: "2411", role: "hr", name: "Fatima Kaka", hourlyRate: 5.8, currency: "GBP" },
   "9001": { password: "Welcome2026!", role: "agent", name: "Raghad Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
   "9002": { password: "Welcome2026!", role: "agent", name: "Qamar Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
+  "9003": { password: "Reema2026!", role: "agent", name: "Reema Obaid", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
 };
 
 const ROLE_LEVELS = {
@@ -894,7 +895,7 @@ async function handleLogin(e) {
   const pw = document.getElementById("password")?.value || "";
   const submitBtn = e?.target?.querySelector('button[type="submit"]');
 
-  if (!USERS[id]) return showError("المستخدم غير موجود. جرّب 0001 أو 1001 أو 2001 أو 3001 أو 9001 أو 9002.");
+  if (!USERS[id]) return showError("المستخدم غير موجود. جرّب 0001 أو 1001 أو 2001 أو 3001 أو 9001 أو 9002 أو 9003.");
   if (USERS[id].password !== pw) return showError(getLanguage() === "ar" ? "كلمة المرور غير صحيحة." : "Incorrect password.");
 
   try {

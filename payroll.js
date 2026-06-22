@@ -168,6 +168,7 @@ const STAFF = {
   "3001": { id: "3001", name: "HR Fatima Kaka", role: "hr", hourlyRate: 5.8, currency: "GBP" },
   "9001": { id: "9001", name: "Agent Raghad Moussa", role: "agent", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
   "9002": { id: "9002", name: "Agent Qamar Moussa", role: "agent", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
+  "9003": { id: "9003", name: "Agent Reema Obaid", role: "agent", supervisorId: "2001", hourlyRate: 1.15, currency: "USD" },
 };
 
 let currentUser = null;

@@ -604,7 +604,7 @@ function roleClassForUser(userId = "") {
   if (id === "1001") return "role-manager";
   if (id === "2001") return "role-supervisor";
   if (id === "3001") return "role-hr";
-  if (id === "9001" || id === "9002") return "role-agent";
+  if (id === "9001" || id === "9002" || id === "9003") return "role-agent";
   return "role-room";
 }
 
