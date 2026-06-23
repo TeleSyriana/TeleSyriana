@@ -1,18 +1,13 @@
-TeleSyriana staff loading + full ticket search v2
+TeleSyriana tickets filters v3
 
-Upload/replace only these files in the project root:
+Upload/replace these root files only:
 - index.html
 - tickets.js
+- style.css
 
-What changed vs v1:
-- Staff devices still load their own ticket queue first for fast startup.
-- After the queue is ready, the tickets page warms a whole-team search index in the background.
-- Searching by order number, email, customer name, notes, comments, status, or assigned staff can again reveal old tickets and tickets assigned to other team members.
-- Search outside the agent queue does not block the first page load.
-- Cache-busting version changed from staff-load-fix-v1 to staff-load-search-v2.
-
-Test after upload:
-1) Agent login: tickets page should open quickly with that agent's own tickets.
-2) Search an old order number assigned to someone else: it should appear after a few seconds at most.
-3) Clear search: the agent should return to their own queue only.
-4) Admin/manager/supervisor: should still see the full queue normally.
+Changes:
+- Ticket stat cards are clickable quick filters: Open, Emergency, Escalated, Resolved today.
+- Added date filter: All days, Today, Yesterday, Last week, Last month.
+- Date filter uses last activity (updatedAt first), so any edited/commented ticket appears under Today.
+- Default ticket list shows unresolved tickets only. Resolved/closed tickets are hidden from the queue unless searched or filtered as resolved/closed.
+- Kept the v2 faster staff loading + background whole-team search behavior.

@@ -14,10 +14,10 @@
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16.png" />
   <link rel="shortcut icon" href="images/favicon.ico" />
-  <link rel="stylesheet" href="style.css?v=staff-load-search-v2" />
+  <link rel="stylesheet" href="style.css?v=staff-load-fix-v1" />
 </head>
 
-<body data-build-version="phase3-shifts">
+<body data-build-version="phase3-ticket-filters-v3">
   <div class="app-wrapper">
 
     <!-- HEADER -->
@@ -391,10 +391,10 @@
           </div>
 
           <div class="ticket-stats-grid">
-            <div class="ticket-stat"><span>مفتوحة</span><strong id="ticket-stat-open">0</strong></div>
-            <div class="ticket-stat emergency"><span>طارئ</span><strong id="ticket-stat-emergency">0</strong></div>
-            <div class="ticket-stat"><span>مصعّدة</span><strong id="ticket-stat-escalated">0</strong></div>
-            <div class="ticket-stat"><span>محلولة today</span><strong id="ticket-stat-resolved">0</strong></div>
+            <button type="button" class="ticket-stat" data-ticket-quick-filter="open" aria-pressed="false"><span>مفتوحة</span><strong id="ticket-stat-open">0</strong></button>
+            <button type="button" class="ticket-stat emergency" data-ticket-quick-filter="emergency" aria-pressed="false"><span>طارئ</span><strong id="ticket-stat-emergency">0</strong></button>
+            <button type="button" class="ticket-stat" data-ticket-quick-filter="escalated" aria-pressed="false"><span>مصعّدة</span><strong id="ticket-stat-escalated">0</strong></button>
+            <button type="button" class="ticket-stat" data-ticket-quick-filter="resolved_today" aria-pressed="false"><span>محلولة اليوم</span><strong id="ticket-stat-resolved">0</strong></button>
           </div>
 
           <form id="ticket-form" class="ticket-form hidden">
@@ -472,7 +472,7 @@
           <div class="ticket-filters">
             <input id="ticket-search" type="text" placeholder="بحث برقم الطلب أو العميل أو الملاحظات…" />
             <select id="ticket-filter-status">
-              <option value="all">كل الحالات</option>
+              <option value="active" selected>غير المحلولة</option>
               <option value="open">مفتوحة</option>
               <option value="waiting_customer">بانتظار العميل</option>
               <option value="waiting_courier">Waiting شركة الشحن</option>
@@ -480,6 +480,13 @@
               <option value="escalated">مصعّدة</option>
               <option value="resolved">محلولة</option>
               <option value="closed">مغلقة</option>
+            </select>
+            <select id="ticket-filter-date">
+              <option value="all">كل الأيام</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="last_week">Last week</option>
+              <option value="last_month">Last month</option>
             </select>
             <select id="ticket-filter-priority">
               <option value="all">كل الأولويات</option>
@@ -1308,10 +1315,10 @@
 
 
   <!-- scripts -->
-  <script type="module" src="app.js?v=staff-load-search-v2"></script>
+  <script type="module" src="app.js?v=staff-load-fix-v1"></script>
   <script type="module" src="tasks.js?v=tickets-delete-v1"></script>
-  <script type="module" src="tickets.js?v=staff-load-search-v2"></script>
-  <script type="module" src="reports.js?v=staff-load-search-v2"></script>
+  <script type="module" src="tickets.js?v=staff-load-fix-v1"></script>
+  <script type="module" src="reports.js?v=staff-load-fix-v1"></script>
   <script type="module" src="payroll.js?v=payroll-ticket-progress-v2"></script>
   <script type="module" src="messages.js?v=tickets-delete-v1"></script>
   <script type="module" src="groups.js?v=tickets-delete-v1"></script>

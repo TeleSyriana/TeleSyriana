@@ -125,12 +125,41 @@ function labelOf(map, key, fallback = '') { const item = map[key]; if (!item) re
 function typeLabel(key) { return labelOf(TYPE_LABELS, key, key || 'Ticket'); }
 function statusLabelText(key) { return labelOf(STATUS_LABELS, key, key || 'Open'); }
 function priorityLabelText(key) { return labelOf(PRIORITY_LABELS, key, key || 'Normal'); }
+
+function setOptionText(selectId, value, ar, en) {
+  const option = el(selectId)?.querySelector(`option[value="${value}"]`);
+  if (option) option.textContent = tt(ar, en);
+}
+function translateTicketFilterOptions() {
+  setOptionText('ticket-filter-status', 'active', 'غير المحلولة', 'Unresolved');
+  setOptionText('ticket-filter-status', 'open', 'مفتوحة', 'Open');
+  setOptionText('ticket-filter-status', 'waiting_customer', 'بانتظار العميل', 'Waiting customer');
+  setOptionText('ticket-filter-status', 'waiting_courier', 'بانتظار شركة الشحن', 'Waiting courier');
+  setOptionText('ticket-filter-status', 'waiting_supplier', 'بانتظار المورد', 'Waiting supplier');
+  setOptionText('ticket-filter-status', 'escalated', 'مصعّدة', 'Escalated');
+  setOptionText('ticket-filter-status', 'resolved', 'محلولة', 'Resolved');
+  setOptionText('ticket-filter-status', 'closed', 'مغلقة', 'Closed');
+  setOptionText('ticket-filter-date', 'all', 'كل الأيام', 'All days');
+  setOptionText('ticket-filter-date', 'today', 'اليوم', 'Today');
+  setOptionText('ticket-filter-date', 'yesterday', 'أمس', 'Yesterday');
+  setOptionText('ticket-filter-date', 'last_week', 'آخر أسبوع', 'Last week');
+  setOptionText('ticket-filter-date', 'last_month', 'آخر شهر', 'Last month');
+  setOptionText('ticket-filter-priority', 'all', 'كل الأولويات', 'All priorities');
+  setOptionText('ticket-filter-priority', 'emergency', 'طارئ', 'Emergency');
+  setOptionText('ticket-filter-priority', 'high', 'عالي', 'High');
+  setOptionText('ticket-filter-priority', 'medium', 'متوسط', 'Medium');
+  setOptionText('ticket-filter-priority', 'normal', 'عادي', 'Normal');
+  setOptionText('ticket-filter-owner', 'all', 'كل الموظفين', 'All owners');
+  setOptionText('ticket-filter-owner', 'mine', 'تذاكري', 'My tickets');
+  setOptionText('ticket-filter-owner', 'unassigned', 'غير مسندة', 'Unassigned');
+}
 function translateTicketsStatic() {
   const statSpans = Array.from(document.querySelectorAll('#page-tickets .ticket-stat span'));
   if (statSpans[0]) statSpans[0].textContent = tt('مفتوحة', 'Open');
   if (statSpans[1]) statSpans[1].textContent = tt('طارئ', 'Emergency');
   if (statSpans[2]) statSpans[2].textContent = tt('مصعّدة', 'Escalated');
   if (statSpans[3]) statSpans[3].textContent = tt('محلولة اليوم', 'Resolved today');
+  translateTicketFilterOptions();
   if (el("ticket-deleted-toggle")) el("ticket-deleted-toggle").textContent = deletedFolderLabel();
   if (el("ticket-delete-btn")) el("ticket-delete-btn").textContent = tt("حذف", "Delete");
   if (el("deleted-tickets-close")) el("deleted-tickets-close").textContent = tt("إغلاق", "Close");
@@ -172,6 +201,84 @@ function fmtDate(v) {
   const ms = tsToMs(v);
   if (!ms) return "—";
   return new Date(ms).toLocaleString();
+}
+
+function isResolvedTicket(ticket) {
+  return ["resolved", "closed"].includes(String(ticket?.status || ""));
+}
+function ticketActivityMs(ticket) {
+  return tsToMs(ticket?.updatedAt) || tsToMs(ticket?.resolvedAt) || tsToMs(ticket?.createdAt) || 0;
+}
+function startOfLocalDay(offsetDays = 0) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  if (offsetDays) d.setDate(d.getDate() + offsetDays);
+  return d.getTime();
+}
+function ticketMatchesDateFilter(ticket, filter) {
+  if (!filter || filter === "all") return true;
+  const ms = ticketActivityMs(ticket);
+  if (!ms) return false;
+  const today = startOfLocalDay(0);
+  const tomorrow = startOfLocalDay(1);
+  if (filter === "today") return ms >= today && ms < tomorrow;
+  if (filter === "yesterday") {
+    const yesterday = startOfLocalDay(-1);
+    return ms >= yesterday && ms < today;
+  }
+  if (filter === "last_week") return ms >= today - (6 * 86400000) && ms < tomorrow;
+  if (filter === "last_month") return ms >= today - (29 * 86400000) && ms < tomorrow;
+  return true;
+}
+function currentTicketQuickFilterKey() {
+  const status = el("ticket-filter-status")?.value || "active";
+  const priority = el("ticket-filter-priority")?.value || "all";
+  const date = el("ticket-filter-date")?.value || "all";
+  if (status === "open" && priority === "all" && date === "all") return "open";
+  if (status === "active" && priority === "emergency" && date === "all") return "emergency";
+  if (status === "escalated" && priority === "all" && date === "all") return "escalated";
+  if (status === "resolved" && priority === "all" && date === "today") return "resolved_today";
+  return "";
+}
+function syncTicketQuickStats() {
+  const active = currentTicketQuickFilterKey();
+  document.querySelectorAll('[data-ticket-quick-filter]').forEach((node) => {
+    const on = node.getAttribute('data-ticket-quick-filter') === active;
+    node.classList.toggle('active-filter', on);
+    node.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+function setTicketSelectValue(id, value) {
+  const node = el(id);
+  if (!node) return;
+  node.value = value;
+  node.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function applyTicketQuickFilter(kind) {
+  if (el('ticket-search')) el('ticket-search').value = '';
+  if (kind === 'open') {
+    setTicketSelectValue('ticket-filter-status', 'open');
+    setTicketSelectValue('ticket-filter-priority', 'all');
+    setTicketSelectValue('ticket-filter-date', 'all');
+    setTicketSelectValue('ticket-filter-owner', 'all');
+  } else if (kind === 'emergency') {
+    setTicketSelectValue('ticket-filter-status', 'active');
+    setTicketSelectValue('ticket-filter-priority', 'emergency');
+    setTicketSelectValue('ticket-filter-date', 'all');
+    setTicketSelectValue('ticket-filter-owner', 'all');
+  } else if (kind === 'escalated') {
+    setTicketSelectValue('ticket-filter-status', 'escalated');
+    setTicketSelectValue('ticket-filter-priority', 'all');
+    setTicketSelectValue('ticket-filter-date', 'all');
+    setTicketSelectValue('ticket-filter-owner', 'all');
+  } else if (kind === 'resolved_today') {
+    setTicketSelectValue('ticket-filter-status', 'resolved');
+    setTicketSelectValue('ticket-filter-priority', 'all');
+    setTicketSelectValue('ticket-filter-date', 'today');
+    setTicketSelectValue('ticket-filter-owner', 'all');
+  }
+  scheduleTeamTicketSearch();
+  renderTicketList();
 }
 
 function fmtPurchaseDate(v) {
@@ -1085,14 +1192,20 @@ function fillAssigneeSelect(selectEl, includeUnassigned = true) {
 
 function ticketMatchesFilters(ticket) {
   const q = (el("ticket-search")?.value || "").trim().toLowerCase();
-  const status = el("ticket-filter-status")?.value || "all";
+  const status = el("ticket-filter-status")?.value || "active";
   const priority = el("ticket-filter-priority")?.value || "all";
   const owner = el("ticket-filter-owner")?.value || "all";
+  const dateFilter = el("ticket-filter-date")?.value || "all";
 
-  if (status !== "all" && ticket.status !== status) return false;
+  if (status === "active") {
+    // Keep solved tickets out of the daily queue, but allow search to reveal them.
+    if (!q && isResolvedTicket(ticket)) return false;
+  } else if (status !== "all" && ticket.status !== status) return false;
+
   if (priority !== "all" && ticket.priority !== priority) return false;
   if (owner === "mine" && ticket.assignedTo !== currentUser?.id) return false;
   if (owner === "unassigned" && ticket.assignedTo) return false;
+  if (!ticketMatchesDateFilter(ticket, dateFilter)) return false;
 
   if (q) {
     const hay = ticketSearchText(ticket);
@@ -1102,12 +1215,12 @@ function ticketMatchesFilters(ticket) {
 }
 
 function renderStats(rows) {
-  const open = rows.filter((t) => !["resolved", "closed"].includes(t.status)).length;
-  const emergency = rows.filter((t) => t.priority === "emergency" && !["resolved", "closed"].includes(t.status)).length;
+  const open = rows.filter((t) => !isResolvedTicket(t)).length;
+  const emergency = rows.filter((t) => t.priority === "emergency" && !isResolvedTicket(t)).length;
   const escalated = rows.filter((t) => t.status === "escalated").length;
   const resolvedToday = rows.filter((t) => {
-    if (t.status !== "resolved" && t.status !== "closed") return false;
-    const ms = tsToMs(t.resolvedAt || t.updatedAt);
+    if (!isResolvedTicket(t)) return false;
+    const ms = ticketActivityMs(t);
     if (!ms) return false;
     const d = new Date(ms);
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` === todayKey();
@@ -1376,6 +1489,7 @@ function renderTicketList() {
     renderStats([]);
     empty.classList.add("hidden");
     updateTicketGlobalSearchUI([]);
+    syncTicketQuickStats();
     list.innerHTML = `
       <div class="ticket-loading-card ${ticketsLoadingSlow ? "slow" : ""}">
         <div class="ticket-loading-spinner" aria-hidden="true"></div>
@@ -1398,6 +1512,7 @@ function renderTicketList() {
       : tt("لا توجد تذاكر في قائمتك الحالية.", "No tickets found in your current queue.");
   }
   updateTicketGlobalSearchUI(filtered);
+  syncTicketQuickStats();
 
   filtered.forEach((t) => {
     const btn = document.createElement("button");
@@ -1934,10 +2049,15 @@ function hookUI() {
     await createTicket();
   });
 
-  ["ticket-filter-status", "ticket-filter-priority", "ticket-filter-owner"].forEach((id) => {
+  ["ticket-filter-status", "ticket-filter-priority", "ticket-filter-owner", "ticket-filter-date"].forEach((id) => {
     const node = el(id);
     node?.addEventListener("input", renderTicketList);
     node?.addEventListener("change", renderTicketList);
+  });
+
+  translateTicketFilterOptions();
+  document.querySelectorAll('[data-ticket-quick-filter]').forEach((node) => {
+    node.addEventListener('click', () => applyTicketQuickFilter(node.getAttribute('data-ticket-quick-filter') || ''));
   });
 
   const ticketSearch = el("ticket-search");
