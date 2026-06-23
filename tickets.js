@@ -86,6 +86,16 @@ let currentLiveOrderFirebaseStatus = "none";
 let editingTicketCommentId = null;
 let ticketOpenProgressToken = 0;
 let ticketOpenProgressHideTimer = null;
+let ticketScopeMaps = new Map();
+let ticketTeamSearchMap = new Map();
+let ticketsInitialLoading = false;
+let ticketsLoadingMessage = "";
+let ticketsLoadingSlow = false;
+let ticketLoadSlowTimer = null;
+let teamSearchTimer = null;
+let teamSearchToken = 0;
+let teamSearchLoading = false;
+let teamSearchLastTerm = "";
 
 const SHOPIFY_BACKEND_URL = "https://telesyriana-backend.onrender.com";
 const SHOPIFY_API_KEY_STORAGE = "telesyrianaShopifyBackendApiKey";
@@ -100,6 +110,13 @@ function defaultShopifyApiKey() {
 function el(id) { return document.getElementById(id); }
 function ticketLang() { return ((document.body?.dataset?.language || document.documentElement.lang || 'ar') === 'en') ? 'en' : 'ar'; }
 function tt(ar, en) { return ticketLang() === 'ar' ? ar : en; }
+
+function emitTicketLoadEvent(name, detail = {}) {
+  try { window.dispatchEvent(new CustomEvent(`telesyriana:tickets-${name}`, { detail })); } catch {}
+}
+
+function ticketLoadMessage(ar, en) { return tt(ar, en); }
+
 function labelOf(map, key, fallback = '') { const item = map[key]; if (!item) return fallback || key || ''; return item[ticketLang()] || item.en || fallback || key || ''; }
 function typeLabel(key) { return labelOf(TYPE_LABELS, key, key || 'Ticket'); }
 function statusLabelText(key) { return labelOf(STATUS_LABELS, key, key || 'Open'); }
@@ -461,6 +478,104 @@ function isTicketGlobalSearchHit(ticket) {
   const q = currentTicketSearchTerm();
   return Boolean(isTicketGlobalSearchActive() && !canViewTicketBase(ticket) && ticketSearchText(ticket).includes(q));
 }
+
+
+function sortTicketRows(rows) {
+  return rows.sort((a, b) => {
+    const bm = tsToMs(b.updatedAt || b.createdAt) || Number(String(b.orderNumber || '').replace(/\D/g, '')) || 0;
+    const am = tsToMs(a.updatedAt || a.createdAt) || Number(String(a.orderNumber || '').replace(/\D/g, '')) || 0;
+    return bm - am;
+  });
+}
+
+function mergeTicketMaps() {
+  const merged = new Map();
+  ticketScopeMaps.forEach((map) => map.forEach((row, id) => merged.set(id, row)));
+  ticketTeamSearchMap.forEach((row, id) => merged.set(id, row));
+  allTickets = sortTicketRows([...merged.values()]);
+}
+
+function ticketListenSourcesForUser(user) {
+  const base = collection(db, TICKETS_COL);
+  if (!user) return [];
+  const role = String(user.role || '').toLowerCase();
+
+  // Managers/admins keep the full operational queue. Agents get only their scoped tickets.
+  // This is the important performance fix for staff devices.
+  if (canSeeAll(user) || role === 'supervisor') return [{ key: 'team', source: base }];
+
+  return [
+    { key: 'assigned', source: query(base, where('assignedTo', '==', user.id)) },
+    { key: 'created', source: query(base, where('createdBy', '==', user.id)) },
+  ];
+}
+
+function setTicketsInlineLoading(active, message = '', slow = false) {
+  ticketsInitialLoading = Boolean(active);
+  ticketsLoadingMessage = message || '';
+  ticketsLoadingSlow = Boolean(slow);
+  renderTicketList();
+}
+
+function clearTicketSlowTimer() {
+  if (ticketLoadSlowTimer) clearTimeout(ticketLoadSlowTimer);
+  ticketLoadSlowTimer = null;
+}
+
+function clearTeamSearchResults() {
+  teamSearchLoading = false;
+  teamSearchLastTerm = '';
+  ticketTeamSearchMap = new Map();
+  mergeTicketMaps();
+}
+
+function scheduleTeamTicketSearch() {
+  const q = currentTicketSearchTerm();
+  if (!isTicketGlobalSearchActive()) {
+    if (teamSearchTimer) clearTimeout(teamSearchTimer);
+    teamSearchToken += 1;
+    if (ticketTeamSearchMap.size || teamSearchLoading) {
+      clearTeamSearchResults();
+      renderTicketList();
+      renderTicketDetail();
+    }
+    return;
+  }
+
+  if (q === teamSearchLastTerm && ticketTeamSearchMap.size) return;
+  if (teamSearchTimer) clearTimeout(teamSearchTimer);
+  teamSearchTimer = setTimeout(() => runTeamTicketSearch(q), 650);
+}
+
+async function runTeamTicketSearch(q) {
+  const token = ++teamSearchToken;
+  teamSearchLoading = true;
+  teamSearchLastTerm = q;
+  updateTicketGlobalSearchUI(allTickets.filter(canViewTicket).filter(ticketMatchesFilters));
+
+  try {
+    const snap = await getDocs(collection(db, TICKETS_COL));
+    if (token !== teamSearchToken || q !== currentTicketSearchTerm()) return;
+
+    const matches = [];
+    snap.forEach((d) => {
+      const row = { id: d.id, ...d.data() };
+      if (!canViewTicketBase(row) && ticketSearchText(row).includes(q)) matches.push(row);
+    });
+
+    ticketTeamSearchMap = new Map(matches.slice(0, 60).map((row) => [row.id, row]));
+    teamSearchLoading = false;
+    mergeTicketMaps();
+    renderTicketList();
+    renderTicketDetail();
+  } catch (err) {
+    console.error('team ticket search failed', err);
+    teamSearchLoading = false;
+    updateTicketGlobalSearchUI(allTickets.filter(canViewTicket).filter(ticketMatchesFilters));
+    showTicketAlert(tt('تعذر البحث في كل الفريق. تحقق من الاتصال أو صلاحيات Firestore.', 'Could not search all team tickets. Check connection or Firestore permissions.'), true);
+  }
+}
+
 function canManageTicketFields(ticket) {
   if (!currentUser || !ticket) return false;
   return canEditAll(currentUser) || ticket.assignedTo === currentUser.id || ticket.createdBy === currentUser.id;
@@ -993,11 +1108,15 @@ function updateTicketGlobalSearchUI(filteredRows = []) {
     hint.textContent = '';
     return;
   }
-  const globalHits = filteredRows.filter(isTicketGlobalSearchHit).length;
   hint.classList.remove('hidden');
+  if (teamSearchLoading) {
+    hint.innerHTML = tt(`جاري البحث في كل تذاكر الفريق عن “${escapeHtml(q)}”…`, `Searching all team tickets for “${escapeHtml(q)}”…`);
+    return;
+  }
+  const globalHits = filteredRows.filter(isTicketGlobalSearchHit).length;
   hint.innerHTML = globalHits
     ? tt(`تم العثور على ${globalHits} تذكرة من خارج قائمتك. يمكنك فتحها وإضافة تحديثات المتابعة.`, `Found ${globalHits} ticket(s) outside your own queue. You can open them and add handling updates.`)
-    : tt(`البحث يشمل كل تذاكر الفريق. اكتب رقم الطلب أو البريد أو اسم العميل بدقة.`, `Search includes all team tickets. Use order number, email, or customer name for best results.`);
+    : tt(`قائمتك الشخصية محملة بسرعة. للبحث خارج قائمتك اكتب رقم الطلب أو البريد بدقة وانتظر ثواني قليلة.`, `Your personal queue is loaded fast. To search outside your queue, type an exact order number or email and wait a few seconds.`);
 }
 
 function ensureTicketAccessNotice() {
@@ -1206,6 +1325,20 @@ function renderTicketList() {
   const list = el("tickets-list");
   const empty = el("tickets-empty");
   if (!list || !empty) return;
+
+  if (ticketsInitialLoading && !allTickets.length) {
+    renderStats([]);
+    empty.classList.add("hidden");
+    updateTicketGlobalSearchUI([]);
+    list.innerHTML = `
+      <div class="ticket-loading-card ${ticketsLoadingSlow ? "slow" : ""}">
+        <div class="ticket-loading-spinner" aria-hidden="true"></div>
+        <strong>${escapeHtml(ticketsLoadingSlow ? tt("التحميل بطيء", "Loading is slow") : tt("جاري تحميل التذاكر", "Loading tickets"))}</strong>
+        <span>${escapeHtml(ticketsLoadingMessage || tt("تحميل قائمة التذاكر المناسبة لحسابك…", "Loading the ticket queue for your account…"))}</span>
+        ${ticketsLoadingSlow ? `<button type="button" class="btn-secondary" onclick="window.location.reload()">${escapeHtml(tt("إعادة المحاولة", "Retry"))}</button>` : ""}
+      </div>`;
+    return;
+  }
 
   const visible = allTickets.filter(canViewTicket);
   renderStats(visible);
@@ -1755,10 +1888,20 @@ function hookUI() {
     await createTicket();
   });
 
-  ["ticket-search", "ticket-filter-status", "ticket-filter-priority", "ticket-filter-owner"].forEach((id) => {
+  ["ticket-filter-status", "ticket-filter-priority", "ticket-filter-owner"].forEach((id) => {
     const node = el(id);
     node?.addEventListener("input", renderTicketList);
     node?.addEventListener("change", renderTicketList);
+  });
+
+  const ticketSearch = el("ticket-search");
+  ticketSearch?.addEventListener("input", () => {
+    renderTicketList();
+    scheduleTeamTicketSearch();
+  });
+  ticketSearch?.addEventListener("change", () => {
+    renderTicketList();
+    scheduleTeamTicketSearch();
   });
 
   el("ticket-save-btn")?.addEventListener("click", saveSelectedTicket);
@@ -2046,26 +2189,87 @@ function subscribeDeletedTickets() {
 }
 
 function subscribeTickets() {
-  if (unsubTickets) unsubTickets();
-  // Read the raw collection, then sort locally. This keeps old/legacy tickets visible
-  // even if a ticket document is missing updatedAt or Firestore has no orderBy index yet.
-  const q = collection(db, TICKETS_COL);
-  unsubTickets = onSnapshot(q, (snapshot) => {
-    allTickets = [];
-    snapshot.forEach((d) => allTickets.push({ id: d.id, ...d.data() }));
-    allTickets.sort((a, b) => {
-      const bm = tsToMs(b.updatedAt || b.createdAt) || Number(String(b.orderNumber || '').replace(/\D/g, '')) || 0;
-      const am = tsToMs(a.updatedAt || a.createdAt) || Number(String(a.orderNumber || '').replace(/\D/g, '')) || 0;
-      return bm - am;
+  if (unsubTickets) {
+    try { unsubTickets(); } catch {}
+  }
+
+  ticketScopeMaps = new Map();
+  ticketTeamSearchMap = new Map();
+  mergeTicketMaps();
+
+  const sources = ticketListenSourcesForUser(currentUser);
+  if (!sources.length) {
+    setTicketsInlineLoading(false);
+    renderTicketList();
+    renderTicketDetail();
+    return;
+  }
+
+  setTicketsInlineLoading(true, ticketLoadMessage('تحميل قائمة التذاكر حسب صلاحية هذا الحساب…', 'Loading the ticket queue for this account…'));
+  emitTicketLoadEvent('loading', {
+    percent: 84,
+    message: ticketLoadMessage('تحميل تذاكر هذا الموظف فقط لتسريع الأجهزة الضعيفة…', 'Loading only this staff member’s scoped tickets for faster startup…'),
+  });
+
+  clearTicketSlowTimer();
+  ticketLoadSlowTimer = setTimeout(() => {
+    if (!ticketsInitialLoading) return;
+    setTicketsInlineLoading(true, ticketLoadMessage('الاتصال أو صلاحيات Firestore تأخرت. يمكنك الانتظار أو إعادة المحاولة.', 'Connection or Firestore permissions are taking longer than normal. You can wait or retry.'), true);
+    emitTicketLoadEvent('loading', {
+      percent: 92,
+      message: ticketLoadMessage('التذاكر تأخرت أكثر من المعتاد على هذا الجهاز…', 'Tickets are taking longer than normal on this device…'),
     });
+  }, 10_000);
+
+  let loadedScopes = 0;
+  let initialReadyEmitted = false;
+  const unsubs = sources.map(({ key, source }) => onSnapshot(source, (snapshot) => {
+    const map = new Map();
+    snapshot.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+    if (!ticketScopeMaps.has(key)) loadedScopes += 1;
+    ticketScopeMaps.set(key, map);
+
+    mergeTicketMaps();
     if (selectedTicketId && !allTickets.some((t) => t.id === selectedTicketId)) selectedTicketId = null;
+
+    if (!initialReadyEmitted && loadedScopes >= sources.length) {
+      initialReadyEmitted = true;
+      clearTicketSlowTimer();
+      ticketsInitialLoading = false;
+      ticketsLoadingSlow = false;
+      ticketsLoadingMessage = '';
+      emitTicketLoadEvent('ready', {
+        count: allTickets.length,
+        message: ticketLoadMessage(`تم تحميل ${allTickets.length} تذكرة.`, `Loaded ${allTickets.length} ticket(s).`),
+      });
+    }
+
     renderTicketList();
     renderTicketDetail();
   }, (err) => {
-    console.error("tickets snapshot error", err);
-    showTicketAlert(tt("تعذر تحميل التذاكر. تحقق من صلاحيات Firestore أو الاتصال.", "Could not load tickets. Check Firestore rules or connection."), true);
-  });
+    console.error('tickets snapshot error', err);
+    showTicketAlert(tt('تعذر تحميل التذاكر. تحقق من صلاحيات Firestore أو الاتصال.', 'Could not load tickets. Check Firestore rules or connection.'), true);
+    emitTicketLoadEvent('error', {
+      message: `${tt('تعذر تحميل التذاكر:', 'Could not load tickets:')} ${err?.code || err?.message || 'unknown error'}`,
+    });
+    clearTicketSlowTimer();
+    ticketsInitialLoading = false;
+    ticketsLoadingSlow = false;
+    renderTicketList();
+  }));
+
+  unsubTickets = () => {
+    clearTicketSlowTimer();
+    if (teamSearchTimer) clearTimeout(teamSearchTimer);
+    unsubs.forEach((fn) => { try { fn(); } catch {} });
+    ticketScopeMaps = new Map();
+    ticketTeamSearchMap = new Map();
+    teamSearchLoading = false;
+    ticketsInitialLoading = false;
+    ticketsLoadingSlow = false;
+  };
 }
+
 
 function initTickets() {
   currentUser = getCurrentUser();
@@ -2077,6 +2281,11 @@ function initTickets() {
 
   if (!currentUser) {
     allTickets = [];
+    ticketScopeMaps = new Map();
+    ticketTeamSearchMap = new Map();
+    teamSearchLoading = false;
+    ticketsInitialLoading = false;
+    clearTicketSlowTimer();
     renderTicketList();
     updateTicketGlobalSearchUI([]);
     renderTicketDetail();

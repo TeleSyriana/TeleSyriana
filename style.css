@@ -6344,3 +6344,96 @@ body.dark .ticket-open-progress-track{ background:rgba(255,255,255,.12); }
 @media (max-width:700px){
   .ticket-open-progress{ position:sticky; top:8px; right:auto; width:100%; margin-bottom:12px; }
 }
+
+/* Phase: staff startup progress + scoped ticket loading */
+.startup-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 10, 18, 0.66);
+  backdrop-filter: blur(16px);
+}
+.startup-loader.hidden { display: none; }
+.startup-loader-card {
+  width: min(420px, 94vw);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 26px;
+  padding: 24px;
+  color: #fff;
+  background: linear-gradient(145deg, rgba(23,25,38,0.94), rgba(35,18,37,0.90));
+  box-shadow: 0 24px 80px rgba(0,0,0,0.38);
+}
+.startup-loader-logo {
+  font-weight: 900;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+  margin-bottom: 14px;
+}
+.startup-loader-logo span { color: #ff75c5; }
+.startup-loader-title {
+  font-weight: 800;
+  font-size: 1.05rem;
+  margin-bottom: 14px;
+}
+.startup-progress-track {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.12);
+}
+.startup-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff75c5, #9b7cff);
+  transition: width .28s ease;
+}
+.startup-progress-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: .92rem;
+  color: rgba(255,255,255,0.78);
+}
+.startup-progress-row strong { color: #fff; }
+.startup-loader-retry {
+  width: 100%;
+  margin-top: 16px;
+}
+.startup-loader.slow .startup-progress-fill { background: linear-gradient(90deg, #f59e0b, #ff75c5); }
+.startup-loader.danger .startup-progress-fill { background: linear-gradient(90deg, #ef4444, #f97316); }
+
+.ticket-loading-card {
+  display: grid;
+  gap: 10px;
+  place-items: center;
+  text-align: center;
+  min-height: 190px;
+  padding: 22px;
+  border-radius: 22px;
+  border: 1px dashed rgba(148, 163, 184, .38);
+  background: rgba(255,255,255,.04);
+  color: inherit;
+}
+.ticket-loading-card span {
+  color: var(--muted, #64748b);
+  font-size: .92rem;
+  line-height: 1.45;
+}
+.ticket-loading-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 3px solid rgba(148, 163, 184, .35);
+  border-top-color: currentColor;
+  animation: ticketSpin .8s linear infinite;
+}
+.ticket-loading-card.slow {
+  border-color: rgba(245, 158, 11, .55);
+}
+@keyframes ticketSpin { to { transform: rotate(360deg); } }

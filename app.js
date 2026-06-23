@@ -111,6 +111,110 @@ let lastSyncMs = 0;
 let lastSyncStatus = null;
 let lastSyncPayloadHash = "";
 
+// App startup diagnostics. This keeps slow staff devices informed instead of showing a frozen screen.
+const APP_LOADING_TIMEOUT_MS = 10_000;
+let appLoadingTimer = null;
+let appLoadingVisible = false;
+
+function loadingText(ar, en) {
+  try { return getLanguage() === "ar" ? ar : en; } catch { return ar || en || ""; }
+}
+
+function ensureAppLoadingOverlay() {
+  let overlay = document.getElementById("app-startup-loader");
+  if (overlay) return overlay;
+
+  overlay = document.createElement("div");
+  overlay.id = "app-startup-loader";
+  overlay.className = "startup-loader hidden";
+  overlay.innerHTML = `
+    <div class="startup-loader-card" role="status" aria-live="polite">
+      <div class="startup-loader-logo">Tele<span>Syriana</span></div>
+      <div id="startup-loader-title" class="startup-loader-title">Loading…</div>
+      <div class="startup-progress-track"><div id="startup-progress-fill" class="startup-progress-fill" style="width:0%"></div></div>
+      <div class="startup-progress-row">
+        <span id="startup-loader-step">Starting…</span>
+        <strong id="startup-loader-percent">0%</strong>
+      </div>
+      <button id="startup-loader-retry" type="button" class="btn-secondary startup-loader-retry hidden">Retry</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#startup-loader-retry")?.addEventListener("click", () => window.location.reload());
+  return overlay;
+}
+
+function setAppLoading(percent, title, step, options = {}) {
+  const overlay = ensureAppLoadingOverlay();
+  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+  appLoadingVisible = true;
+  overlay.classList.remove("hidden", "slow", "danger");
+  if (options.slow) overlay.classList.add("slow");
+  if (options.danger) overlay.classList.add("danger");
+  const fill = overlay.querySelector("#startup-progress-fill");
+  const pctEl = overlay.querySelector("#startup-loader-percent");
+  const titleEl = overlay.querySelector("#startup-loader-title");
+  const stepEl = overlay.querySelector("#startup-loader-step");
+  const retry = overlay.querySelector("#startup-loader-retry");
+  if (fill) fill.style.width = `${pct}%`;
+  if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
+  if (titleEl && title) titleEl.textContent = title;
+  if (stepEl && step) stepEl.textContent = step;
+  retry?.classList.toggle("hidden", !options.retry);
+
+  if (appLoadingTimer) clearTimeout(appLoadingTimer);
+  if (!options.noWatchdog && pct < 100) {
+    appLoadingTimer = setTimeout(() => {
+      if (!appLoadingVisible) return;
+      setAppLoading(
+        Math.max(pct, 88),
+        loadingText("التحميل بطيء على هذا الجهاز", "This device is loading slowly"),
+        loadingText("غالباً الاتصال أو صلاحيات البيانات تأخرت. اضغط Retry إذا بقيت الشاشة معلقة.", "Network/data permissions are taking longer than normal. Press Retry if it stays stuck."),
+        { slow: true, retry: true, noWatchdog: true }
+      );
+    }, APP_LOADING_TIMEOUT_MS);
+  }
+}
+
+function hideAppLoading(delay = 250) {
+  if (appLoadingTimer) clearTimeout(appLoadingTimer);
+  appLoadingTimer = null;
+  window.setTimeout(() => {
+    const overlay = document.getElementById("app-startup-loader");
+    if (overlay) overlay.classList.add("hidden");
+    appLoadingVisible = false;
+  }, delay);
+}
+
+window.addEventListener("telesyriana:tickets-loading", (event) => {
+  const d = event.detail || {};
+  setAppLoading(
+    d.percent || 82,
+    loadingText("تحميل التذاكر", "Loading tickets"),
+    d.message || loadingText("جاري تحميل قائمة التذاكر المناسبة لصلاحية المستخدم…", "Loading the ticket queue for this user…")
+  );
+});
+
+window.addEventListener("telesyriana:tickets-ready", (event) => {
+  const d = event.detail || {};
+  setAppLoading(
+    100,
+    loadingText("جاهز", "Ready"),
+    d.message || loadingText("تم تحميل البيانات.", "Data loaded."),
+    { noWatchdog: true }
+  );
+  hideAppLoading(450);
+});
+
+window.addEventListener("telesyriana:tickets-error", (event) => {
+  const d = event.detail || {};
+  setAppLoading(
+    d.percent || 92,
+    loadingText("تعذر تحميل التذاكر", "Tickets failed to load"),
+    d.message || loadingText("تحقق من الاتصال أو صلاحيات Firestore.", "Check the connection or Firestore permissions."),
+    { danger: true, retry: true, noWatchdog: true }
+  );
+});
+
 /* ------------------------------ helpers --------------------------------- */
 
 
@@ -722,44 +826,73 @@ async function stopPresence() {
 
 
 /* --------------------------- Issue rate calendar ------------------------- */
+function ticketCalendarQueriesForUser(user) {
+  if (!user) return [];
+  const role = normaliseRole(user.role);
+  const base = collection(db, "tickets");
+
+  // Managers/admin/HR/supervisors still see the team view. Agents get scoped queries
+  // so weaker devices do not download the full ticket collection on every login.
+  if (role !== "agent") return [{ key: "team", source: base }];
+
+  return [
+    { key: "assigned", source: query(base, where("assignedTo", "==", user.id)) },
+    { key: "created", source: query(base, where("createdBy", "==", user.id)) },
+  ];
+}
+
+function updateIssueCalendarFromRows(rows) {
+  const stats = {};
+  const todayKey = getTodayKey();
+  rows.forEach((t) => {
+    const status = String(t.status || "open").toLowerCase();
+    if (["resolved", "closed", "done", "cancelled", "canceled"].includes(status)) return;
+
+    // Active unresolved issues affect Today until they are solved.
+    const key = todayKey;
+    if (!stats[key]) stats[key] = { total: 0, risk: 0, emergency: 0 };
+    stats[key].total += 1;
+
+    const priority = String(t.priority || "").toLowerCase();
+    const risk = String(t.risk || t.customerMood || "").toLowerCase();
+    const type = String(t.type || "").toLowerCase();
+    const isEmergency = priority === "emergency" || status === "escalated" || status === "urgent";
+    const isRisk = isEmergency || priority === "high" || risk.includes("chargeback") || risk === "high" || type === "item_not_genuine";
+    if (isRisk) stats[key].risk += 1;
+    if (isEmergency) stats[key].emergency += 1;
+  });
+
+  issueStatsByDay = stats;
+  buildMiniCalendar();
+  const summary = document.getElementById("issue-calendar-summary");
+  if (summary) {
+    const s = stats[todayKey] || { total: 0, risk: 0, emergency: 0 };
+    if (s.emergency >= 1 || s.risk >= 2 || s.total >= 3) {
+      summary.textContent = `Today: ${s.total} active issues • ${s.risk} risk issues. Emergency/overload active.`;
+    } else if (s.total >= 1) {
+      summary.textContent = `Today: ${s.total} active issue${s.total === 1 ? "" : "s"} • manageable.`;
+    } else {
+      summary.textContent = "Today: stable. No active unresolved issues.";
+    }
+  }
+}
+
 function subscribeIssueCalendar() {
   if (issueCalendarUnsub) return;
   try {
-    issueCalendarUnsub = onSnapshot(collection(db, "tickets"), (snapshot) => {
-      const stats = {};
-      const todayKey = getTodayKey();
-      snapshot.forEach((d) => {
-        const t = d.data() || {};
-        const status = String(t.status || "open").toLowerCase();
-        if (["resolved", "closed", "done", "cancelled", "canceled"].includes(status)) return;
+    const sources = ticketCalendarQueriesForUser(currentUser);
+    const scopeRows = new Map();
+    const unsubs = sources.map(({ key, source }) => onSnapshot(source, (snapshot) => {
+      const rows = [];
+      snapshot.forEach((d) => rows.push({ id: d.id, ...d.data() }));
+      scopeRows.set(key, rows);
 
-        // Active unresolved issues affect Today until they are solved.
-        const key = todayKey;
-        if (!stats[key]) stats[key] = { total: 0, risk: 0, emergency: 0 };
-        stats[key].total += 1;
+      const merged = new Map();
+      scopeRows.forEach((list) => list.forEach((row) => merged.set(row.id, row)));
+      updateIssueCalendarFromRows([...merged.values()]);
+    }, (err) => console.warn("issue calendar listener failed", err)));
 
-        const priority = String(t.priority || "").toLowerCase();
-        const risk = String(t.risk || t.customerMood || "").toLowerCase();
-        const type = String(t.type || "").toLowerCase();
-        const isEmergency = priority === "emergency" || status === "escalated" || status === "urgent";
-        const isRisk = isEmergency || priority === "high" || risk.includes("chargeback") || risk === "high" || type === "item_not_genuine";
-        if (isRisk) stats[key].risk += 1;
-        if (isEmergency) stats[key].emergency += 1;
-      });
-      issueStatsByDay = stats;
-      buildMiniCalendar();
-      const summary = document.getElementById("issue-calendar-summary");
-      if (summary) {
-        const s = stats[todayKey] || { total: 0, risk: 0, emergency: 0 };
-        if (s.emergency >= 1 || s.risk >= 2 || s.total >= 3) {
-          summary.textContent = `Today: ${s.total} active issues • ${s.risk} risk issues. Emergency/overload active.`;
-        } else if (s.total >= 1) {
-          summary.textContent = `Today: ${s.total} active issue${s.total === 1 ? "" : "s"} • manageable.`;
-        } else {
-          summary.textContent = "Today: stable. No active unresolved issues.";
-        }
-      }
-    }, (err) => console.warn("issue calendar listener failed", err));
+    issueCalendarUnsub = () => unsubs.forEach((fn) => { try { fn(); } catch {} });
   } catch (err) {
     console.warn("issue calendar init failed", err);
   }
@@ -832,19 +965,26 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     const savedUser = localStorage.getItem(USER_KEY);
     if (savedUser) {
+      setAppLoading(12, loadingText("استعادة الجلسة", "Restoring session"), loadingText("تم العثور على جلسة محفوظة…", "Saved session found…"));
       const u = JSON.parse(savedUser);
       if (USERS[u.id]) {
         // Refresh saved sessions from the current role map, so role changes apply after updates.
+        setAppLoading(30, loadingText("تحميل الصلاحيات", "Loading permissions"), loadingText("تحديث دور المستخدم من النظام…", "Refreshing the user role from the local role map…"));
         currentUser = safeUserPayload(u.id);
         localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+        setAppLoading(48, loadingText("تحميل جلسة اليوم", "Loading today’s session"), loadingText("قراءة حالة الدوام الحالية…", "Reading the current work state…"));
         await initStateForUser();
+        setAppLoading(72, loadingText("فتح لوحة التحكم", "Opening dashboard"), loadingText("تجهيز الصفحة الرئيسية…", "Preparing the home page…"));
         showDashboard();
+        window.dispatchEvent(new Event("telesyriana:user-changed"));
         return;
       }
     }
   } catch (err) {
     console.warn("Saved session ignored:", err);
     localStorage.removeItem(USER_KEY);
+    setAppLoading(90, loadingText("تعذر استعادة الجلسة", "Could not restore session"), String(err?.message || err || ""), { danger: true, retry: true, noWatchdog: true });
+    hideAppLoading(1200);
   }
 
   showLogin();
@@ -899,12 +1039,14 @@ async function handleLogin(e) {
   if (USERS[id].password !== pw) return showError(getLanguage() === "ar" ? "كلمة المرور غير صحيحة." : "Incorrect password.");
 
   try {
+    setAppLoading(8, loadingText("بدء تسجيل الدخول", "Starting login"), loadingText("فحص بيانات الدخول…", "Checking login details…"));
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.dataset.originalText = submitBtn.textContent;
-      submitBtn.textContent = "جاري الدخول...";
+      submitBtn.textContent = loadingText("جاري الدخول...", "Signing in...");
     }
 
+    setAppLoading(24, loadingText("تسجيل الدخول صحيح", "Login accepted"), loadingText("تحميل دور المستخدم والصلاحيات…", "Loading user role and permissions…"));
     currentUser = safeUserPayload(id);
     localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
@@ -915,11 +1057,14 @@ async function handleLogin(e) {
 
     document.getElementById("login-error")?.classList.add("hidden");
 
+    setAppLoading(42, loadingText("تحميل جلسة العمل", "Loading work session"), loadingText("جاري تحميل حالة الدوام لهذا اليوم…", "Loading today’s work state…"));
     await initStateForUser();
+    setAppLoading(72, loadingText("فتح لوحة التحكم", "Opening dashboard"), loadingText("تجهيز الواجهة والتقويم…", "Preparing dashboard and calendar…"));
     showDashboard();
     window.dispatchEvent(new Event("telesyriana:user-changed"));
   } catch (err) {
     console.error("Login failed:", err);
+    setAppLoading(92, loadingText("فشل تسجيل الدخول", "Login failed"), String(err?.message || err || loadingText("حدث خطأ غير معروف.", "Unknown error.")), { danger: true, retry: true, noWatchdog: true });
     showError(`فشل تسجيل الدخول: ${err?.message || err}`);
   } finally {
     if (submitBtn) {
@@ -1915,6 +2060,7 @@ function ensureProfilePhotoControls() {
 /* --------------------------- View switching ----------------------------- */
 
 function showLogin() {
+  hideAppLoading(0);
   closeMobileMenu();
   document.body.classList.add("auth-screen");
   document.body.classList.remove("dashboard-ready");
@@ -1934,6 +2080,7 @@ function showLogin() {
 }
 
 function showDashboard() {
+  setAppLoading(78, loadingText("تجهيز لوحة التحكم", "Preparing dashboard"), loadingText("فتح الصفحة الرئيسية وتشغيل الخدمات…", "Opening the home page and starting services…"));
   closeMobileMenu();
   document.body.classList.remove("auth-screen");
   document.body.classList.add("dashboard-ready");

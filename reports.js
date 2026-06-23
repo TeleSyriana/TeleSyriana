@@ -9,6 +9,7 @@ const {
   doc,
   updateDoc,
   query,
+  where,
   orderBy,
   onSnapshot,
   serverTimestamp,
@@ -380,17 +381,44 @@ function subscribeReports() {
   });
 }
 
+function ticketSnapshotSourcesForUser(user) {
+  const base = collection(db, TICKETS_COL);
+  if (!user) return [];
+  const role = String(user.role || '').toLowerCase();
+  if (canSeeAll(user) || role === 'supervisor') return [{ key: 'team', source: query(base, orderBy("updatedAt", "desc")) }];
+  return [
+    { key: 'assigned', source: query(base, where('assignedTo', '==', user.id)) },
+    { key: 'created', source: query(base, where('createdBy', '==', user.id)) },
+  ];
+}
+
+function sortTicketSnapshotRows(rows) {
+  return rows.sort((a, b) => {
+    const bm = tsToMs(b.updatedAt || b.createdAt) || Number(String(b.orderNumber || '').replace(/\D/g, '')) || 0;
+    const am = tsToMs(a.updatedAt || a.createdAt) || Number(String(a.orderNumber || '').replace(/\D/g, '')) || 0;
+    return bm - am;
+  });
+}
+
 function subscribeTicketsSnapshot() {
   if (unsubTickets) unsubTickets();
-  const q = query(collection(db, TICKETS_COL), orderBy("updatedAt", "desc"));
-  unsubTickets = onSnapshot(q, (snapshot) => {
-    allTickets = [];
-    snapshot.forEach((d) => allTickets.push({ id: d.id, ...d.data() }));
+  const sources = ticketSnapshotSourcesForUser(currentUser);
+  const scopeRows = new Map();
+  const unsubs = sources.map(({ key, source }) => onSnapshot(source, (snapshot) => {
+    const rows = [];
+    snapshot.forEach((d) => rows.push({ id: d.id, ...d.data() }));
+    scopeRows.set(key, rows);
+
+    const merged = new Map();
+    scopeRows.forEach((list) => list.forEach((row) => merged.set(row.id, row)));
+    allTickets = sortTicketSnapshotRows([...merged.values()]);
     renderTicketSnapshot();
   }, (err) => {
     console.warn("reports ticket snapshot failed", err);
-  });
+  }));
+  unsubTickets = () => unsubs.forEach((fn) => { try { fn(); } catch {} });
 }
+
 
 function initReports() {
   currentUser = getCurrentUser();

@@ -1,0 +1,20 @@
+TeleSyriana staff loading fix v1
+
+Upload/replace these files in the project root:
+- index.html
+- app.js
+- tickets.js
+- reports.js
+- style.css
+
+What changed:
+- Added startup loading progress with clear stages and Retry.
+- Agents no longer download the full tickets collection on login.
+- Agent ticket queue now loads scoped tickets by assignedTo/createdBy.
+- Team/global ticket search still works on demand when the agent searches.
+- Reports ticket snapshot is also scoped for agents to avoid another full tickets read.
+- Cache-busting query strings updated to force staff devices to load the new files.
+
+After upload:
+- Ask employees to fully close/reopen the website or refresh once.
+- If any device still hangs, note the exact loading step shown on screen.
