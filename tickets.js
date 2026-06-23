@@ -96,6 +96,10 @@ let teamSearchTimer = null;
 let teamSearchToken = 0;
 let teamSearchLoading = false;
 let teamSearchLastTerm = "";
+let teamSearchIndexLoaded = false;
+let teamSearchIndexLoading = false;
+let teamSearchIndexPromise = null;
+let teamSearchIndexLoadedAt = 0;
 
 const SHOPIFY_BACKEND_URL = "https://telesyriana-backend.onrender.com";
 const SHOPIFY_API_KEY_STORAGE = "telesyrianaShopifyBackendApiKey";
@@ -522,11 +526,61 @@ function clearTicketSlowTimer() {
   ticketLoadSlowTimer = null;
 }
 
-function clearTeamSearchResults() {
+function clearTeamSearchResults({ keepIndex = true } = {}) {
   teamSearchLoading = false;
   teamSearchLastTerm = '';
-  ticketTeamSearchMap = new Map();
+  if (!keepIndex || !teamSearchIndexLoaded) ticketTeamSearchMap = new Map();
   mergeTicketMaps();
+}
+
+function shouldUseTeamSearchIndex() {
+  return Boolean(currentUser && !canSeeAll(currentUser));
+}
+
+function queueTeamSearchIndexWarmup(delay = 1200) {
+  if (!shouldUseTeamSearchIndex() || teamSearchIndexLoaded || teamSearchIndexLoading) return;
+  window.setTimeout(() => {
+    if (shouldUseTeamSearchIndex()) loadTeamSearchIndex({ silent: true });
+  }, delay);
+}
+
+async function loadTeamSearchIndex({ silent = false } = {}) {
+  if (!shouldUseTeamSearchIndex()) return;
+  if (teamSearchIndexLoaded) return;
+  if (teamSearchIndexPromise) return teamSearchIndexPromise;
+
+  teamSearchIndexLoading = true;
+  if (!silent) {
+    teamSearchLoading = true;
+    updateTicketGlobalSearchUI(allTickets.filter(canViewTicket).filter(ticketMatchesFilters));
+  }
+
+  teamSearchIndexPromise = getDocs(collection(db, TICKETS_COL))
+    .then((snap) => {
+      const map = new Map(ticketTeamSearchMap);
+      snap.forEach((d) => {
+        const row = { id: d.id, ...d.data() };
+        // Keep every readable ticket in memory for search, but only reveal non-owned tickets when a search term matches.
+        map.set(row.id, row);
+      });
+      ticketTeamSearchMap = map;
+      teamSearchIndexLoaded = true;
+      teamSearchIndexLoadedAt = Date.now();
+      mergeTicketMaps();
+    })
+    .catch((err) => {
+      console.error('team ticket index failed', err);
+      if (!silent) showTicketAlert(tt('تعذر تحميل فهرس بحث الفريق. البحث في تذاكر الآخرين قد يكون محدوداً.', 'Could not load the team search index. Searching other people’s tickets may be limited.'), true);
+    })
+    .finally(() => {
+      teamSearchIndexLoading = false;
+      teamSearchIndexPromise = null;
+      teamSearchLoading = false;
+      renderTicketList();
+      renderTicketDetail();
+    });
+
+  return teamSearchIndexPromise;
 }
 
 function scheduleTeamTicketSearch() {
@@ -534,17 +588,23 @@ function scheduleTeamTicketSearch() {
   if (!isTicketGlobalSearchActive()) {
     if (teamSearchTimer) clearTimeout(teamSearchTimer);
     teamSearchToken += 1;
-    if (ticketTeamSearchMap.size || teamSearchLoading) {
-      clearTeamSearchResults();
-      renderTicketList();
-      renderTicketDetail();
-    }
+    teamSearchLoading = false;
+    teamSearchLastTerm = '';
+    renderTicketList();
+    renderTicketDetail();
     return;
   }
 
-  if (q === teamSearchLastTerm && ticketTeamSearchMap.size) return;
+  if (teamSearchIndexLoaded) {
+    teamSearchLastTerm = q;
+    renderTicketList();
+    renderTicketDetail();
+    return;
+  }
+
+  if (q === teamSearchLastTerm && (teamSearchLoading || teamSearchIndexLoading)) return;
   if (teamSearchTimer) clearTimeout(teamSearchTimer);
-  teamSearchTimer = setTimeout(() => runTeamTicketSearch(q), 650);
+  teamSearchTimer = setTimeout(() => runTeamTicketSearch(q), 350);
 }
 
 async function runTeamTicketSearch(q) {
@@ -553,27 +613,13 @@ async function runTeamTicketSearch(q) {
   teamSearchLastTerm = q;
   updateTicketGlobalSearchUI(allTickets.filter(canViewTicket).filter(ticketMatchesFilters));
 
-  try {
-    const snap = await getDocs(collection(db, TICKETS_COL));
-    if (token !== teamSearchToken || q !== currentTicketSearchTerm()) return;
+  await loadTeamSearchIndex({ silent: false });
+  if (token !== teamSearchToken || q !== currentTicketSearchTerm()) return;
 
-    const matches = [];
-    snap.forEach((d) => {
-      const row = { id: d.id, ...d.data() };
-      if (!canViewTicketBase(row) && ticketSearchText(row).includes(q)) matches.push(row);
-    });
-
-    ticketTeamSearchMap = new Map(matches.slice(0, 60).map((row) => [row.id, row]));
-    teamSearchLoading = false;
-    mergeTicketMaps();
-    renderTicketList();
-    renderTicketDetail();
-  } catch (err) {
-    console.error('team ticket search failed', err);
-    teamSearchLoading = false;
-    updateTicketGlobalSearchUI(allTickets.filter(canViewTicket).filter(ticketMatchesFilters));
-    showTicketAlert(tt('تعذر البحث في كل الفريق. تحقق من الاتصال أو صلاحيات Firestore.', 'Could not search all team tickets. Check connection or Firestore permissions.'), true);
-  }
+  teamSearchLoading = false;
+  mergeTicketMaps();
+  renderTicketList();
+  renderTicketDetail();
 }
 
 function canManageTicketFields(ticket) {
@@ -1109,14 +1155,14 @@ function updateTicketGlobalSearchUI(filteredRows = []) {
     return;
   }
   hint.classList.remove('hidden');
-  if (teamSearchLoading) {
-    hint.innerHTML = tt(`جاري البحث في كل تذاكر الفريق عن “${escapeHtml(q)}”…`, `Searching all team tickets for “${escapeHtml(q)}”…`);
+  if (teamSearchLoading || teamSearchIndexLoading) {
+    hint.innerHTML = tt(`جاري تجهيز بحث كل الفريق عن “${escapeHtml(q)}”…`, `Preparing whole-team search for “${escapeHtml(q)}”…`);
     return;
   }
   const globalHits = filteredRows.filter(isTicketGlobalSearchHit).length;
   hint.innerHTML = globalHits
     ? tt(`تم العثور على ${globalHits} تذكرة من خارج قائمتك. يمكنك فتحها وإضافة تحديثات المتابعة.`, `Found ${globalHits} ticket(s) outside your own queue. You can open them and add handling updates.`)
-    : tt(`قائمتك الشخصية محملة بسرعة. للبحث خارج قائمتك اكتب رقم الطلب أو البريد بدقة وانتظر ثواني قليلة.`, `Your personal queue is loaded fast. To search outside your queue, type an exact order number or email and wait a few seconds.`);
+    : tt(`لم يظهر تطابق خارج قائمتك. جرّب رقم الطلب الكامل أو البريد أو اسم العميل، والبحث سيشمل التذاكر القديمة وتذاكر الفريق بعد تجهيز الفهرس.`, `No outside-queue match yet. Try the full order number, email, or customer name; search includes old and team tickets after the index is ready.`);
 }
 
 function ensureTicketAccessNotice() {
@@ -2195,6 +2241,10 @@ function subscribeTickets() {
 
   ticketScopeMaps = new Map();
   ticketTeamSearchMap = new Map();
+  teamSearchIndexLoaded = false;
+  teamSearchIndexLoading = false;
+  teamSearchIndexPromise = null;
+  teamSearchIndexLoadedAt = 0;
   mergeTicketMaps();
 
   const sources = ticketListenSourcesForUser(currentUser);
@@ -2242,6 +2292,7 @@ function subscribeTickets() {
         count: allTickets.length,
         message: ticketLoadMessage(`تم تحميل ${allTickets.length} تذكرة.`, `Loaded ${allTickets.length} ticket(s).`),
       });
+      queueTeamSearchIndexWarmup(1200);
     }
 
     renderTicketList();
@@ -2265,6 +2316,10 @@ function subscribeTickets() {
     ticketScopeMaps = new Map();
     ticketTeamSearchMap = new Map();
     teamSearchLoading = false;
+    teamSearchIndexLoaded = false;
+    teamSearchIndexLoading = false;
+    teamSearchIndexPromise = null;
+    teamSearchIndexLoadedAt = 0;
     ticketsInitialLoading = false;
     ticketsLoadingSlow = false;
   };
@@ -2284,6 +2339,10 @@ function initTickets() {
     ticketScopeMaps = new Map();
     ticketTeamSearchMap = new Map();
     teamSearchLoading = false;
+    teamSearchIndexLoaded = false;
+    teamSearchIndexLoading = false;
+    teamSearchIndexPromise = null;
+    teamSearchIndexLoadedAt = 0;
     ticketsInitialLoading = false;
     clearTicketSlowTimer();
     renderTicketList();
