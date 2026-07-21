@@ -24,7 +24,7 @@ function patchPayroll(coreSource) {
   const imports = `import { db, fs } from ${JSON.stringify(FIREBASE_URL)};\nimport { listEmployees } from ${JSON.stringify(DIRECTORY_URL)};`;
   source = replaceRequired(source, 'import { db, fs } from "./firebase.js";', imports, 'firebase import');
 
-  const staffReplacement = `let STAFF = {};\n\nasync function refreshPayrollStaffDirectory() {\n  const rows = await listEmployees({ includeDisabled: true, includeArchived: true });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
+  const staffReplacement = `let STAFF = {};\n\nasync function refreshPayrollStaffDirectory() {\n  // Keep inactive employees for historical payroll/reporting labels.\n  const rows = await listEmployees({ includeDisabled: true, includeArchived: true });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
   source = replaceBetweenRequired(
     source,
     'const STAFF = {\n',
@@ -42,18 +42,26 @@ function patchPayroll(coreSource) {
 
   source = replaceRequired(
     source,
+    '    const editableIds = canSeeAll(currentUser) ? Object.keys(STAFF) : visibleIds;',
+    '    const editableIds = (canSeeAll(currentUser) ? Object.keys(STAFF) : visibleIds)\n      .filter((id) => String(STAFF[id]?.accountStatus || "active") === "active");',
+    'active payroll settings targets'
+  );
+
+  source = replaceRequired(
+    source,
     'function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();',
     'async function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();',
     'payroll init directory refresh'
   );
 
   const oldUserChanged = `window.addEventListener("telesyriana:user-changed", () => {\n  currentUser = getCurrentUser();\n  populateStaffFilters();\n  setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser) subscribePayroll();\n});`;
-  const newUserChanged = `async function refreshPayrollForCurrentDirectory() {\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();\n  populateStaffFilters();\n  setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser) subscribePayroll();\n}\n\nwindow.addEventListener("telesyriana:user-changed", refreshPayrollForCurrentDirectory);\nwindow.addEventListener("telesyriana:employee-directory-changed", refreshPayrollForCurrentDirectory);`;
+  const newUserChanged = `async function refreshPayrollForCurrentDirectory({ resetRange = false } = {}) {\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();\n  populateStaffFilters();\n  if (resetRange) setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser) subscribePayroll();\n}\n\nwindow.addEventListener("telesyriana:user-changed", () => refreshPayrollForCurrentDirectory({ resetRange: true }));\nwindow.addEventListener("telesyriana:employee-directory-changed", () => refreshPayrollForCurrentDirectory({ resetRange: false }));`;
   source = replaceRequired(source, oldUserChanged, newUserChanged, 'payroll user/directory refresh');
 
   if (source.includes('const STAFF = {')) throw new Error('Payroll directory validation failed: legacy STAFF remains.');
   if (!source.includes('await refreshPayrollStaffDirectory()')) throw new Error('Payroll directory validation failed: refresh missing.');
   if (source.includes('["admin", "manager", "supervisor"].includes(role)')) throw new Error('Payroll visibility validation failed.');
+  if (!source.includes('.filter((id) => String(STAFF[id]?.accountStatus || "active") === "active")')) throw new Error('Payroll directory validation failed: inactive settings targets remain.');
   return source;
 }
 
