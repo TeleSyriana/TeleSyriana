@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   static-preflight:
-    name: Validate Phase 1 migration loaders
+    name: Validate current TeleSyriana runtime
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -41,15 +41,51 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Run deterministic preflight
+      - name: Detect runtime mode and run deterministic preflight
         id: preflight
         shell: bash
         continue-on-error: true
         run: |
           set +e
-          node tools/phase1-static-preflight.mjs > phase1-preflight.log 2>&1
-          code=$?
+          mode='phase1_loader'
+          code=0
+
+          if grep -Fxq "import './app-core.js';" app.js \
+            && grep -Fxq "import './messages-core.js';" messages.js \
+            && grep -Fxq "import './groups-core.js';" groups.js; then
+            mode='emergency_stable_core'
+            {
+              echo 'TeleSyriana runtime mode: emergency_stable_core'
+              echo 'The Phase 1 App/Messages/Groups Blob loaders are intentionally bypassed.'
+              echo 'Validating stable-core entry files instead of requiring Phase 1 loader markers.'
+            } > phase1-preflight.log
+
+            cp app.js /tmp/telesyriana-app-entry.mjs
+            cp messages.js /tmp/telesyriana-messages-entry.mjs
+            cp groups.js /tmp/telesyriana-groups-entry.mjs
+            node --check /tmp/telesyriana-app-entry.mjs >> phase1-preflight.log 2>&1 || code=$?
+            node --check /tmp/telesyriana-messages-entry.mjs >> phase1-preflight.log 2>&1 || code=$?
+            node --check /tmp/telesyriana-groups-entry.mjs >> phase1-preflight.log 2>&1 || code=$?
+
+            for core in app-core.js messages-core.js groups-core.js; do
+              if [ ! -s "$core" ]; then
+                echo "ERROR: required stable core is missing or empty: $core" >> phase1-preflight.log
+                code=1
+              fi
+            done
+
+            if [ "$code" -eq 0 ]; then
+              echo 'Emergency stable-core preflight: PASS' >> phase1-preflight.log
+            else
+              echo 'Emergency stable-core preflight: FAIL' >> phase1-preflight.log
+            fi
+          else
+            node tools/phase1-static-preflight.mjs > phase1-preflight.log 2>&1
+            code=$?
+          fi
+
           cat phase1-preflight.log
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
 
@@ -62,11 +98,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: No-login browser loader smoke test
+      - name: Browser runtime smoke test
         id: browser_smoke
         if: steps.preflight.outputs.exit_code == '0'
         shell: bash
         continue-on-error: true
+        env:
+          TS_RUNTIME_MODE: ${{ steps.preflight.outputs.mode }}
         run: |
           set +e
           mkdir -p /tmp/phase1-browser
@@ -86,10 +124,11 @@ jobs:
           sleep 1
 
           cd /tmp/phase1-browser
-          GITHUB_WORKSPACE="$GITHUB_WORKSPACE" node --input-type=module > "$GITHUB_WORKSPACE/phase1-browser-smoke.log" 2>&1 <<'NODE'
+          GITHUB_WORKSPACE="$GITHUB_WORKSPACE" TS_RUNTIME_MODE="$TS_RUNTIME_MODE" node --input-type=module > "$GITHUB_WORKSPACE/phase1-browser-smoke.log" 2>&1 <<'NODE'
           import fs from 'node:fs';
           import puppeteer from 'puppeteer-core';
 
+          const runtimeMode = process.env.TS_RUNTIME_MODE || 'phase1_loader';
           const candidates = [
             '/usr/bin/google-chrome',
             '/usr/bin/google-chrome-stable',
@@ -128,20 +167,31 @@ jobs:
               messagesLifecycle: Boolean(window.__TS_MESSAGE_PAGE_LIFECYCLE__),
               employeesLifecycle: Boolean(window.__TS_EMPLOYEES_PAGE_LIFECYCLE__),
               appLoaded: Boolean(document.getElementById('login-form')),
+              loginVisible: !document.getElementById('login-screen')?.classList.contains('hidden'),
             }));
 
             const fallbackPattern = /(Phase 1 employee-directory loader failed|Central ticket staff-directory bridge failed|Central reports staff-directory bridge failed|Central payroll staff-directory bridge failed|Central chat employee-directory bridge failed|Central group member-directory bridge failed|Employees UI safety bridge failed)/i;
             const fallbackLogs = consoleRows.filter((row) => fallbackPattern.test(row));
 
+            console.log('runtime_mode=' + runtimeMode);
             console.log('runtime=' + JSON.stringify(runtime));
             console.log('fallback_logs=' + JSON.stringify(fallbackLogs));
             console.log('page_errors=' + JSON.stringify(pageErrors));
             console.log('console_tail=' + JSON.stringify(consoleRows.slice(-30)));
 
-            const lifecycleOk = runtime.ticketLifecycle && runtime.reportsLifecycle && runtime.payrollLifecycle && runtime.messagesLifecycle && runtime.employeesLifecycle;
-            if (!runtime.appLoaded) throw new Error('Login UI did not load.');
-            if (!lifecycleOk) throw new Error(`One or more Phase 1 page lifecycle bridges did not initialize: ${JSON.stringify(runtime)}`);
-            if (fallbackLogs.length) throw new Error(`One or more Phase 1 loaders fell back to untouched core: ${fallbackLogs.join(' | ')}`);
+            if (!runtime.appLoaded || !runtime.loginVisible) {
+              throw new Error(`Login UI did not initialize correctly: ${JSON.stringify(runtime)}`);
+            }
+
+            if (runtimeMode === 'phase1_loader') {
+              const lifecycleOk = runtime.ticketLifecycle && runtime.reportsLifecycle && runtime.payrollLifecycle && runtime.messagesLifecycle && runtime.employeesLifecycle;
+              if (!lifecycleOk) throw new Error(`One or more Phase 1 page lifecycle bridges did not initialize: ${JSON.stringify(runtime)}`);
+              if (fallbackLogs.length) throw new Error(`One or more Phase 1 loaders fell back to untouched core: ${fallbackLogs.join(' | ')}`);
+            }
+
+            if (pageErrors.length) {
+              throw new Error(`Uncaught browser errors: ${pageErrors.join(' | ')}`);
+            }
           } finally {
             await browser.close();
           }
@@ -222,7 +272,7 @@ jobs:
         if: steps.firestore_probe.outputs.status == 'quota_exhausted'
         shell: bash
         run: |
-          echo '::warning::Firestore probe reached telesyriana-ccms but returned RESOURCE_EXHAUSTED / Quota exceeded. Static/browser preflight passed, but live Firestore smoke testing remains blocked until quota recovers or is increased.'
+          echo '::warning::Firestore probe reached telesyriana-ccms but returned RESOURCE_EXHAUSTED / Quota exceeded. Runtime/browser validation passed, but live Firestore smoke testing remains blocked until quota recovers or is increased.'
 
       - name: Fail when browser smoke failed
         if: steps.preflight.outputs.exit_code == '0' && steps.browser_smoke.outputs.exit_code != '0'
