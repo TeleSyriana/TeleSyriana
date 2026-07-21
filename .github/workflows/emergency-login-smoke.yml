@@ -1,0 +1,127 @@
+name: Emergency login smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'app-core.js'
+      - 'index.html'
+      - '.github/workflows/emergency-login-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  login-smoke:
+    name: Verify login handler without production writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Run no-write Chrome login smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/telesyriana-browser
+          cd /tmp/telesyriana-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > emergency-login-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/emergency-login-smoke.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const candidates = [
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/chromium',
+          ];
+          const executablePath = candidates.find((path) => fs.existsSync(path));
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found on runner.');
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+          });
+
+          try {
+            const page = await browser.newPage();
+            const pageErrors = [];
+            const consoleRows = [];
+            page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
+            page.on('console', (message) => consoleRows.push(`[${message.type()}] ${message.text()}`));
+
+            await page.goto('http://127.0.0.1:4173/index.html', {
+              waitUntil: 'domcontentloaded',
+              timeout: 30_000,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+
+            const before = await page.evaluate(() => ({
+              form: Boolean(document.getElementById('login-form')),
+              loginVisible: !document.getElementById('login-screen')?.classList.contains('hidden'),
+              dashboardHidden: document.getElementById('dashboard-screen')?.classList.contains('hidden') === true,
+            }));
+
+            if (!before.form || !before.loginVisible || !before.dashboardHidden) {
+              throw new Error(`Login screen did not initialise correctly: ${JSON.stringify(before)}`);
+            }
+
+            await page.type('#ccmsId', '9999');
+            await page.type('#password', 'invalid-smoke-password');
+            await page.click('#login-form button[type="submit"]');
+            await new Promise((resolve) => setTimeout(resolve, 300));
+
+            const after = await page.evaluate(() => {
+              const error = document.getElementById('login-error');
+              return {
+                errorVisible: Boolean(error && !error.classList.contains('hidden')),
+                errorText: String(error?.textContent || '').trim(),
+                dashboardHidden: document.getElementById('dashboard-screen')?.classList.contains('hidden') === true,
+              };
+            });
+
+            console.log('before=' + JSON.stringify(before));
+            console.log('after=' + JSON.stringify(after));
+            console.log('page_errors=' + JSON.stringify(pageErrors));
+            console.log('console_tail=' + JSON.stringify(consoleRows.slice(-30)));
+
+            if (!after.errorVisible || !after.errorText) {
+              throw new Error('Invalid CCMS login did not reach the login submit handler.');
+            }
+            if (!after.dashboardHidden) {
+              throw new Error('Invalid credentials unexpectedly opened the dashboard.');
+            }
+            if (pageErrors.length) {
+              throw new Error(`Uncaught browser errors: ${pageErrors.join(' | ')}`);
+            }
+          } finally {
+            await browser.close();
+          }
+          NODE
+
+          cat "$GITHUB_WORKSPACE/emergency-login-smoke.log"
+
+      - name: Upload emergency login smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emergency-login-smoke-output
+          path: |
+            emergency-login-smoke.log
+            emergency-login-server.log
+          if-no-files-found: warn
+          retention-days: 7
