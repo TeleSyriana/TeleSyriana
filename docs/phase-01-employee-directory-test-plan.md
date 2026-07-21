@@ -65,6 +65,8 @@ The existing code showed several read-amplification paths that can plausibly con
 - Deleted Tickets subscribed for privileged users before the Deleted folder was opened
 - the Home issue calendar downloaded the full historical ticket collection for non-Agent accounts
 
+Illustrative presence-only estimate using the current seven seeded accounts and an eight-hour day: a 30-second heartbeat is about 6,720 presence writes/day. With seven Messages presence listeners plus four management App presence listeners, those updates could cause roughly 73,920 listener document reads/day before ticket/report/payroll reads are counted. This is an estimate from the source topology, not measured Firebase billing data, but it demonstrates why the old listener pattern could exceed a 50,000-read free-tier allowance.
+
 The Phase-1 loaders now reduce those reads without modifying the preserved core engines.
 
 ## Production invariants
