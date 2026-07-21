@@ -166,6 +166,11 @@ function verifyFacadeAndLoaderGuards() {
   assert(directory.includes('assertManagementActor(actor)'), 'employee-directory.js: management actor guard missing');
   assert(directory.includes('assertSupervisorTeamCanChange'), 'employee-directory.js: Supervisor team guard missing');
   assert(directory.includes('You cannot change your own management role.'), 'employee-directory.js: self-role service guard missing');
+  assert(directory.includes('const DIRECTORY_CACHE_TTL_MS = 30_000;'), 'employee-directory.js: shared directory cache TTL missing');
+  assert(directory.includes('let employeeListCachePromise = null;'), 'employee-directory.js: concurrent directory request coalescing missing');
+  assert(directory.includes('export async function listEmployees(options = {})'), 'employee-directory.js: cached listEmployees facade missing');
+  assert(directory.includes('function notifyDirectoryChanged(detail = {}) {\n  invalidateEmployeeListCache();'), 'employee-directory.js: write cache invalidation missing');
+  assert(directory.includes('destructive-role/status safety decision'), 'employee-directory.js: fresh Supervisor safety-read marker missing');
 
   const loaders = {
     'app.js': [
