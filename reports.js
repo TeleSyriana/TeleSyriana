@@ -1,6 +1,6 @@
 // reports.js — TeleSyriana Phase 1 employee-directory migration loader
-// Keeps the report/ticket-summary engine in reports-core.js and swaps only the
-// duplicated staff directory for the central employee directory.
+// Keeps the report/ticket-summary engine in reports-core.js, swaps its staff
+// directory, and keeps Firestore listeners off while Reports is hidden.
 
 const CORE_URL = new URL('./reports-core.js', import.meta.url);
 const FIREBASE_URL = new URL('./firebase.js', import.meta.url).href;
@@ -27,11 +27,20 @@ function patchReports(coreSource) {
   const staffReplacement = `let STAFF = {};\n\nasync function refreshReportsStaffDirectory() {\n  const rows = await listEmployees({ includeDisabled: true, includeArchived: true });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
   source = replaceBetweenRequired(source, 'const STAFF = {\n', 'const REPORT_LABELS = {', staffReplacement, 'hard-coded reports STAFF map');
 
+  const reportsLifecycleHelpers = `function reportsPageIsActive() {\n  const page = el("page-reports");\n  return Boolean(page && !page.classList.contains("hidden"));\n}\n\nfunction stopReportsPageSubscriptions() {\n  if (unsubReports) { try { unsubReports(); } catch {} }\n  if (unsubTickets) { try { unsubTickets(); } catch {} }\n  unsubReports = null;\n  unsubTickets = null;\n}\n\nfunction bindReportsPageLifecycle() {\n  if (window.__TS_REPORTS_PAGE_LIFECYCLE__) return;\n  window.__TS_REPORTS_PAGE_LIFECYCLE__ = true;\n  document.addEventListener("click", (event) => {\n    const nav = event.target?.closest?.(".nav-link[data-page]");\n    if (!nav) return;\n    if (nav.dataset.page === "reports") setTimeout(() => initReports(), 0);\n    else stopReportsPageSubscriptions();\n  });\n}\n\n`;
+
   source = replaceRequired(
     source,
     'function initReports() {\n  currentUser = getCurrentUser();',
-    'async function initReports() {\n  currentUser = getCurrentUser();\n  await refreshReportsStaffDirectory();',
-    'reports init directory refresh'
+    `${reportsLifecycleHelpers}async function initReports() {\n  currentUser = getCurrentUser();\n  await refreshReportsStaffDirectory();\n  bindReportsPageLifecycle();`,
+    'reports init directory/lifecycle refresh'
+  );
+
+  source = replaceRequired(
+    source,
+    '  subscribeReports();\n  subscribeTicketsSnapshot();\n}',
+    '  if (!reportsPageIsActive()) {\n    stopReportsPageSubscriptions();\n    return;\n  }\n  subscribeReports();\n  subscribeTicketsSnapshot();\n}',
+    'lazy reports page subscriptions'
   );
 
   source = replaceRequired(
@@ -43,6 +52,7 @@ function patchReports(coreSource) {
 
   if (source.includes('const STAFF = {')) throw new Error('Reports directory validation failed: legacy STAFF remains.');
   if (!source.includes('await refreshReportsStaffDirectory()')) throw new Error('Reports directory validation failed: refresh missing.');
+  if (!source.includes('function reportsPageIsActive()') || !source.includes('stopReportsPageSubscriptions()')) throw new Error('Reports quota validation failed: hidden-page subscriptions remain.');
   return source;
 }
 
