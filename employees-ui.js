@@ -1,6 +1,6 @@
 // employees-ui.js — TeleSyriana Phase 1 account-management safety loader
 // Preserves the employee management UI in employees-ui-core.js and adds
-// duplicate-CCMS, self-lockout and active-team protection.
+// duplicate-CCMS, self-lockout, active-team and lazy-directory protection.
 
 const CORE_URL = new URL('./employees-ui-core.js', import.meta.url);
 const DIRECTORY_URL = new URL('./employee-directory.js', import.meta.url).href;
@@ -45,9 +45,32 @@ function patchEmployeesUi(coreSource) {
     'quick action active team protection'
   );
 
+  const lazyDirectoryHelpers = `function employeesPageIsActive() {\n  const page = document.getElementById("page-employees");\n  return Boolean(page && !page.classList.contains("hidden"));\n}\n\nfunction bindEmployeesPageLifecycle() {\n  if (window.__TS_EMPLOYEES_PAGE_LIFECYCLE__) return;\n  window.__TS_EMPLOYEES_PAGE_LIFECYCLE__ = true;\n  document.addEventListener("click", (event) => {\n    const nav = event.target?.closest?.('.nav-link[data-page="employees"]');\n    if (!nav) return;\n    setTimeout(() => { if (canManage() && employeesPageIsActive()) refresh(); }, 0);\n  });\n}\n\n`;
+  source = replaceRequired(
+    source,
+    'function syncVisibility() {',
+    lazyDirectoryHelpers + 'function syncVisibility() {',
+    'employees page lifecycle helpers'
+  );
+
+  source = replaceRequired(
+    source,
+    '  if (allowed) refresh();',
+    '  if (allowed && employeesPageIsActive()) refresh();',
+    'lazy employees directory refresh'
+  );
+
+  source = replaceRequired(
+    source,
+    'function boot() {\n  hook();\n  syncVisibility();',
+    'function boot() {\n  hook();\n  bindEmployeesPageLifecycle();\n  syncVisibility();',
+    'employees lifecycle boot'
+  );
+
   if (!source.includes('This CCMS ID already exists.')) throw new Error('Employees UI validation failed: duplicate CCMS protection missing.');
   if (!source.includes('document.getElementById("employee-role").disabled = Boolean(self);')) throw new Error('Employees UI validation failed: self-role lock missing.');
   if (!source.includes('function activeDirectReports(supervisorId)')) throw new Error('Employees UI validation failed: active-team protection missing.');
+  if (!source.includes('function employeesPageIsActive()') || !source.includes('window.__TS_EMPLOYEES_PAGE_LIFECYCLE__')) throw new Error('Employees UI quota validation failed: hidden-page directory refresh remains.');
   return source;
 }
 
