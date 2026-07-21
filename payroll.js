@@ -1,6 +1,6 @@
 // payroll.js — TeleSyriana Phase 1 employee-directory migration loader
-// Preserves the payroll engine in payroll-core.js and replaces only its staff
-// directory/visibility source. Existing agentDays calculations remain intact.
+// Preserves the payroll engine in payroll-core.js, replaces its staff source,
+// and avoids historical payroll listeners while the Payroll page is hidden.
 
 const CORE_URL = new URL('./payroll-core.js', import.meta.url);
 const FIREBASE_URL = new URL('./firebase.js', import.meta.url).href;
@@ -47,21 +47,31 @@ function patchPayroll(coreSource) {
     'active payroll settings targets'
   );
 
+  const payrollLifecycleHelpers = `function payrollPageIsActive() {\n  const page = el("page-payroll");\n  return Boolean(page && !page.classList.contains("hidden"));\n}\n\nfunction stopPayrollPageSubscriptions() {\n  if (unsubDays) { try { unsubDays(); } catch {} }\n  if (unsubSettings) { try { unsubSettings(); } catch {} }\n  unsubDays = null;\n  unsubSettings = null;\n}\n\nfunction bindPayrollPageLifecycle() {\n  if (window.__TS_PAYROLL_PAGE_LIFECYCLE__) return;\n  window.__TS_PAYROLL_PAGE_LIFECYCLE__ = true;\n  document.addEventListener("click", (event) => {\n    const nav = event.target?.closest?.(".nav-link[data-page]");\n    if (!nav) return;\n    if (nav.dataset.page === "payroll") {\n      setTimeout(() => refreshPayrollForCurrentDirectory({ resetRange: false }), 0);\n    } else {\n      stopPayrollPageSubscriptions();\n    }\n  });\n}\n\n`;
+
   source = replaceRequired(
     source,
     'function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();',
-    'async function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();',
-    'payroll init directory refresh'
+    `${payrollLifecycleHelpers}async function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();\n  bindPayrollPageLifecycle();`,
+    'payroll init directory/lifecycle refresh'
+  );
+
+  source = replaceRequired(
+    source,
+    '  if (currentUser) subscribePayroll();\n}',
+    '  if (currentUser && payrollPageIsActive()) subscribePayroll();\n  else stopPayrollPageSubscriptions();\n}',
+    'lazy initial payroll subscriptions'
   );
 
   const oldUserChanged = `window.addEventListener("telesyriana:user-changed", () => {\n  currentUser = getCurrentUser();\n  populateStaffFilters();\n  setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser) subscribePayroll();\n});`;
-  const newUserChanged = `async function refreshPayrollForCurrentDirectory({ resetRange = false } = {}) {\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();\n  populateStaffFilters();\n  if (resetRange) setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser) subscribePayroll();\n}\n\nwindow.addEventListener("telesyriana:user-changed", () => refreshPayrollForCurrentDirectory({ resetRange: true }));\nwindow.addEventListener("telesyriana:employee-directory-changed", () => refreshPayrollForCurrentDirectory({ resetRange: false }));`;
+  const newUserChanged = `async function refreshPayrollForCurrentDirectory({ resetRange = false } = {}) {\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();\n  populateStaffFilters();\n  if (resetRange) setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser && payrollPageIsActive()) subscribePayroll();\n  else stopPayrollPageSubscriptions();\n}\n\nwindow.addEventListener("telesyriana:user-changed", () => refreshPayrollForCurrentDirectory({ resetRange: true }));\nwindow.addEventListener("telesyriana:employee-directory-changed", () => refreshPayrollForCurrentDirectory({ resetRange: false }));`;
   source = replaceRequired(source, oldUserChanged, newUserChanged, 'payroll user/directory refresh');
 
   if (source.includes('const STAFF = {')) throw new Error('Payroll directory validation failed: legacy STAFF remains.');
   if (!source.includes('await refreshPayrollStaffDirectory()')) throw new Error('Payroll directory validation failed: refresh missing.');
   if (source.includes('["admin", "manager", "supervisor"].includes(role)')) throw new Error('Payroll visibility validation failed.');
   if (!source.includes('.filter((id) => String(STAFF[id]?.accountStatus || "active") === "active")')) throw new Error('Payroll directory validation failed: inactive settings targets remain.');
+  if (!source.includes('function payrollPageIsActive()') || !source.includes('stopPayrollPageSubscriptions()')) throw new Error('Payroll quota validation failed: hidden-page subscriptions remain.');
   return source;
 }
 
