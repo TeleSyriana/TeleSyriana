@@ -1,0 +1,61 @@
+name: Phase 1A employee identity preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'employee-model.js'
+      - 'employee-identity-seed.js'
+      - 'employee-identity-store.js'
+      - 'project-model.js'
+      - 'project-directory.js'
+      - 'tools/phase1a-model-preflight.mjs'
+      - 'docs/phase-1a-employee-identity.md'
+      - '.github/workflows/phase1a-model-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase1a-preflight:
+    name: Validate Phase 1A identity foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run pure model tests
+        run: node tools/phase1a-model-preflight.mjs
+
+      - name: Syntax check new browser modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in employee-model.js employee-identity-seed.js employee-identity-store.js project-model.js project-directory.js; do
+            cp "$file" "/tmp/${file%.js}.mjs"
+            node --check "/tmp/${file%.js}.mjs"
+          done
+
+      - name: Confirm Phase 1A does not touch live runtime entry points
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          changed="$(git diff --name-only origin/main...HEAD)"
+          printf '%s\n' "$changed"
+
+          forbidden='^(app\.js|app-core\.js|tickets\.js|tickets-core\.js|payroll\.js|payroll-core\.js|reports\.js|reports-core\.js|messages\.js|messages-core\.js|groups\.js|groups-core\.js|tasks\.js|meetings\.js|index\.html)$'
+          if printf '%s\n' "$changed" | grep -Eq "$forbidden"; then
+            echo 'Phase 1A unexpectedly changes a production runtime entry/module.' >&2
+            exit 1
+          fi
+
+          echo 'Phase 1A runtime isolation check: PASS'
