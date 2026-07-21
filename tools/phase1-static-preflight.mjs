@@ -44,6 +44,7 @@ const CORE_MARKERS = Object.freeze({
     'import { db, fs } from "./firebase.js";',
     '// Demo users\n',
     'function hasRoleAtLeast(user, role) {',
+    'function safeUserPayload(id) {\n  const u = USERS[id];\n  if (!u) return null;\n  const { password, ...safe } = u;\n  return { id, ...safe };\n}\n',
     '      const u = JSON.parse(savedUser);\n      if (USERS[u.id]) {',
     '    currentUser = safeUserPayload(id);',
     'let staffSettingsUnsub = null;\nlet issueStatsByDay = {};',
@@ -62,6 +63,9 @@ const CORE_MARKERS = Object.freeze({
     '  fillRoleOptions(row?.role || "agent");',
     '  const password = String(document.getElementById("employee-password")?.value || "");',
     '  if (type === "edit") return openModal(row);',
+    'function syncVisibility() {',
+    '  if (allowed) refresh();',
+    'function boot() {\n  hook();\n  syncVisibility();',
   ],
   'tickets-core.js': [
     'import { db, fs } from "./firebase.js";',
@@ -107,6 +111,8 @@ const CORE_MARKERS = Object.freeze({
   'groups-core.js': [
     'import { db, fs } from "./firebase.js";',
     '// --------- member search (works even if modal is opened later) ----------\n',
+    '          btn.addEventListener("dblclick", () => {',
+    '  openBtn?.addEventListener("click", () => {\n    resetFormToCreate();\n    openModal();\n  });',
     'document.addEventListener("DOMContentLoaded", () => {\n  hookMemberSearch();',
   ],
 });
@@ -174,17 +180,18 @@ function verifyFacadeAndLoaderGuards() {
 
   const loaders = {
     'app.js': [
+      'legacy safe-user helper',
       'legacy auth code remains',
       'profile name can still override directory identity',
       'quota-safe presence lifecycle missing',
       'Home issue calendar still reads full ticket history',
     ],
-    'employees-ui.js': ['duplicate CCMS protection missing', 'self-role lock missing', 'active-team protection missing'],
-    'tickets.js': ['legacy STAFF remains', 'active assignment filter missing', 'hidden-page subscriptions remain', 'deleted tickets are not on-demand'],
-    'payroll.js': ['legacy STAFF remains', 'inactive settings targets remain', 'hidden-page subscriptions remain'],
-    'reports.js': ['legacy STAFF remains', 'refresh missing', 'hidden-page subscriptions remain'],
-    'messages.js': ['hard-coded roles remain', 'directory names are not authoritative', 'directory refresh missing', 'hidden-page realtime listeners remain'],
-    'groups.js': ['initial member refresh missing', 'inactive-member protection missing'],
+    'employees-ui.js': ['duplicate CCMS protection missing', 'self-role lock missing', 'active-team protection missing', 'hidden-page directory refresh remains'],
+    'tickets.js': ['legacy STAFF remains', 'active assignment filter missing', 'hidden-page subscriptions remain', 'deleted tickets are not on-demand', 'directory still loads before page/login need'],
+    'payroll.js': ['legacy STAFF remains', 'inactive settings targets remain', 'hidden-page subscriptions remain', 'directory still loads before page/login need'],
+    'reports.js': ['legacy STAFF remains', 'refresh missing', 'hidden-page subscriptions remain', 'directory still loads before page/login need'],
+    'messages.js': ['hard-coded roles remain', 'directory names are not authoritative', 'directory refresh missing', 'hidden-page realtime listeners remain', 'directory still loads before login/page need'],
+    'groups.js': ['on-demand member refresh missing', 'inactive-member protection missing', 'directory still loads on login screen'],
   };
 
   for (const [file, guards] of Object.entries(loaders)) {
