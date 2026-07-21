@@ -26,13 +26,7 @@ function patchMessages(coreSource) {
   source = replaceRequired(source, 'import { db, fs } from "./firebase.js";', imports, 'firebase import');
 
   const dynamicRoleClass = `const employeeDirectoryCache = new Map();\n\nfunction roleClassForUser(userId = "") {\n  const role = String(employeeDirectoryCache.get(String(userId || ""))?.role || "").toLowerCase();\n  if (role === "admin") return "role-admin";\n  if (role === "manager") return "role-manager";\n  if (role === "supervisor") return "role-supervisor";\n  if (role === "hr") return "role-hr";\n  if (role === "agent") return "role-agent";\n  return "role-room";\n}\n\n`;
-  source = replaceBetweenRequired(
-    source,
-    'function roleClassForUser(userId = "") {',
-    'function getProfilePhoto(userId) {',
-    dynamicRoleClass,
-    'hard-coded chat role classes'
-  );
+  source = replaceBetweenRequired(source, 'function roleClassForUser(userId = "") {', 'function getProfilePhoto(userId) {', dynamicRoleClass, 'hard-coded chat role classes');
 
   const oldDmDisplayName = `function getDmDisplayName(userId) {\n  const profileName = profileCache.get(String(userId))?.name;\n  const nameEl = document.querySelector(\`[data-name="\${CSS.escape(String(userId))}"]\`);\n  return String(profileName || nameEl?.dataset?.baseName || nameEl?.textContent || \`CCMS \${userId}\`).replace("🎂", "").trim();\n}`;
   const newDmDisplayName = `function getDmDisplayName(userId) {\n  const id = String(userId || "");\n  const directoryName = employeeDirectoryCache.get(id)?.name;\n  const profileName = profileCache.get(id)?.name;\n  const nameEl = document.querySelector(\`[data-name="\${CSS.escape(id)}"]\`);\n  return String(directoryName || profileName || nameEl?.dataset?.baseName || nameEl?.textContent || \`CCMS \${id}\`).replace("🎂", "").trim();\n}`;
@@ -44,8 +38,8 @@ function patchMessages(coreSource) {
   source = replaceRequired(
     source,
     'document.addEventListener("DOMContentLoaded", () => {',
-    'document.addEventListener("DOMContentLoaded", async () => {',
-    'async chat init'
+    'async function bootMessagesPhase1() {',
+    'messages ready-state boot start'
   );
   source = replaceRequired(
     source,
@@ -65,8 +59,8 @@ function patchMessages(coreSource) {
   source = replaceRequired(
     source,
     '  subscribeالحالةDots();\n});',
-    '  syncMessagePageRealtime();\n});',
-    'lazy initial status dots'
+    '  syncMessagePageRealtime();\n}\nif (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootMessagesPhase1);\nelse bootMessagesPhase1();',
+    'messages ready-state boot end'
   );
 
   source = replaceRequired(
@@ -88,6 +82,7 @@ function patchMessages(coreSource) {
   if (!source.includes('await refreshMessageEmployeeDirectory()')) throw new Error('Messages directory validation failed: directory refresh missing.');
   if (!source.includes('function messagesPageIsActive()') || !source.includes('stopMessagePageRealtime()')) throw new Error('Messages quota validation failed: hidden-page realtime listeners remain.');
   if (source.includes('setCurrentUser();\n  await refreshMessageEmployeeDirectory();')) throw new Error('Messages quota validation failed: directory still loads before login/page need.');
+  if (!source.includes('bootMessagesPhase1')) throw new Error('Messages boot validation failed: ready-state boot missing.');
   return source;
 }
 
