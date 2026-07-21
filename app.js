@@ -73,10 +73,39 @@ function patchCoreApp(coreSource) {
     'directory login assignment'
   );
 
+  source = replaceRequired(
+    source,
+    'let staffSettingsUnsub = null;\nlet issueStatsByDay = {};',
+    'let staffSettingsUnsub = null;\nlet employeeAccountUnsub = null;\nlet issueStatsByDay = {};',
+    'current employee watcher state'
+  );
+
+  const employeeWatcher = `function subscribeCurrentEmployeeAccount() {\n  if (!currentUser?.id) return;\n  try { employeeAccountUnsub?.(); } catch {}\n  employeeAccountUnsub = null;\n\n  const ref = doc(collection(db, "employees"), String(currentUser.id));\n  employeeAccountUnsub = onSnapshot(ref, async (snap) => {\n    if (!snap.exists() || !currentUser?.id) return;\n    try {\n      const employee = await getEmployee(currentUser.id, { allowLegacyFallback: true });\n      if (!employee) return;\n      if (!employeeIsActive(employee)) {\n        showToast(getLanguage() === "ar" ? "تم تعطيل أو أرشفة هذا الحساب من الإدارة." : "This account was disabled or archived by management.", "warning", 5000);\n        await handleLogout();\n        return;\n      }\n\n      const nextUser = safeEmployeePayload(employee);\n      const changed = ["name", "role", "supervisorId", "hourlyRate", "currency", "timezone", "language", "accountStatus"]\n        .some((key) => String(currentUser?.[key] ?? "") !== String(nextUser?.[key] ?? ""));\n      if (!changed) return;\n\n      currentUser = nextUser;\n      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n\n      if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();\n      else if (supUnsub) { try { supUnsub(); } catch {} supUnsub = null; }\n\n      updateDashboardUI();\n      window.dispatchEvent(new Event("telesyriana:user-changed"));\n    } catch (err) {\n      console.warn("Employee account refresh failed", err);\n    }\n  }, (err) => console.warn("Employee account listener failed", err));\n}\n\n`;
+  source = replaceRequired(
+    source,
+    '/* --------------------------- Widgets (Clock/Date) ------------------------ */',
+    employeeWatcher + '/* --------------------------- Widgets (Clock/Date) ------------------------ */',
+    'current employee watcher function'
+  );
+
+  source = replaceRequired(
+    source,
+    'function finishInit(now) {\n  if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();',
+    'function finishInit(now) {\n  subscribeCurrentEmployeeAccount();\n  if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();',
+    'start current employee watcher'
+  );
+
+  source = replaceRequired(
+    source,
+    '  try { if (staffSettingsUnsub) staffSettingsUnsub(); } catch {}\n  staffSettingsUnsub = null;\n  currentStaffSettings = {};',
+    '  try { if (staffSettingsUnsub) staffSettingsUnsub(); } catch {}\n  staffSettingsUnsub = null;\n  try { employeeAccountUnsub?.(); } catch {}\n  employeeAccountUnsub = null;\n  currentStaffSettings = {};',
+    'stop current employee watcher on logout'
+  );
+
   if (source.includes('const USERS = {') || source.includes('safeUserPayload(id)')) {
     throw new Error('Phase 1 loader validation failed: legacy auth code remains.');
   }
-  if (!source.includes('authenticateEmployee(id, pw)') || !source.includes('getEmployee(u?.id')) {
+  if (!source.includes('authenticateEmployee(id, pw)') || !source.includes('getEmployee(u?.id') || !source.includes('subscribeCurrentEmployeeAccount()')) {
     throw new Error('Phase 1 loader validation failed: directory auth was not injected.');
   }
 
