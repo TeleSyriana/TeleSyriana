@@ -44,6 +44,13 @@ function patchCoreApp(coreSource) {
     'legacy USERS and role helpers'
   );
 
+  source = replaceRequired(
+    source,
+    'function safeUserPayload(id) {\n  const u = USERS[id];\n  if (!u) return null;\n  const { password, ...safe } = u;\n  return { id, ...safe };\n}\n\n',
+    '',
+    'legacy safe-user helper'
+  );
+
   const savedSessionStart = '      const u = JSON.parse(savedUser);\n      if (USERS[u.id]) {';
   const savedSessionEnd = '      }\n    }\n  } catch (err) {';
   const savedSessionReplacement = `      const u = JSON.parse(savedUser);\n      const directoryUser = await getEmployee(u?.id, { allowLegacyFallback: true });\n      if (directoryUser && employeeIsActive(directoryUser)) {\n        // Always refresh a saved browser session from the central directory so\n        // promotions, disabled accounts and profile edits apply after reload.\n        setAppLoading(30, loadingText("تحميل الصلاحيات", "Loading permissions"), loadingText("تحديث دور المستخدم من النظام…", "Refreshing the user role from the employee directory…"));\n        currentUser = safeEmployeePayload(directoryUser);\n        localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n        setAppLoading(48, loadingText("تحميل جلسة اليوم", "Loading today’s session"), loadingText("قراءة حالة الدوام الحالية…", "Reading the current work state…"));\n        await initStateForUser();\n        setAppLoading(72, loadingText("فتح لوحة التحكم", "Opening dashboard"), loadingText("تجهيز الصفحة الرئيسية…", "Preparing the home page…"));\n        showDashboard();\n        window.dispatchEvent(new Event("telesyriana:user-changed"));\n        return;\n      }\n      localStorage.removeItem(USER_KEY);\n`;
@@ -165,7 +172,7 @@ function patchCoreApp(coreSource) {
     'prevent self profile rename'
   );
 
-  if (source.includes('const USERS = {') || source.includes('safeUserPayload(id)')) {
+  if (source.includes('const USERS = {') || source.includes('safeUserPayload(')) {
     throw new Error('Phase 1 loader validation failed: legacy auth code remains.');
   }
   if (!source.includes('authenticateEmployee(id, pw)') || !source.includes('getEmployee(u?.id') || !source.includes('subscribeCurrentEmployeeAccount()')) {
