@@ -13,9 +13,10 @@
 
 import { db, fs } from "./firebase.js";
 
-const { doc, getDoc, collection, getDocs, setDoc, serverTimestamp } = fs;
+const { doc, getDoc, collection, getDocs, setDoc, addDoc, serverTimestamp } = fs;
 
 export const EMPLOYEES_COL = "employees";
+export const EMPLOYEE_AUDIT_COL = "employeeAudit";
 
 export const ROLE_LEVELS = Object.freeze({
   agent: 1,
@@ -42,6 +43,32 @@ function cleanId(value) {
 function cleanCurrency(value) {
   const code = String(value || "USD").trim().toUpperCase();
   return /^[A-Z]{3}$/.test(code) ? code : "USD";
+}
+
+function auditActor(actor = null) {
+  return {
+    actorId: cleanId(actor?.id),
+    actorName: String(actor?.name || "").trim(),
+    actorRole: normaliseRole(actor?.role),
+  };
+}
+
+async function writeEmployeeAudit(action, target, actor = null, changes = {}) {
+  try {
+    await addDoc(collection(db, EMPLOYEE_AUDIT_COL), {
+      action: String(action || "employee_update"),
+      targetId: cleanId(target?.id || target?.employeeId || target?.ccmsId),
+      targetName: String(target?.name || target?.fullName || "").trim(),
+      ...auditActor(actor),
+      changes,
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // The employee operation itself remains authoritative. Audit logging should
+    // never make HR repeat a successful staff action because of a separate log
+    // permission/network issue.
+    console.warn("Employee audit log write failed.", err);
+  }
 }
 
 export function normaliseRole(role) {
@@ -197,27 +224,53 @@ export async function saveEmployee(input = {}, actor = null) {
   if (password) payload.password = password;
 
   await setDoc(doc(db, EMPLOYEES_COL, employeeId), payload, { merge: true });
-  return safeEmployeePayload(normaliseEmployee(employeeId, { ...mergeWithLegacy(employeeId, payload), source: "firestore" }));
+
+  const result = safeEmployeePayload(normaliseEmployee(employeeId, {
+    ...mergeWithLegacy(employeeId, payload),
+    source: "firestore",
+  }));
+
+  const changes = {
+    name: { from: existing?.name || null, to: result?.name || name },
+    role: { from: existing?.role || null, to: result?.role || payload.role },
+    supervisorId: { from: existing?.supervisorId || "", to: result?.supervisorId || "" },
+    hourlyRate: { from: existing?.hourlyRate ?? null, to: result?.hourlyRate ?? payload.hourlyRate },
+    currency: { from: existing?.currency || null, to: result?.currency || payload.currency },
+    accountStatus: { from: existing?.accountStatus || null, to: result?.accountStatus || payload.accountStatus },
+    timezone: { from: existing?.timezone || "", to: result?.timezone || "" },
+    passwordChanged: Boolean(password),
+  };
+
+  await writeEmployeeAudit(existing ? "employee_updated" : "employee_created", result || { id: employeeId, name }, actor, changes);
+  return result;
 }
 
 export async function setEmployeeStatus(id, accountStatus, actor = null) {
   const employee = await getEmployee(id, { allowLegacyFallback: true });
   if (!employee) throw new Error("Employee not found.");
+  const nextStatus = normaliseAccountStatus(accountStatus);
   await setDoc(doc(db, EMPLOYEES_COL, employee.id), {
-    accountStatus: normaliseAccountStatus(accountStatus),
+    accountStatus: nextStatus,
     updatedAt: serverTimestamp(),
     updatedBy: cleanId(actor?.id),
     updatedByName: String(actor?.name || "").trim(),
   }, { merge: true });
+  await writeEmployeeAudit("employee_status_changed", employee, actor, {
+    accountStatus: { from: employee.accountStatus, to: nextStatus },
+  });
 }
 
 export async function setEmployeeRole(id, role, actor = null) {
   const employee = await getEmployee(id, { allowLegacyFallback: true });
   if (!employee) throw new Error("Employee not found.");
+  const nextRole = normaliseRole(role);
   await setDoc(doc(db, EMPLOYEES_COL, employee.id), {
-    role: normaliseRole(role),
+    role: nextRole,
     updatedAt: serverTimestamp(),
     updatedBy: cleanId(actor?.id),
     updatedByName: String(actor?.name || "").trim(),
   }, { merge: true });
+  await writeEmployeeAudit("employee_role_changed", employee, actor, {
+    role: { from: employee.role, to: nextRole },
+  });
 }
