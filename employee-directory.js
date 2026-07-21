@@ -1,20 +1,19 @@
 // employee-directory.js — TeleSyriana Phase 1 central employee directory
 //
-// This module is the single compatibility layer for staff identity while the
-// application migrates away from duplicated STAFF/USERS objects.
+// Single compatibility layer for staff identity while TeleSyriana migrates
+// away from duplicated STAFF/USERS objects.
 //
 // Source priority:
 //   1. Firestore employees/{ccmsId}
 //   2. Legacy seed below (keeps current production accounts working)
 //
-// Password verification is intentionally kept compatible with the current
-// client-side login during Phase 1. Moving authentication/server-side password
-// handling is a separate migration and must not be mixed into this live-data
-// change.
+// Phase 1 intentionally keeps the current password model compatible so this
+// live migration does not break tomorrow's users. Authentication hardening is
+// separate from the operational employee-directory migration.
 
 import { db, fs } from "./firebase.js";
 
-const { doc, getDoc, collection, getDocs } = fs;
+const { doc, getDoc, collection, getDocs, setDoc, serverTimestamp } = fs;
 
 export const EMPLOYEES_COL = "employees";
 
@@ -31,13 +30,18 @@ export const LEGACY_EMPLOYEE_SEED = Object.freeze({
   "1001": { password: "0951", role: "manager", name: "Mohammad Safar", hourlyRate: 5.8, currency: "GBP", accountStatus: "active" },
   "2001": { password: "2411", role: "supervisor", name: "Dema Shabar", hourlyRate: 5.8, currency: "GBP", accountStatus: "active" },
   "3001": { password: "2411", role: "hr", name: "Fatima Kaka", hourlyRate: 5.8, currency: "GBP", accountStatus: "active" },
-  "9001": { password: "Welcome2026!", role: "agent", name: "Raghad Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active" },
-  "9002": { password: "Welcome2026!", role: "agent", name: "Qamar Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active" },
-  "9003": { password: "Reema2026!", role: "agent", name: "Reema Obaid", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active" },
+  "9001": { password: "Welcome2026!", role: "agent", name: "Raghad Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active", timezone: "Asia/Damascus" },
+  "9002": { password: "Welcome2026!", role: "agent", name: "Qamar Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active", timezone: "Asia/Damascus" },
+  "9003": { password: "Reema2026!", role: "agent", name: "Reema Obaid", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active", timezone: "Asia/Damascus" },
 });
 
 function cleanId(value) {
   return String(value || "").trim();
+}
+
+function cleanCurrency(value) {
+  const code = String(value || "USD").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(code) ? code : "USD";
 }
 
 export function normaliseRole(role) {
@@ -71,7 +75,7 @@ export function normaliseEmployee(id, data = {}) {
     role: normaliseRole(data.role),
     supervisorId: cleanId(data.supervisorId),
     hourlyRate: Math.max(0, Number(data.hourlyRate) || 0),
-    currency: String(data.currency || "USD").trim().toUpperCase(),
+    currency: cleanCurrency(data.currency),
     accountStatus: normaliseAccountStatus(data.accountStatus),
     timezone: String(data.timezone || data.defaultTimezone || "").trim(),
     language: String(data.language || "").trim(),
@@ -92,6 +96,11 @@ export function getLegacyEmployee(id) {
   return row ? normaliseEmployee(employeeId, { ...row, source: "legacy" }) : null;
 }
 
+function mergeWithLegacy(employeeId, firestoreData = {}) {
+  const legacy = LEGACY_EMPLOYEE_SEED[employeeId] || {};
+  return { ...legacy, ...firestoreData };
+}
+
 export async function getEmployee(id, options = {}) {
   const employeeId = cleanId(id);
   if (!employeeId) return null;
@@ -100,7 +109,12 @@ export async function getEmployee(id, options = {}) {
 
   try {
     const snap = await getDoc(doc(db, EMPLOYEES_COL, employeeId));
-    if (snap.exists()) return normaliseEmployee(employeeId, { ...snap.data(), source: "firestore" });
+    if (snap.exists()) {
+      return normaliseEmployee(employeeId, {
+        ...mergeWithLegacy(employeeId, snap.data()),
+        source: "firestore",
+      });
+    }
   } catch (err) {
     console.warn("Employee directory lookup failed; using compatibility fallback.", err);
   }
@@ -129,7 +143,10 @@ export async function listEmployees(options = {}) {
   try {
     const snap = await getDocs(collection(db, EMPLOYEES_COL));
     snap.forEach((item) => {
-      const row = normaliseEmployee(item.id, { ...item.data(), source: "firestore" });
+      const row = normaliseEmployee(item.id, {
+        ...mergeWithLegacy(item.id, item.data()),
+        source: "firestore",
+      });
       if (row) merged.set(row.id, row);
     });
   } catch (err) {
@@ -141,4 +158,66 @@ export async function listEmployees(options = {}) {
     .filter((row) => includeArchived || row.accountStatus !== "archived")
     .map(safeEmployeePayload)
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+export async function saveEmployee(input = {}, actor = null) {
+  const employeeId = cleanId(input.id || input.employeeId || input.ccmsId);
+  if (!employeeId) throw new Error("CCMS ID is required.");
+  if (!/^\d{4,10}$/.test(employeeId)) throw new Error("CCMS ID must contain 4–10 digits.");
+
+  const name = String(input.name || input.fullName || "").trim();
+  if (!name) throw new Error("Employee name is required.");
+
+  const existing = await getEmployee(employeeId, { allowLegacyFallback: true });
+  const password = typeof input.password === "string" ? input.password.trim() : "";
+  if (!existing && !password) throw new Error("A temporary password is required for a new employee.");
+
+  const payload = {
+    employeeId,
+    ccmsId: employeeId,
+    name,
+    fullName: name,
+    role: normaliseRole(input.role),
+    supervisorId: cleanId(input.supervisorId),
+    hourlyRate: Math.max(0, Number(input.hourlyRate) || 0),
+    currency: cleanCurrency(input.currency),
+    accountStatus: normaliseAccountStatus(input.accountStatus),
+    timezone: String(input.timezone || "").trim(),
+    language: String(input.language || "").trim(),
+    updatedAt: serverTimestamp(),
+    updatedBy: cleanId(actor?.id),
+    updatedByName: String(actor?.name || "").trim(),
+  };
+
+  if (!existing) {
+    payload.createdAt = serverTimestamp();
+    payload.createdBy = cleanId(actor?.id);
+    payload.createdByName = String(actor?.name || "").trim();
+  }
+  if (password) payload.password = password;
+
+  await setDoc(doc(db, EMPLOYEES_COL, employeeId), payload, { merge: true });
+  return safeEmployeePayload(normaliseEmployee(employeeId, { ...mergeWithLegacy(employeeId, payload), source: "firestore" }));
+}
+
+export async function setEmployeeStatus(id, accountStatus, actor = null) {
+  const employee = await getEmployee(id, { allowLegacyFallback: true });
+  if (!employee) throw new Error("Employee not found.");
+  await setDoc(doc(db, EMPLOYEES_COL, employee.id), {
+    accountStatus: normaliseAccountStatus(accountStatus),
+    updatedAt: serverTimestamp(),
+    updatedBy: cleanId(actor?.id),
+    updatedByName: String(actor?.name || "").trim(),
+  }, { merge: true });
+}
+
+export async function setEmployeeRole(id, role, actor = null) {
+  const employee = await getEmployee(id, { allowLegacyFallback: true });
+  if (!employee) throw new Error("Employee not found.");
+  await setDoc(doc(db, EMPLOYEES_COL, employee.id), {
+    role: normaliseRole(role),
+    updatedAt: serverTimestamp(),
+    updatedBy: cleanId(actor?.id),
+    updatedByName: String(actor?.name || "").trim(),
+  }, { merge: true });
 }
