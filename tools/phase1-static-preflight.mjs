@@ -2,8 +2,9 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -104,8 +105,11 @@ function read(relativePath) {
   return readFileSync(join(ROOT, relativePath), 'utf8');
 }
 
-function gitBlobSha(content) {
-  const bytes = Buffer.from(content, 'utf8');
+function readBytes(relativePath) {
+  return readFileSync(join(ROOT, relativePath));
+}
+
+function gitBlobSha(bytes) {
   return createHash('sha1')
     .update(Buffer.from(`blob ${bytes.length}\0`, 'utf8'))
     .update(bytes)
@@ -117,14 +121,24 @@ function assert(condition, message) {
 }
 
 function verifySyntax() {
-  for (const file of JS_FILES) {
-    execFileSync(process.execPath, ['--check', join(ROOT, file)], { stdio: 'pipe' });
+  // TeleSyriana is a browser ES-module app and intentionally has no package.json.
+  // Copy each source to a temporary .mjs path so Node parses it as an ES module
+  // without changing the repository's runtime/module configuration.
+  const scratch = mkdtempSync(join(tmpdir(), 'telesyriana-phase1-'));
+  try {
+    for (const file of JS_FILES) {
+      const tempFile = join(scratch, `${basename(file, '.js')}.mjs`);
+      writeFileSync(tempFile, readBytes(file));
+      execFileSync(process.execPath, ['--check', tempFile], { stdio: 'pipe' });
+    }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
 
 function verifyPreservedBlobs() {
   for (const [file, expected] of Object.entries(PRESERVED_BLOBS)) {
-    const actual = gitBlobSha(read(file));
+    const actual = gitBlobSha(readBytes(file));
     assert(actual === expected, `${file}: preserved blob changed. Expected ${expected}, got ${actual}`);
   }
 }
