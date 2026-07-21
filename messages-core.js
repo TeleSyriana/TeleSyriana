@@ -1469,7 +1469,8 @@ function syncMessagesPageRealtime() {
   }
   subscribePresenceSidebar();
   subscribeProfilesSidebar();
-  syncMessagesPageRealtime();
+  subscribeGroupsCloud();
+  subscribeRecentsCloud();
   subscribeالحالةDots();
   applyProfileAvatars();
   applyBirthdayBadges();
@@ -1508,8 +1509,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   hookSearch();
 
-  subscribeGroupsCloud();
-  subscribeRecentsCloud();
+  syncMessagesPageRealtime();
 
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => {
