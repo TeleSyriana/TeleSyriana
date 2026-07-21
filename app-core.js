@@ -802,12 +802,37 @@ function escapeSmall(v) {
   return String(v || "").replace(/[&<>"']/g, (m) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));
 }
 
+function stopPresenceListener() {
+  if (!presenceUnsub) return;
+  try { presenceUnsub(); } catch {}
+  presenceUnsub = null;
+}
+
+function syncHomeRealtimeListeners(pageId = pageVisibleName()) {
+  const homeActive = pageId === "home";
+
+  if (homeActive && canViewOnlineNow(currentUser)) subscribePresence();
+  else stopPresenceListener();
+
+  if (homeActive && canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();
+  else if (supUnsub) {
+    try { supUnsub(); } catch {}
+    supUnsub = null;
+  }
+
+  if (homeActive) subscribeIssueCalendar();
+  else if (issueCalendarUnsub) {
+    try { issueCalendarUnsub(); } catch {}
+    issueCalendarUnsub = null;
+  }
+}
+
 function startPresence() {
   if (!currentUser) return;
-  subscribePresence();
+  syncHomeRealtimeListeners();
   updatePresence(true);
   if (presenceTimerId) clearInterval(presenceTimerId);
-  presenceTimerId = setInterval(() => updatePresence(false), 30_000);
+  presenceTimerId = setInterval(() => updatePresence(false), 60_000);
 }
 
 async function stopPresence() {
@@ -833,7 +858,7 @@ function ticketCalendarQueriesForUser(user) {
 
   // Managers/admin/HR/supervisors still see the team view. Agents get scoped queries
   // so weaker devices do not download the full ticket collection on every login.
-  if (role !== "agent") return [{ key: "team", source: base }];
+  if (role !== "agent") return [{ key: "team", source: query(base, where("status", "in", ["open", "waiting_customer", "waiting_courier", "waiting_supplier", "escalated", "urgent"])) }];
 
   return [
     { key: "assigned", source: query(base, where("assignedTo", "==", user.id)) },
@@ -1012,6 +1037,7 @@ function switchPage(pageId) {
   });
 
   updatePresence(false).catch(() => {});
+  syncHomeRealtimeListeners(pageId);
   try { translateFeaturePages(getLanguage()); applyPhase21LanguagePolish(getLanguage()); setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 80); } catch {}
 
   // floating chat toggle visibility rules
