@@ -1,0 +1,54 @@
+name: Apply Phase 1 Login Patch
+
+on:
+  push:
+    branches:
+      - agent/phase-01-employee-directory
+    paths:
+      - .github/workflows/apply-phase1-login-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-login-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout phase branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/phase-01-employee-directory
+          fetch-depth: 0
+
+      - name: Dry-run exact patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f phase1-app-login.patch
+          patch --dry-run -p0 < phase1-app-login.patch
+
+      - name: Apply and validate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch -p0 < phase1-app-login.patch
+          grep -q 'authenticateEmployee' app.js
+          grep -q 'const directoryUser = await getEmployee' app.js
+          grep -q 'const auth = await authenticateEmployee' app.js
+          if grep -q 'const USERS = {' app.js; then
+            echo 'Hard-coded USERS map still exists; refusing to commit.' >&2
+            exit 1
+          fi
+          git diff --check
+
+      - name: Commit only validated migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'TeleSyriana Phase Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app.js
+          git rm phase1-app-login.patch .github/workflows/apply-phase1-login-patch.yml
+          git diff --cached --check
+          git commit -m 'phase 1 migrate login to employee directory'
+          git push origin HEAD:agent/phase-01-employee-directory
