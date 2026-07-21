@@ -10,6 +10,8 @@ on:
       - 'messages-core.js'
       - 'groups.js'
       - 'groups-core.js'
+      - 'tasks.js'
+      - 'meetings.js'
       - 'index.html'
       - '.github/workflows/emergency-login-smoke.yml'
   workflow_dispatch:
