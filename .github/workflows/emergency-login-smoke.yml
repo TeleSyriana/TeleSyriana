@@ -1,0 +1,179 @@
+name: Emergency login smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'app-core.js'
+      - 'messages.js'
+      - 'messages-core.js'
+      - 'groups.js'
+      - 'groups-core.js'
+      - 'index.html'
+      - '.github/workflows/emergency-login-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  login-smoke:
+    name: Verify login handler without production writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Run no-write Chrome login smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/telesyriana-browser
+          cd /tmp/telesyriana-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > emergency-login-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/emergency-login-smoke.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const candidates = [
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/chromium',
+          ];
+          const executablePath = candidates.find((path) => fs.existsSync(path));
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found on runner.');
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+          });
+
+          try {
+            const page = await browser.newPage();
+            const pageErrors = [];
+            const consoleRows = [];
+            page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
+            page.on('console', (message) => consoleRows.push(`[${message.type()}] ${message.text()}`));
+
+            // This is a no-write/no-read production smoke test. The application
+            // must be able to reach its compatibility/offline path when Firestore
+            // is unavailable or quota-exhausted.
+            await page.setRequestInterception(true);
+            page.on('request', (request) => {
+              const url = request.url();
+              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) {
+                request.abort();
+              } else {
+                request.continue();
+              }
+            });
+
+            await page.goto('http://127.0.0.1:4173/index.html', {
+              waitUntil: 'domcontentloaded',
+              timeout: 30_000,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+
+            const before = await page.evaluate(() => ({
+              form: Boolean(document.getElementById('login-form')),
+              loginVisible: !document.getElementById('login-screen')?.classList.contains('hidden'),
+              dashboardHidden: document.getElementById('dashboard-screen')?.classList.contains('hidden') === true,
+            }));
+
+            if (!before.form || !before.loginVisible || !before.dashboardHidden) {
+              throw new Error(`Login screen did not initialise correctly: ${JSON.stringify(before)}`);
+            }
+
+            // Invalid credentials prove the submit handler is attached without
+            // causing any Firestore activity.
+            await page.type('#ccmsId', '9999');
+            await page.type('#password', 'invalid-smoke-password');
+            await page.click('#login-form button[type="submit"]');
+            await new Promise((resolve) => setTimeout(resolve, 300));
+
+            const invalidResult = await page.evaluate(() => {
+              const error = document.getElementById('login-error');
+              return {
+                errorVisible: Boolean(error && !error.classList.contains('hidden')),
+                errorText: String(error?.textContent || '').trim(),
+                dashboardHidden: document.getElementById('dashboard-screen')?.classList.contains('hidden') === true,
+              };
+            });
+
+            if (!invalidResult.errorVisible || !invalidResult.errorText) {
+              throw new Error('Invalid CCMS login did not reach the login submit handler.');
+            }
+            if (!invalidResult.dashboardHidden) {
+              throw new Error('Invalid credentials unexpectedly opened the dashboard.');
+            }
+
+            // Now prove an existing production account can enter the dashboard
+            // while Firestore is completely unavailable. This uses the same
+            // compatibility credentials already present in the preserved core.
+            await page.evaluate(() => {
+              document.getElementById('ccmsId').value = '';
+              document.getElementById('password').value = '';
+              const error = document.getElementById('login-error');
+              if (error) {
+                error.textContent = '';
+                error.classList.add('hidden');
+              }
+            });
+            await page.type('#ccmsId', '1001');
+            await page.type('#password', '0951');
+            await page.click('#login-form button[type="submit"]');
+            await new Promise((resolve) => setTimeout(resolve, 2500));
+
+            const validResult = await page.evaluate(() => {
+              let stored = null;
+              try { stored = JSON.parse(localStorage.getItem('telesyrianaUser') || 'null'); } catch {}
+              return {
+                loginHidden: document.getElementById('login-screen')?.classList.contains('hidden') === true,
+                dashboardVisible: document.getElementById('dashboard-screen')?.classList.contains('hidden') === false,
+                userId: stored?.id || '',
+                userRole: stored?.role || '',
+              };
+            });
+
+            console.log('before=' + JSON.stringify(before));
+            console.log('invalid_result=' + JSON.stringify(invalidResult));
+            console.log('valid_result=' + JSON.stringify(validResult));
+            console.log('page_errors=' + JSON.stringify(pageErrors));
+            console.log('console_tail=' + JSON.stringify(consoleRows.slice(-40)));
+
+            if (!validResult.loginHidden || !validResult.dashboardVisible || validResult.userId !== '1001') {
+              throw new Error(`Existing Manager login did not open dashboard with Firestore blocked: ${JSON.stringify(validResult)}`);
+            }
+            if (pageErrors.length) {
+              throw new Error(`Uncaught browser errors: ${pageErrors.join(' | ')}`);
+            }
+          } finally {
+            await browser.close();
+          }
+          NODE
+
+          cat "$GITHUB_WORKSPACE/emergency-login-smoke.log"
+
+      - name: Upload emergency login smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emergency-login-smoke-output
+          path: |
+            emergency-login-smoke.log
+            emergency-login-server.log
+          if-no-files-found: warn
+          retention-days: 7
