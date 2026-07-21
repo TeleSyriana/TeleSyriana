@@ -1,1 +1,0 @@
-Triggers the isolated Notes and Meetings Firestore quota patch.
