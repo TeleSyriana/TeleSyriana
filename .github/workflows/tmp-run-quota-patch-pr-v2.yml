@@ -1,4 +1,4 @@
-name: Temporary quota patch PR runner v4
+name: Temporary quota patch PR runner v5
 
 on:
   pull_request:
@@ -17,48 +17,46 @@ jobs:
           ref: agent/firestore-quota-hotfix-v1
           fetch-depth: 0
 
-      - name: Fix Messages quota lifecycle ordering
-        run: python tools/fix-quota-hotfix-messages.py
+      - name: Apply Notes and Meetings quota lifecycle patch
+        run: python tools/apply-quota-hotfix-tasks-meetings.py
 
-      - name: Syntax check patched stable cores
+      - name: Syntax check affected modules
         run: |
-          cp app-core.js /tmp/app-core.mjs
-          cp messages-core.js /tmp/messages-core.mjs
-          cp groups-core.js /tmp/groups-core.mjs
-          node --check /tmp/app-core.mjs
-          node --check /tmp/messages-core.mjs
-          node --check /tmp/groups-core.mjs
+          cp tasks.js /tmp/tasks.mjs
+          cp meetings.js /tmp/meetings.mjs
+          node --check /tmp/tasks.mjs
+          node --check /tmp/meetings.mjs
 
-      - name: Verify quota lifecycle after repair
+      - name: Verify page-scoped Firestore lifecycle
         shell: bash
         run: |
-          grep -q 'setInterval(() => updatePresence(false), 60_000)' app-core.js
-          grep -q 'function syncHomeRealtimeListeners' app-core.js
-          grep -q 'where("status", "in"' app-core.js
-          grep -q 'function messagesPageIsActive' messages-core.js
-          grep -q 'function stopMessagesPageRealtime' messages-core.js
-          grep -q 'subscribeGroupsCloud();' messages-core.js
-          grep -q 'subscribeRecentsCloud();' messages-core.js
-          grep -q 'function groupsMessagesPageIsActive' groups-core.js
+          grep -q 'function notesPageIsActive' tasks.js
+          grep -q 'function stopNotesSubscription' tasks.js
+          grep -q 'if (!notesPageIsActive())' tasks.js
+          grep -q 'function meetingsPageIsActive' meetings.js
+          grep -q 'function stopUpcomingSubscription' meetings.js
+          grep -q 'function syncMeetingsPageRealtime' meetings.js
           python - <<'PY'
           from pathlib import Path
-          s = Path('messages-core.js').read_text()
-          a = s.index('function syncMessagesPageRealtime()')
-          b = s.index('// ---------------- init ----------------', a)
-          helper = s[a:b]
-          if 'syncMessagesPageRealtime();' in helper:
-              raise SystemExit('Messages helper recursion is still present')
-          print('Messages helper recursion check: PASS')
+          tasks = Path('tasks.js').read_text()
+          meetings = Path('meetings.js').read_text()
+          if 'document.addEventListener("DOMContentLoaded", initNotes);' in tasks:
+              raise SystemExit('Notes still uses unconditional legacy boot')
+          init_pos = meetings.index('function initاجتماعs()')
+          init_tail = meetings[init_pos:init_pos+2500]
+          if '\n    subscribeUpcoming();\n' in init_tail:
+              raise SystemExit('Meetings still subscribes unconditionally at init')
+          print('Notes/Meetings hidden-page listener checks: PASS')
           PY
 
-      - name: Commit repaired stable core
+      - name: Commit Notes and Meetings quota hotfix
         run: |
           git config user.name 'TeleSyriana Quota Hotfix'
           git config user.email 'actions@users.noreply.github.com'
-          git add messages-core.js
+          git add tasks.js meetings.js
           if git diff --cached --quiet; then
-            echo 'No repair changes to commit.'
+            echo 'No Notes/Meetings changes to commit.'
             exit 0
           fi
-          git commit -m '[quota-patch] fix Messages page-aware lifecycle'
+          git commit -m '[quota-patch] make Notes and Meetings page-scoped'
           git push origin HEAD:agent/firestore-quota-hotfix-v1
