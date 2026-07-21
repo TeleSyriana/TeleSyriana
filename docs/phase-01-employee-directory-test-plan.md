@@ -31,7 +31,7 @@ Large existing operational modules are retained byte-for-byte as `*-core.js` fil
 
 ## Verified automated preflight
 
-GitHub Actions now runs `node tools/phase1-static-preflight.mjs` for this phase. The deterministic preflight has passed after catching and fixing one real saved-session marker mismatch.
+GitHub Actions runs `node tools/phase1-static-preflight.mjs` for this phase. The deterministic preflight has passed after catching and fixing one real saved-session marker mismatch.
 
 The preflight validates:
 
@@ -42,7 +42,7 @@ The preflight validates:
 - untouched-core fallback paths
 - quota-reduction guard markers for App, Tickets, Reports, Payroll and Messages
 
-The Firestore network probe is intentionally a separate gate so a quota/rules problem cannot be confused with a code-loader problem.
+The Firestore network probe is intentionally a separate gate so a quota/rules problem cannot be confused with a code-loader problem. CI treats a confirmed `RESOURCE_EXHAUSTED` result as a warning/blocker rather than a code failure, while permission/network/other unexpected probe failures still fail the workflow.
 
 ## Current live Firestore finding
 
