@@ -7,6 +7,7 @@
 const CORE_URL = new URL('./app-core.js', import.meta.url);
 const FIREBASE_URL = new URL('./firebase.js', import.meta.url).href;
 const DIRECTORY_URL = new URL('./employee-directory.js', import.meta.url).href;
+const EMPLOYEES_UI_URL = new URL('./employees-ui.js', import.meta.url).href;
 
 function replaceRequired(source, oldText, newText, label) {
   if (!source.includes(oldText)) {
@@ -26,7 +27,7 @@ function replaceBetweenRequired(source, startMarker, endMarker, replacement, lab
 function patchCoreApp(coreSource) {
   let source = String(coreSource || '');
 
-  const imports = `import { db, fs } from ${JSON.stringify(FIREBASE_URL)};\nimport {\n  authenticateEmployee,\n  employeeIsActive,\n  getEmployee,\n  normaliseRole,\n  roleLevel,\n  safeEmployeePayload,\n} from ${JSON.stringify(DIRECTORY_URL)};`;
+  const imports = `import { db, fs } from ${JSON.stringify(FIREBASE_URL)};\nimport {\n  authenticateEmployee,\n  employeeIsActive,\n  getEmployee,\n  normaliseRole,\n  roleLevel,\n  safeEmployeePayload,\n} from ${JSON.stringify(DIRECTORY_URL)};\nimport ${JSON.stringify(EMPLOYEES_UI_URL)};`;
 
   source = replaceRequired(
     source,

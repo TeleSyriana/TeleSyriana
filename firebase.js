@@ -1,14 +1,14 @@
 // import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 // import {
 //   getFirestore,
-//
+
 //   // docs
 //   doc,
 //   setDoc,
 //   getDoc,
 //   updateDoc,
 //   deleteDoc,
-//
+
 //   // collections / queries
 //   collection,
 //   addDoc,
@@ -18,12 +18,12 @@
 //   orderBy,
 //   onSnapshot,
 //   serverTimestamp,
-//
+
 //   // optional helpers (nice to have)
 //   limit,
 //   startAfter
 // } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-//
+
 // const firebaseConfig = {
 //   apiKey: "AIzaSyDSvgD5GEZRE_zBzspoPr3pHQW1XOZr6yQ",
 //   authDomain: "telesyriana-ccms.firebaseapp.com",
@@ -32,10 +32,10 @@
 //   messagingSenderId: "867008812270",
 //   appId: "1:867008812270:web:b87edde8d675aa5e224fff",
 // };
-//
+
 // export const app = initializeApp(firebaseConfig);
 // export const db = getFirestore(app);
-//
+
 // // keep same pattern used in your project
 // export const fs = {
 //   // docs
@@ -44,7 +44,7 @@
 //   getDoc,
 //   updateDoc,
 //   deleteDoc,
-//
+
 //   // collections / queries
 //   collection,
 //   addDoc,
@@ -54,7 +54,7 @@
 //   orderBy,
 //   onSnapshot,
 //   serverTimestamp,
-//
+
 //   // optional
 //   limit,
 //   startAfter
@@ -136,11 +136,5 @@ export const fs = {
   runTransaction,
 };
 
-// Phase 1 employee directory is loaded as an isolated enhancement so existing
-// TeleSyriana modules do not need to be rewritten at once. Dynamic import keeps
-// Firebase fully initialised before the employee module imports it back.
-queueMicrotask(() => {
-  import("./employees-ui.js").catch((err) => {
-    console.warn("Employee directory UI did not load; core TeleSyriana continues normally.", err);
-  });
-});
+
+
