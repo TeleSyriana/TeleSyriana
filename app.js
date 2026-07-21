@@ -1,6 +1,6 @@
 // app.js — TeleSyriana Phase 1 migration loader
 // Keeps the previous production app byte-for-byte in app-core.js and applies
-// only the central employee-directory auth/session migration at module load.
+// central employee-directory plus quota-safe runtime patches at module load.
 // If an expected source marker ever changes, TeleSyriana falls back to the
 // untouched core app instead of running a partially patched build.
 
@@ -96,6 +96,31 @@ function patchCoreApp(coreSource) {
     'stop current employee watcher on logout'
   );
 
+  // Reduce presence read/write amplification. Agents still write their own
+  // heartbeat, but only management users on Home subscribe to the team list.
+  source = replaceRequired(
+    source,
+    'function startPresence() {\n  if (!currentUser) return;\n  subscribePresence();\n  updatePresence(true);\n  if (presenceTimerId) clearInterval(presenceTimerId);\n  presenceTimerId = setInterval(() => updatePresence(false), 30_000);\n}',
+    'function startPresence() {\n  if (!currentUser) return;\n  const homeActive = pageVisibleName() === "home";\n  if (homeActive && canViewOnlineNow(currentUser)) subscribePresence();\n  else if (presenceUnsub) { try { presenceUnsub(); } catch {} presenceUnsub = null; }\n  updatePresence(true);\n  if (presenceTimerId) clearInterval(presenceTimerId);\n  presenceTimerId = setInterval(() => updatePresence(false), 60_000);\n}',
+    'quota-safe presence heartbeat'
+  );
+
+  source = replaceRequired(
+    source,
+    '  updatePresence(false).catch(() => {});\n  try { translateFeaturePages(getLanguage()); applyPhase21LanguagePolish(getLanguage()); setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 80); } catch {}',
+    '  updatePresence(false).catch(() => {});\n  if (pageId === "home" && canViewOnlineNow(currentUser)) subscribePresence();\n  else if (presenceUnsub) { try { presenceUnsub(); } catch {} presenceUnsub = null; }\n  try { translateFeaturePages(getLanguage()); applyPhase21LanguagePolish(getLanguage()); setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 80); } catch {}',
+    'home-only management presence listener'
+  );
+
+  // The Home calendar only displays unresolved issues. Do not download every
+  // historical solved ticket merely to calculate today's active-risk summary.
+  source = replaceRequired(
+    source,
+    '  if (role !== "agent") return [{ key: "team", source: base }];',
+    '  if (role !== "agent") return [{ key: "team", source: query(base, where("status", "in", ["open", "waiting_customer", "waiting_courier", "waiting_supplier", "escalated", "urgent"])) }];',
+    'active-only home ticket calendar'
+  );
+
   // Official account identity now belongs to the employee directory. Keep the
   // existing profile system for photo/birthday/language/theme/notes only.
   source = replaceRequired(
@@ -148,6 +173,12 @@ function patchCoreApp(coreSource) {
   }
   if (!source.includes('nameEl.readOnly = true;') || source.includes('name: cached.name, profilePhoto')) {
     throw new Error('Phase 1 loader validation failed: profile name can still override directory identity.');
+  }
+  if (!source.includes('setInterval(() => updatePresence(false), 60_000)') || !source.includes('pageId === "home" && canViewOnlineNow(currentUser)')) {
+    throw new Error('Phase 1 loader validation failed: quota-safe presence lifecycle missing.');
+  }
+  if (!source.includes('where("status", "in", ["open"')) {
+    throw new Error('Phase 1 loader validation failed: Home issue calendar still reads full ticket history.');
   }
 
   return source;
