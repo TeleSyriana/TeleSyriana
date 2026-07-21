@@ -29,12 +29,7 @@ function patchReports(coreSource) {
 
   const reportsLifecycleHelpers = `function reportsPageIsActive() {\n  const page = el("page-reports");\n  return Boolean(page && !page.classList.contains("hidden"));\n}\n\nfunction stopReportsPageSubscriptions() {\n  if (unsubReports) { try { unsubReports(); } catch {} }\n  if (unsubTickets) { try { unsubTickets(); } catch {} }\n  unsubReports = null;\n  unsubTickets = null;\n}\n\nfunction bindReportsPageLifecycle() {\n  if (window.__TS_REPORTS_PAGE_LIFECYCLE__) return;\n  window.__TS_REPORTS_PAGE_LIFECYCLE__ = true;\n  document.addEventListener("click", (event) => {\n    const nav = event.target?.closest?.(".nav-link[data-page]");\n    if (!nav) return;\n    if (nav.dataset.page === "reports") setTimeout(() => initReports(), 0);\n    else stopReportsPageSubscriptions();\n  });\n}\n\n`;
 
-  source = replaceRequired(
-    source,
-    'function initReports() {\n  currentUser = getCurrentUser();',
-    `${reportsLifecycleHelpers}async function initReports() {\n  currentUser = getCurrentUser();\n  bindReportsPageLifecycle();`,
-    'reports init lifecycle'
-  );
+  source = replaceRequired(source, 'function initReports() {\n  currentUser = getCurrentUser();', `${reportsLifecycleHelpers}async function initReports() {\n  currentUser = getCurrentUser();\n  bindReportsPageLifecycle();`, 'reports init lifecycle');
 
   source = replaceRequired(
     source,
@@ -43,6 +38,12 @@ function patchReports(coreSource) {
     'lazy reports page subscriptions'
   );
 
+  source = replaceRequired(
+    source,
+    'document.addEventListener("DOMContentLoaded", initReports);',
+    'if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initReports);\nelse initReports();',
+    'reports ready-state boot'
+  );
   source = replaceRequired(
     source,
     'window.addEventListener("telesyriana:user-changed", initReports);',
@@ -54,6 +55,7 @@ function patchReports(coreSource) {
   if (!source.includes('await refreshReportsStaffDirectory()')) throw new Error('Reports directory validation failed: refresh missing.');
   if (!source.includes('function reportsPageIsActive()') || !source.includes('stopReportsPageSubscriptions()')) throw new Error('Reports quota validation failed: hidden-page subscriptions remain.');
   if (source.includes('currentUser = getCurrentUser();\n  await refreshReportsStaffDirectory();')) throw new Error('Reports quota validation failed: directory still loads before page/login need.');
+  if (!source.includes('document.readyState === "loading"')) throw new Error('Reports boot validation failed: ready-state boot missing.');
   return source;
 }
 
