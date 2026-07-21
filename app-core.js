@@ -2127,6 +2127,16 @@ function showDashboard() {
   }
   startPresence();
   subscribeIssueCalendar();
+
+  // Home is the initial ready state. Tickets load lazily when opened,
+  // so startup must not wait for a tickets-ready event.
+  setAppLoading(
+    100,
+    loadingText("جاهز", "Ready"),
+    loadingText("تم فتح لوحة التحكم.", "Dashboard ready."),
+    { noWatchdog: true }
+  );
+  hideAppLoading(200);
 }
 
 function setPlaceholder(selector, value) {
