@@ -25,8 +25,47 @@ The branch now includes:
 - dynamic Chat Direct Messages from the employee directory
 - dynamic Group member picker from the employee directory
 - history-preserving account disable/archive behaviour
+- Firestore quota/read-amplification mitigation: slower presence heartbeat, Home-only management presence subscription, active-only Home ticket calendar, hidden-page lazy subscriptions for Tickets/Reports/Payroll, Messages-only presence/profile/status listeners, and on-demand Deleted Tickets subscription
 
-Large existing operational modules are retained byte-for-byte as `*-core.js` files. Small migration loaders apply only the Step-1 employee-directory changes and fall back to the untouched core module if an expected source marker does not match.
+Large existing operational modules are retained byte-for-byte as `*-core.js` files. Small migration loaders apply only the Step-1 employee-directory/quota-safe changes and fall back to the untouched core module if an expected source marker does not match.
+
+## Verified automated preflight
+
+GitHub Actions now runs `node tools/phase1-static-preflight.mjs` for this phase. The deterministic preflight has passed after catching and fixing one real saved-session marker mismatch.
+
+The preflight validates:
+
+- ES-module syntax for all migration/core JavaScript files
+- exact Git blob hashes for preserved rollback cores
+- every required old-source marker used by the runtime loaders
+- employee-management service guards
+- untouched-core fallback paths
+- quota-reduction guard markers for App, Tickets, Reports, Payroll and Messages
+
+The Firestore network probe is intentionally a separate gate so a quota/rules problem cannot be confused with a code-loader problem.
+
+## Current live Firestore finding
+
+A read-only GitHub Actions probe reached the real `telesyriana-ccms` Firestore REST endpoint successfully but returned:
+
+- HTTP `429`
+- `RESOURCE_EXHAUSTED`
+- `Quota exceeded.`
+
+This is **not a permission-denied result**. It means the live Firestore permission smoke test is currently inconclusive because the project is refusing reads due to quota/resource exhaustion.
+
+The existing code showed several read-amplification paths that can plausibly contribute to this:
+
+- presence was written every 30 seconds
+- Messages subscribed every logged-in browser to the full presence collection even while Messages was hidden
+- the main App maintained another presence listener for management accounts
+- Reports subscribed to reports + ticket snapshots at startup even while the page was hidden
+- Payroll subscribed to `agentDays` at startup even while Payroll was hidden
+- Tickets subscribed at startup even while Tickets was hidden
+- Deleted Tickets subscribed for privileged users before the Deleted folder was opened
+- the Home issue calendar downloaded the full historical ticket collection for non-Agent accounts
+
+The Phase-1 loaders now reduce those reads without modifying the preserved core engines.
 
 ## Production invariants
 
@@ -111,13 +150,15 @@ These must remain true throughout Phase 1:
 
 ### Tickets
 
-- [ ] Existing tickets load normally.
+- [ ] Existing tickets load normally when the Tickets page is opened.
+- [ ] Tickets does not keep its main Firestore listener active while another page is open.
 - [ ] Existing Agent sees own/created ticket scope as before.
 - [ ] Supervisor sees the intended team scope.
 - [ ] HR/Manager/Admin ticket visibility remains intact.
 - [ ] Newly-created active employee appears in assignment controls.
 - [ ] Disabled/archived employee retains their name on historical ticket ownership but is not offered for new assignment.
 - [ ] Promoting/demoting/changing supervisor refreshes staff/team lookups.
+- [ ] Deleted Tickets are loaded only after the Deleted folder is opened and unsubscribed when it closes.
 - [ ] Searching old tickets still works.
 - [ ] Solved tickets remain searchable.
 - [ ] Shopify order lookup works exactly as before.
@@ -125,7 +166,8 @@ These must remain true throughout Phase 1:
 ### Payroll / attendance
 
 - [ ] Today's `agentDays` record uses directory employee ID/name/role/rate/supervisor.
-- [ ] Existing monthly payroll still loads.
+- [ ] Existing monthly payroll still loads when Payroll is opened.
+- [ ] Payroll does not keep `agentDays`/staff-settings listeners active while another page is open.
 - [ ] HR/Manager/Admin can see full payroll as intended.
 - [ ] Supervisor sees their team rather than every employee.
 - [ ] Historical disabled/archived employees remain available when reviewing old payroll.
@@ -136,7 +178,8 @@ These must remain true throughout Phase 1:
 
 ### Reports
 
-- [ ] Existing reports load.
+- [ ] Existing reports load when Reports is opened.
+- [ ] Reports does not keep report/ticket listeners active while another page is open.
 - [ ] Agent sees own reports.
 - [ ] Supervisor sees intended team reports.
 - [ ] HR/Manager/Admin visibility remains intact.
@@ -151,14 +194,18 @@ These must remain true throughout Phase 1:
 - [ ] Official DM display name follows the employee directory rather than an older profile-name cache.
 - [ ] Disabled/archived employee is removed from the active DM contact list without deleting chat history.
 - [ ] Avatar role styling follows the employee directory rather than hard-coded CCMS IDs.
+- [ ] Presence/profile/agent-status realtime listeners activate when Messages opens and stop when the user leaves Messages.
 - [ ] New active employee appears in the Group member picker.
 - [ ] Inactive historical Group members remain visible when relevant but cannot be newly selected.
 
-### Supervisor homepage
+### Supervisor homepage / presence
 
 - [ ] New agent's `agentDays.supervisorId` makes them appear in the correct Supervisor table.
 - [ ] Promoted Supervisor can see agents assigned to their CCMS ID.
 - [ ] Supervisor does not receive global team visibility.
+- [ ] Presence heartbeat is approximately once per minute rather than every 30 seconds.
+- [ ] Team presence listener is active only for management while Home is visible.
+- [ ] Home issue calendar still shows active unresolved issue counts after switching to an active-status Firestore query.
 
 ## Device / UI checks
 
@@ -171,18 +218,29 @@ These must remain true throughout Phase 1:
 
 ## Current remaining gates
 
-### 1. Real Firestore permission smoke test
+### 1. Firestore quota must recover or be increased
 
-This repository does not contain the deployed `firestore.rules` / Firebase deployment configuration. The live Firestore environment must therefore be tested to confirm authorised browser sessions can read/write:
+The real Firestore endpoint currently returns `429 RESOURCE_EXHAUSTED / Quota exceeded`. Before production merge:
+
+- check Firestore **Usage** and Google Cloud **Quotas** for project `telesyriana-ccms`
+- confirm whether billing is enabled and whether the project is operating only on the free daily quota
+- let the quota reset or increase/enable sufficient quota
+- rerun the read-only Firestore probe until it returns a normal Firestore result (`200` or `404`) instead of `429`
+
+Only after that can the employee permission/read path be meaningfully tested.
+
+### 2. Real Firestore permission/write smoke test
+
+Once quota is available, confirm authorised browser sessions can read/write:
 
 - `employees`
 - `employeeAudit`
 
 and that the existing collections continue operating normally.
 
-### 2. Browser runtime smoke test
+### 3. Browser runtime smoke test
 
-The branch uses reversible migration loaders around the exact current production modules. The loaders have strict marker validation and untouched-core fallback, but the complete branch still needs browser testing before merge to verify module loading, Blob-module imports and Firestore behaviour in the actual TeleSyriana hosting environment.
+The branch uses reversible migration loaders around the exact current production modules. The loaders have strict marker validation and untouched-core fallback, but the complete branch still needs browser testing before merge to verify module loading, Blob-module imports, page lifecycle subscriptions and Firestore behaviour in the actual TeleSyriana hosting environment.
 
 The current execution environment cannot resolve the GitHub/raw.githack hosts required to open a non-production static preview, so this test has not been falsely marked as completed.
 
@@ -190,11 +248,13 @@ The current execution environment cannot resolve the GitHub/raw.githack hosts re
 
 Phase 1 is ready only when:
 
-1. Existing and newly-created accounts pass login/session testing.
-2. Add / Edit / Promote / Demote / Disable / Reactivate / Archive pass against the real Firestore environment.
-3. Tickets, Payroll, Reports, Chat and Groups pass the cross-module regression checks above.
-4. Supervisor team behaviour and reassignment guard are verified with a real promoted Supervisor and assigned Agent.
-5. Existing Shopify order lookup and ticket history are unchanged.
-6. Personal profile settings still work without overriding the directory-owned official name.
-7. The complete regression checklist passes on desktop and at least one staff/mobile device.
-8. Draft PR #3 is reviewed against the current `main` immediately before merge.
+1. Static preflight remains green on the final branch head.
+2. Firestore no longer returns `RESOURCE_EXHAUSTED` and the read-only probe reaches a normal `200/404` result.
+3. Existing and newly-created accounts pass login/session testing.
+4. Add / Edit / Promote / Demote / Disable / Reactivate / Archive pass against the real Firestore environment.
+5. Tickets, Payroll, Reports, Chat and Groups pass the cross-module regression checks above, including lazy-listener lifecycle checks.
+6. Supervisor team behaviour and reassignment guard are verified with a real promoted Supervisor and assigned Agent.
+7. Existing Shopify order lookup and ticket history are unchanged.
+8. Personal profile settings still work without overriding the directory-owned official name.
+9. The complete regression checklist passes on desktop and at least one staff/mobile device.
+10. Draft PR #3 is reviewed against the current `main` immediately before merge.
