@@ -1,0 +1,246 @@
+name: Phase 1 static preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'app-core.js'
+      - 'employee-directory.js'
+      - 'employee-directory-core.js'
+      - 'employees-ui.js'
+      - 'employees-ui-core.js'
+      - 'tickets.js'
+      - 'tickets-core.js'
+      - 'payroll.js'
+      - 'payroll-core.js'
+      - 'reports.js'
+      - 'reports-core.js'
+      - 'messages.js'
+      - 'messages-core.js'
+      - 'groups.js'
+      - 'groups-core.js'
+      - 'tools/phase1-static-preflight.mjs'
+      - '.github/workflows/phase1-static-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-preflight:
+    name: Validate Phase 1 migration loaders
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run deterministic preflight
+        id: preflight
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          node tools/phase1-static-preflight.mjs > phase1-preflight.log 2>&1
+          code=$?
+          cat phase1-preflight.log
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload preflight output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-static-preflight-output
+          path: phase1-preflight.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: No-login browser loader smoke test
+        id: browser_smoke
+        if: steps.preflight.outputs.exit_code == '0'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p /tmp/phase1-browser
+          cd /tmp/phase1-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+          npm_code=$?
+          if [ "$npm_code" -ne 0 ]; then
+            echo "browser_smoke=puppeteer_install_failed" > "$GITHUB_WORKSPACE/phase1-browser-smoke.log"
+            echo "exit_code=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > phase1-browser-server.log 2>&1 &
+          server_pid=$!
+          sleep 1
+
+          cd /tmp/phase1-browser
+          GITHUB_WORKSPACE="$GITHUB_WORKSPACE" node --input-type=module > "$GITHUB_WORKSPACE/phase1-browser-smoke.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const candidates = [
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/chromium',
+          ];
+          const executablePath = candidates.find((path) => fs.existsSync(path));
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found on runner.');
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+          });
+
+          try {
+            const page = await browser.newPage();
+            const consoleRows = [];
+            const pageErrors = [];
+
+            page.on('console', (message) => {
+              consoleRows.push(`[${message.type()}] ${message.text()}`);
+            });
+            page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
+
+            await page.goto('http://127.0.0.1:4173/index.html', {
+              waitUntil: 'domcontentloaded',
+              timeout: 30_000,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 6_000));
+
+            const runtime = await page.evaluate(() => ({
+              ticketLifecycle: Boolean(window.__TS_TICKET_PAGE_LIFECYCLE__),
+              reportsLifecycle: Boolean(window.__TS_REPORTS_PAGE_LIFECYCLE__),
+              payrollLifecycle: Boolean(window.__TS_PAYROLL_PAGE_LIFECYCLE__),
+              messagesLifecycle: Boolean(window.__TS_MESSAGE_PAGE_LIFECYCLE__),
+              employeesLifecycle: Boolean(window.__TS_EMPLOYEES_PAGE_LIFECYCLE__),
+              appLoaded: Boolean(document.getElementById('login-form')),
+            }));
+
+            const fallbackPattern = /(Phase 1 employee-directory loader failed|Central ticket staff-directory bridge failed|Central reports staff-directory bridge failed|Central payroll staff-directory bridge failed|Central chat employee-directory bridge failed|Central group member-directory bridge failed|Employees UI safety bridge failed)/i;
+            const fallbackLogs = consoleRows.filter((row) => fallbackPattern.test(row));
+
+            console.log('runtime=' + JSON.stringify(runtime));
+            console.log('fallback_logs=' + JSON.stringify(fallbackLogs));
+            console.log('page_errors=' + JSON.stringify(pageErrors));
+            console.log('console_tail=' + JSON.stringify(consoleRows.slice(-30)));
+
+            const lifecycleOk = runtime.ticketLifecycle && runtime.reportsLifecycle && runtime.payrollLifecycle && runtime.messagesLifecycle && runtime.employeesLifecycle;
+            if (!runtime.appLoaded) throw new Error('Login UI did not load.');
+            if (!lifecycleOk) throw new Error(`One or more Phase 1 page lifecycle bridges did not initialize: ${JSON.stringify(runtime)}`);
+            if (fallbackLogs.length) throw new Error(`One or more Phase 1 loaders fell back to untouched core: ${fallbackLogs.join(' | ')}`);
+          } finally {
+            await browser.close();
+          }
+          NODE
+          browser_code=$?
+
+          kill "$server_pid" >/dev/null 2>&1 || true
+          cd "$GITHUB_WORKSPACE"
+          cat phase1-browser-smoke.log || true
+          echo "exit_code=$browser_code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload browser smoke output
+        if: always() && steps.preflight.outputs.exit_code == '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-browser-smoke-output
+          path: |
+            phase1-browser-smoke.log
+            phase1-browser-server.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Read-only Firestore employee probe
+        id: firestore_probe
+        if: steps.preflight.outputs.exit_code == '0' && steps.browser_smoke.outputs.exit_code == '0'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          url='https://firestore.googleapis.com/v1/projects/telesyriana-ccms/databases/(default)/documents/employees/__telesyriana_phase1_read_probe__?key=AIzaSyDSvgD5GEZRE_zBzspoPr3pHQW1XOZr6yQ'
+          code="$(curl --silent --show-error --output firestore-read-probe.json --write-out '%{http_code}' "$url")"
+          curl_code=$?
+          status='unknown'
+          if [ "$curl_code" -ne 0 ]; then
+            status='network_error'
+          elif [ "$code" = '200' ] || [ "$code" = '404' ]; then
+            status='ok'
+          elif [ "$code" = '429' ] && grep -q 'RESOURCE_EXHAUSTED' firestore-read-probe.json 2>/dev/null; then
+            status='quota_exhausted'
+          elif [ "$code" = '403' ] || grep -q 'PERMISSION_DENIED' firestore-read-probe.json 2>/dev/null; then
+            status='permission_denied'
+          else
+            status='failed'
+          fi
+
+          {
+            echo "curl_exit_code=$curl_code"
+            echo "http_status=$code"
+            echo "probe_status=$status"
+            echo 'response_begin'
+            cat firestore-read-probe.json 2>/dev/null || true
+            echo
+            echo 'response_end'
+          } > firestore-read-probe.log
+          cat firestore-read-probe.log
+
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" = 'ok' ] || [ "$status" = 'quota_exhausted' ]; then
+            echo 'exit_code=0' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exit_code=1' >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Upload Firestore probe output
+        if: always() && steps.preflight.outputs.exit_code == '0' && steps.browser_smoke.outputs.exit_code == '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-firestore-read-probe-output
+          path: |
+            firestore-read-probe.log
+            firestore-read-probe.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Report Firestore quota exhaustion
+        if: steps.firestore_probe.outputs.status == 'quota_exhausted'
+        shell: bash
+        run: |
+          echo '::warning::Firestore probe reached telesyriana-ccms but returned RESOURCE_EXHAUSTED / Quota exceeded. Static/browser preflight passed, but live Firestore smoke testing remains blocked until quota recovers or is increased.'
+
+      - name: Fail when browser smoke failed
+        if: steps.preflight.outputs.exit_code == '0' && steps.browser_smoke.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          cat phase1-browser-smoke.log || true
+          exit 1
+
+      - name: Fail when Firestore probe failed
+        if: steps.preflight.outputs.exit_code == '0' && steps.browser_smoke.outputs.exit_code == '0' && steps.firestore_probe.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          cat firestore-read-probe.log || true
+          exit 1
+
+      - name: Fail when preflight failed
+        if: steps.preflight.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          cat phase1-preflight.log
+          exit 1

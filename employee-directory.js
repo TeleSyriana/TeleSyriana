@@ -1,144 +1,219 @@
-// employee-directory.js — TeleSyriana Phase 1 central employee directory
+// employee-directory.js — TeleSyriana Phase 1 synchronising facade
+// The full directory implementation is preserved byte-for-byte in
+// employee-directory-core.js. This facade adds operational permission guards,
+// a short shared employee-list cache, and a browser event after successful
+// employee writes so dependent modules refresh immediately.
 //
-// This module is the single compatibility layer for staff identity while the
-// application migrates away from duplicated STAFF/USERS objects.
-//
-// Source priority:
-//   1. Firestore employees/{ccmsId}
-//   2. Legacy seed below (keeps current production accounts working)
-//
-// Password verification is intentionally kept compatible with the current
-// client-side login during Phase 1. Moving authentication/server-side password
-// handling is a separate migration and must not be mixed into this live-data
-// change.
+// These guards are defense-in-depth for the current custom-login model. They do
+// not replace server-enforced authorization/Firebase Auth, which is a separate
+// security migration.
 
-import { db, fs } from "./firebase.js";
+export * from './employee-directory-core.js';
 
-const { doc, getDoc, collection, getDocs } = fs;
+import {
+  getEmployee as getEmployeeCore,
+  listEmployees as listEmployeesCore,
+  normaliseAccountStatus,
+  normaliseRole,
+  saveEmployee as saveEmployeeCore,
+  setEmployeeRole as setEmployeeRoleCore,
+  setEmployeeStatus as setEmployeeStatusCore,
+} from './employee-directory-core.js';
 
-export const EMPLOYEES_COL = "employees";
+const MANAGEMENT_ROLES = new Set(['admin', 'manager', 'hr']);
+const DIRECTORY_CACHE_TTL_MS = 30_000;
 
-export const ROLE_LEVELS = Object.freeze({
-  agent: 1,
-  supervisor: 2,
-  hr: 3,
-  manager: 3,
-  admin: 4,
-});
-
-export const LEGACY_EMPLOYEE_SEED = Object.freeze({
-  "0001": { password: "Aa095142332415!", role: "admin", name: "Jack Smith", hourlyRate: 0, currency: "GBP", accountStatus: "active" },
-  "1001": { password: "0951", role: "manager", name: "Mohammad Safar", hourlyRate: 5.8, currency: "GBP", accountStatus: "active" },
-  "2001": { password: "2411", role: "supervisor", name: "Dema Shabar", hourlyRate: 5.8, currency: "GBP", accountStatus: "active" },
-  "3001": { password: "2411", role: "hr", name: "Fatima Kaka", hourlyRate: 5.8, currency: "GBP", accountStatus: "active" },
-  "9001": { password: "Welcome2026!", role: "agent", name: "Raghad Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active" },
-  "9002": { password: "Welcome2026!", role: "agent", name: "Qamar Moussa", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active" },
-  "9003": { password: "Reema2026!", role: "agent", name: "Reema Obaid", supervisorId: "2001", hourlyRate: 1.15, currency: "USD", accountStatus: "active" },
-});
+let employeeListCache = null;
+let employeeListCacheAt = 0;
+let employeeListCachePromise = null;
 
 function cleanId(value) {
-  return String(value || "").trim();
+  return String(value || '').trim();
 }
 
-export function normaliseRole(role) {
-  const value = String(role || "agent").trim().toLowerCase();
-  return ROLE_LEVELS[value] ? value : "agent";
+function cloneEmployeeRows(rows = []) {
+  return rows.map((row) => ({ ...row }));
 }
 
-export function normaliseAccountStatus(status) {
-  const value = String(status || "active").trim().toLowerCase();
-  return ["active", "disabled", "archived"].includes(value) ? value : "active";
+function invalidateEmployeeListCache() {
+  employeeListCache = null;
+  employeeListCacheAt = 0;
+  employeeListCachePromise = null;
 }
 
-export function roleLevel(userOrRole) {
-  const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
-  return ROLE_LEVELS[normaliseRole(role)] || 0;
-}
-
-export function employeeIsActive(employee) {
-  return normaliseAccountStatus(employee?.accountStatus) === "active";
-}
-
-export function normaliseEmployee(id, data = {}) {
-  const employeeId = cleanId(data.id || data.employeeId || data.ccmsId || id);
-  if (!employeeId) return null;
-
-  return {
-    id: employeeId,
-    employeeId,
-    ccmsId: employeeId,
-    name: String(data.name || data.fullName || employeeId).trim(),
-    role: normaliseRole(data.role),
-    supervisorId: cleanId(data.supervisorId),
-    hourlyRate: Math.max(0, Number(data.hourlyRate) || 0),
-    currency: String(data.currency || "USD").trim().toUpperCase(),
-    accountStatus: normaliseAccountStatus(data.accountStatus),
-    timezone: String(data.timezone || data.defaultTimezone || "").trim(),
-    language: String(data.language || "").trim(),
-    password: typeof data.password === "string" ? data.password : undefined,
-    source: data.source || "directory",
-  };
-}
-
-export function safeEmployeePayload(employee) {
-  if (!employee) return null;
-  const { password, source, ...safe } = employee;
-  return safe;
-}
-
-export function getLegacyEmployee(id) {
-  const employeeId = cleanId(id);
-  const row = LEGACY_EMPLOYEE_SEED[employeeId];
-  return row ? normaliseEmployee(employeeId, { ...row, source: "legacy" }) : null;
-}
-
-export async function getEmployee(id, options = {}) {
-  const employeeId = cleanId(id);
-  if (!employeeId) return null;
-
-  const allowLegacyFallback = options.allowLegacyFallback !== false;
-
-  try {
-    const snap = await getDoc(doc(db, EMPLOYEES_COL, employeeId));
-    if (snap.exists()) return normaliseEmployee(employeeId, { ...snap.data(), source: "firestore" });
-  } catch (err) {
-    console.warn("Employee directory lookup failed; using compatibility fallback.", err);
+async function allEmployeesCached({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && employeeListCache && now - employeeListCacheAt < DIRECTORY_CACHE_TTL_MS) {
+    return cloneEmployeeRows(employeeListCache);
   }
 
-  return allowLegacyFallback ? getLegacyEmployee(employeeId) : null;
-}
+  // Coalesce simultaneous startup requests from Tickets/Payroll/Reports/Chat/
+  // Groups into one Firestore employee-list read instead of five duplicate reads.
+  if (!force && employeeListCachePromise) {
+    return cloneEmployeeRows(await employeeListCachePromise);
+  }
 
-export async function authenticateEmployee(id, password) {
-  const employee = await getEmployee(id, { allowLegacyFallback: true });
-  if (!employee) return { ok: false, reason: "not_found", employee: null };
-  if (!employeeIsActive(employee)) return { ok: false, reason: employee.accountStatus, employee: null };
-  if (employee.password !== String(password || "")) return { ok: false, reason: "incorrect_password", employee: null };
-  return { ok: true, reason: "ok", employee: safeEmployeePayload(employee) };
+  employeeListCachePromise = listEmployeesCore({ includeDisabled: true, includeArchived: true })
+    .then((rows) => {
+      employeeListCache = cloneEmployeeRows(rows);
+      employeeListCacheAt = Date.now();
+      return employeeListCache;
+    })
+    .finally(() => {
+      employeeListCachePromise = null;
+    });
+
+  return cloneEmployeeRows(await employeeListCachePromise);
 }
 
 export async function listEmployees(options = {}) {
   const includeDisabled = options.includeDisabled === true;
   const includeArchived = options.includeArchived === true;
-  const merged = new Map();
+  const rows = await allEmployeesCached({ force: options.force === true });
 
-  Object.keys(LEGACY_EMPLOYEE_SEED).forEach((id) => {
-    const row = getLegacyEmployee(id);
-    if (row) merged.set(id, row);
-  });
+  return rows
+    .filter((row) => includeDisabled || normaliseAccountStatus(row.accountStatus) !== 'disabled')
+    .filter((row) => includeArchived || normaliseAccountStatus(row.accountStatus) !== 'archived')
+    .map((row) => ({ ...row }));
+}
 
+function actorRole(actor = null) {
+  return normaliseRole(actor?.role);
+}
+
+function assertManagementActor(actor = null) {
+  if (!cleanId(actor?.id) || !MANAGEMENT_ROLES.has(actorRole(actor))) {
+    throw new Error('HR, Manager or Admin permission is required.');
+  }
+}
+
+function allowedRolesForActor(actor = null) {
+  const role = actorRole(actor);
+  if (role === 'admin') return ['agent', 'supervisor', 'hr', 'manager', 'admin'];
+  if (role === 'manager') return ['agent', 'supervisor', 'hr', 'manager'];
+  if (role === 'hr') return ['agent', 'supervisor', 'hr'];
+  return [];
+}
+
+function assertRoleAssignment(actor, role) {
+  const requested = normaliseRole(role);
+  if (!allowedRolesForActor(actor).includes(requested)) {
+    throw new Error(`You do not have permission to assign the ${requested} role.`);
+  }
+  return requested;
+}
+
+function assertTargetPermission(target, actor = null) {
+  assertManagementActor(actor);
+  if (!target) return;
+
+  const actingRole = actorRole(actor);
+  const targetRole = normaliseRole(target.role);
+  if (actingRole === 'admin') return;
+  if (targetRole === 'admin') throw new Error('Only Admin can manage an Admin account.');
+  if (actingRole === 'manager') return;
+  if (!['agent', 'supervisor', 'hr'].includes(targetRole)) {
+    throw new Error('HR cannot manage Manager/Admin accounts.');
+  }
+}
+
+function isSelf(targetId, actor = null) {
+  return Boolean(cleanId(targetId) && cleanId(targetId) === cleanId(actor?.id));
+}
+
+async function assertSupervisorTeamCanChange(target, nextRole = target?.role, nextStatus = target?.accountStatus) {
+  if (!target || normaliseRole(target.role) !== 'supervisor') return;
+  if (normaliseRole(nextRole) === 'supervisor' && normaliseAccountStatus(nextStatus) === 'active') return;
+
+  // This is a destructive-role/status safety decision, so intentionally bypass
+  // the short display cache and read the latest directory state.
+  const rows = await listEmployeesCore({ includeDisabled: true, includeArchived: true });
+  const directReports = rows.filter((row) =>
+    cleanId(row.id) !== cleanId(target.id) &&
+    cleanId(row.supervisorId) === cleanId(target.id) &&
+    normaliseAccountStatus(row.accountStatus) === 'active'
+  );
+
+  if (directReports.length) {
+    const names = directReports.slice(0, 4).map((row) => row.name || row.id).join(', ');
+    const extra = directReports.length > 4 ? ` +${directReports.length - 4}` : '';
+    throw new Error(`Reassign ${directReports.length} active team member(s) before changing this Supervisor: ${names}${extra}`);
+  }
+}
+
+function notifyDirectoryChanged(detail = {}) {
+  invalidateEmployeeListCache();
   try {
-    const snap = await getDocs(collection(db, EMPLOYEES_COL));
-    snap.forEach((item) => {
-      const row = normaliseEmployee(item.id, { ...item.data(), source: "firestore" });
-      if (row) merged.set(row.id, row);
-    });
-  } catch (err) {
-    console.warn("Employee directory list failed; using compatibility seed.", err);
+    window.dispatchEvent(new CustomEvent('telesyriana:employee-directory-changed', { detail }));
+  } catch {}
+}
+
+export async function saveEmployee(input = {}, actor = null) {
+  assertManagementActor(actor);
+
+  const employeeId = cleanId(input.id || input.employeeId || input.ccmsId);
+  const existing = employeeId
+    ? await getEmployeeCore(employeeId, { allowLegacyFallback: true })
+    : null;
+
+  if (existing) assertTargetPermission(existing, actor);
+
+  const nextInput = { ...input };
+  if (existing) {
+    if (!String(nextInput.role || '').trim()) nextInput.role = existing.role;
+    if (!String(nextInput.accountStatus || '').trim()) nextInput.accountStatus = existing.accountStatus;
   }
 
-  return Array.from(merged.values())
-    .filter((row) => includeDisabled || row.accountStatus !== "disabled")
-    .filter((row) => includeArchived || row.accountStatus !== "archived")
-    .map(safeEmployeePayload)
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  if (existing && isSelf(existing.id, actor)) {
+    // Managers can edit their own normal profile fields, but may not use the
+    // employee service to remove their own management access or disable self.
+    nextInput.role = existing.role;
+    nextInput.accountStatus = existing.accountStatus;
+  }
+
+  const requestedRole = assertRoleAssignment(actor, nextInput.role || existing?.role || 'agent');
+  nextInput.role = requestedRole;
+  nextInput.accountStatus = normaliseAccountStatus(nextInput.accountStatus || existing?.accountStatus || 'active');
+
+  if (existing) {
+    await assertSupervisorTeamCanChange(existing, nextInput.role, nextInput.accountStatus);
+  }
+
+  const result = await saveEmployeeCore(nextInput, actor);
+  notifyDirectoryChanged({ action: 'save', employeeId: result?.id || employeeId });
+  return result;
+}
+
+export async function setEmployeeStatus(id, status, actor = null) {
+  assertManagementActor(actor);
+  const employee = await getEmployeeCore(id, { allowLegacyFallback: true });
+  if (!employee) throw new Error('Employee not found.');
+  assertTargetPermission(employee, actor);
+
+  const nextStatus = normaliseAccountStatus(status);
+  if (isSelf(employee.id, actor) && nextStatus !== normaliseAccountStatus(employee.accountStatus)) {
+    throw new Error('You cannot change your own account status.');
+  }
+
+  await assertSupervisorTeamCanChange(employee, employee.role, nextStatus);
+  const result = await setEmployeeStatusCore(id, nextStatus, actor);
+  notifyDirectoryChanged({ action: 'status', employeeId: String(id || ''), status: nextStatus });
+  return result;
+}
+
+export async function setEmployeeRole(id, role, actor = null) {
+  assertManagementActor(actor);
+  const employee = await getEmployeeCore(id, { allowLegacyFallback: true });
+  if (!employee) throw new Error('Employee not found.');
+  assertTargetPermission(employee, actor);
+
+  const nextRole = assertRoleAssignment(actor, role);
+  if (isSelf(employee.id, actor) && nextRole !== normaliseRole(employee.role)) {
+    throw new Error('You cannot change your own management role.');
+  }
+
+  await assertSupervisorTeamCanChange(employee, nextRole, employee.accountStatus);
+  const result = await setEmployeeRoleCore(id, nextRole, actor);
+  notifyDirectoryChanged({ action: 'role', employeeId: String(id || ''), role: nextRole });
+  return result;
 }
