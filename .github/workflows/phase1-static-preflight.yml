@@ -1,0 +1,45 @@
+name: Phase 1 static preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'app-core.js'
+      - 'employee-directory.js'
+      - 'employee-directory-core.js'
+      - 'employees-ui.js'
+      - 'employees-ui-core.js'
+      - 'tickets.js'
+      - 'tickets-core.js'
+      - 'payroll.js'
+      - 'payroll-core.js'
+      - 'reports.js'
+      - 'reports-core.js'
+      - 'messages.js'
+      - 'messages-core.js'
+      - 'groups.js'
+      - 'groups-core.js'
+      - 'tools/phase1-static-preflight.mjs'
+      - '.github/workflows/phase1-static-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-preflight:
+    name: Validate Phase 1 migration loaders
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run deterministic preflight
+        run: node tools/phase1-static-preflight.mjs
