@@ -52,8 +52,8 @@ function patchPayroll(coreSource) {
   source = replaceRequired(
     source,
     'function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();',
-    `${payrollLifecycleHelpers}async function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();\n  bindPayrollPageLifecycle();`,
-    'payroll init directory/lifecycle refresh'
+    `${payrollLifecycleHelpers}async function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();\n  bindPayrollPageLifecycle();\n  if (currentUser && payrollPageIsActive()) await refreshPayrollStaffDirectory();`,
+    'payroll init lifecycle'
   );
 
   source = replaceRequired(
@@ -64,7 +64,7 @@ function patchPayroll(coreSource) {
   );
 
   const oldUserChanged = `window.addEventListener("telesyriana:user-changed", () => {\n  currentUser = getCurrentUser();\n  populateStaffFilters();\n  setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser) subscribePayroll();\n});`;
-  const newUserChanged = `async function refreshPayrollForCurrentDirectory({ resetRange = false } = {}) {\n  currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();\n  populateStaffFilters();\n  if (resetRange) setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser && payrollPageIsActive()) subscribePayroll();\n  else stopPayrollPageSubscriptions();\n}\n\nwindow.addEventListener("telesyriana:user-changed", () => refreshPayrollForCurrentDirectory({ resetRange: true }));\nwindow.addEventListener("telesyriana:employee-directory-changed", () => refreshPayrollForCurrentDirectory({ resetRange: false }));`;
+  const newUserChanged = `async function refreshPayrollForCurrentDirectory({ resetRange = false } = {}) {\n  currentUser = getCurrentUser();\n  if (resetRange) setThisWeekFilters();\n\n  if (!currentUser || !payrollPageIsActive()) {\n    stopPayrollPageSubscriptions();\n    setPermissionsUI();\n    renderPayroll();\n    return;\n  }\n\n  await refreshPayrollStaffDirectory();\n  populateStaffFilters();\n  setPermissionsUI();\n  renderPayroll();\n  subscribePayroll();\n}\n\nwindow.addEventListener("telesyriana:user-changed", () => refreshPayrollForCurrentDirectory({ resetRange: true }));\nwindow.addEventListener("telesyriana:employee-directory-changed", () => refreshPayrollForCurrentDirectory({ resetRange: false }));`;
   source = replaceRequired(source, oldUserChanged, newUserChanged, 'payroll user/directory refresh');
 
   if (source.includes('const STAFF = {')) throw new Error('Payroll directory validation failed: legacy STAFF remains.');
@@ -72,6 +72,7 @@ function patchPayroll(coreSource) {
   if (source.includes('["admin", "manager", "supervisor"].includes(role)')) throw new Error('Payroll visibility validation failed.');
   if (!source.includes('.filter((id) => String(STAFF[id]?.accountStatus || "active") === "active")')) throw new Error('Payroll directory validation failed: inactive settings targets remain.');
   if (!source.includes('function payrollPageIsActive()') || !source.includes('stopPayrollPageSubscriptions()')) throw new Error('Payroll quota validation failed: hidden-page subscriptions remain.');
+  if (source.includes('currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();')) throw new Error('Payroll quota validation failed: directory still loads before page/login need.');
   return source;
 }
 
