@@ -630,13 +630,24 @@ if (window.__TS_MEETINGS_INIT__) {
     });
   }
 
-  // -------------------- init --------------------
-  function initاجتماعs() {
-    const user = getCurrentUser();
+  function meetingsPageIsActive() {
+    const page = document.getElementById("page-meetings");
+    return Boolean(page && !page.classList.contains("hidden"));
+  }
 
-    // supervisor create UI
+  function stopUpcomingSubscription() {
+    if (unsubUpcoming) {
+      try { unsubUpcoming(); } catch {}
+    }
+    unsubUpcoming = null;
+  }
+
+  function syncMeetingsPageRealtime() {
+    const user = getCurrentUser();
+    const active = meetingsPageIsActive();
+
     if (elCreateBox) {
-      const show = !!user && canManageاجتماعs(user);
+      const show = active && !!user && canManageاجتماعs(user);
       elCreateBox.classList.toggle("hidden", !show);
       if (show) {
         injectShareButtons();
@@ -644,7 +655,24 @@ if (window.__TS_MEETINGS_INIT__) {
       }
     }
 
+    if (!user || !active) {
+      stopUpcomingSubscription();
+      return;
+    }
+
     subscribeUpcoming();
+  }
+
+  // -------------------- init --------------------
+  function initاجتماعs() {
+    syncMeetingsPageRealtime();
+
+    document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.page === "meetings") setTimeout(syncMeetingsPageRealtime, 0);
+        else stopUpcomingSubscription();
+      });
+    });
 
     elSearch?.addEventListener("input", () => applySearch(elSearch.value));
     elSearchClear?.addEventListener("click", () => {
@@ -677,13 +705,7 @@ if (window.__TS_MEETINGS_INIT__) {
     leaveBtn?.addEventListener("click", leaveاجتماع);
 
     window.addEventListener("telesyriana:user-changed", () => {
-      const u = getCurrentUser();
-      const show = !!u && canManageاجتماعs(u);
-      elCreateBox?.classList.toggle("hidden", !show);
-      if (show) {
-        injectShareButtons();
-        prepareCreateDefaults(false).catch(console.error);
-      }
+      syncMeetingsPageRealtime();
     });
   }
 

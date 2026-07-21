@@ -288,22 +288,55 @@ function hookNotes() {
   window.addEventListener("beforeunload", () => { if (isDirty) saveCurrentNote({ silent: true }); });
 }
 
+let notesPageLifecycleBound = false;
+
+function notesPageIsActive() {
+  const page = el("page-tasks");
+  return Boolean(page && !page.classList.contains("hidden"));
+}
+
+function stopNotesSubscription() {
+  if (unsubNotes) {
+    try { unsubNotes(); } catch {}
+  }
+  unsubNotes = null;
+}
+
+function bindNotesPageLifecycle() {
+  if (notesPageLifecycleBound) return;
+  notesPageLifecycleBound = true;
+  document.addEventListener("click", (event) => {
+    const nav = event.target?.closest?.(".nav-link[data-page]");
+    if (!nav) return;
+    if (nav.dataset.page === "tasks") setTimeout(initNotes, 0);
+    else stopNotesSubscription();
+  });
+}
+
 function initNotes() {
   currentUser = getUser();
   hookNotes();
   translateNotesStatic();
+  bindNotesPageLifecycle();
+
   if (!currentUser) {
     notes = [];
     blankEditor(true);
-    if (unsubNotes) unsubNotes();
-    unsubNotes = null;
+    stopNotesSubscription();
     setStatus(nt("يلزم تسجيل الدخول", "Login required"), "error");
     return;
   }
+
+  if (!notesPageIsActive()) {
+    stopNotesSubscription();
+    return;
+  }
+
   subscribeNotes();
 }
 
-document.addEventListener("DOMContentLoaded", initNotes);
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initNotes);
+else initNotes();
 window.addEventListener("telesyriana:user-changed", initNotes);
 
 window.addEventListener("telesyriana:language-changed", () => { translateNotesStatic(); renderNotesList(); if (selectedId) applyEditor(notes.find((n) => n.id === selectedId)); });
