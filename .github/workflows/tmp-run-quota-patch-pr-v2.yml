@@ -1,15 +1,15 @@
-name: Temporary quota patch runner v6
+name: Temporary quota patch runner v7
 
 on:
-  push:
-    branches: [agent/firestore-quota-hotfix-v2]
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message, '[quota-v2-patched]') }}
+    if: github.head_ref == 'agent/firestore-quota-hotfix-v2'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +17,18 @@ jobs:
           ref: agent/firestore-quota-hotfix-v2
           fetch-depth: 0
 
+      - name: Detect whether source is already patched
+        id: state
+        shell: bash
+        run: |
+          if grep -q 'function notesPageIsActive' tasks.js && grep -q 'function meetingsPageIsActive' meetings.js; then
+            echo 'patched=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'patched=false' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Apply Notes and Meetings quota lifecycle patch
+        if: steps.state.outputs.patched != 'true'
         run: python tools/apply-quota-hotfix-tasks-meetings.py
 
       - name: Syntax check affected modules
@@ -50,6 +61,7 @@ jobs:
           PY
 
       - name: Commit Notes and Meetings quota hotfix
+        if: steps.state.outputs.patched != 'true'
         run: |
           git config user.name 'TeleSyriana Quota Hotfix'
           git config user.email 'actions@users.noreply.github.com'
