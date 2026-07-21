@@ -126,10 +126,11 @@ jobs:
               reportsLifecycle: Boolean(window.__TS_REPORTS_PAGE_LIFECYCLE__),
               payrollLifecycle: Boolean(window.__TS_PAYROLL_PAGE_LIFECYCLE__),
               messagesLifecycle: Boolean(window.__TS_MESSAGE_PAGE_LIFECYCLE__),
+              employeesLifecycle: Boolean(window.__TS_EMPLOYEES_PAGE_LIFECYCLE__),
               appLoaded: Boolean(document.getElementById('login-form')),
             }));
 
-            const fallbackPattern = /(Phase 1 employee-directory loader failed|Central ticket staff-directory bridge failed|Central reports staff-directory bridge failed|Central payroll staff-directory bridge failed|Central chat employee-directory bridge failed|Groups directory bridge failed|Employees UI safety bridge failed)/i;
+            const fallbackPattern = /(Phase 1 employee-directory loader failed|Central ticket staff-directory bridge failed|Central reports staff-directory bridge failed|Central payroll staff-directory bridge failed|Central chat employee-directory bridge failed|Central group member-directory bridge failed|Employees UI safety bridge failed)/i;
             const fallbackLogs = consoleRows.filter((row) => fallbackPattern.test(row));
 
             console.log('runtime=' + JSON.stringify(runtime));
@@ -137,7 +138,7 @@ jobs:
             console.log('page_errors=' + JSON.stringify(pageErrors));
             console.log('console_tail=' + JSON.stringify(consoleRows.slice(-30)));
 
-            const lifecycleOk = runtime.ticketLifecycle && runtime.reportsLifecycle && runtime.payrollLifecycle && runtime.messagesLifecycle;
+            const lifecycleOk = runtime.ticketLifecycle && runtime.reportsLifecycle && runtime.payrollLifecycle && runtime.messagesLifecycle && runtime.employeesLifecycle;
             if (!runtime.appLoaded) throw new Error('Login UI did not load.');
             if (!lifecycleOk) throw new Error(`One or more Phase 1 page lifecycle bridges did not initialize: ${JSON.stringify(runtime)}`);
             if (fallbackLogs.length) throw new Error(`One or more Phase 1 loaders fell back to untouched core: ${fallbackLogs.join(' | ')}`);
