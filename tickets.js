@@ -43,14 +43,14 @@ function patchTickets(coreSource) {
   source = replaceRequired(
     source,
     'function initTickets() {\n  currentUser = getCurrentUser();',
-    `${ticketLifecycleHelpers}async function initTickets() {\n  currentUser = getCurrentUser();\n  await refreshTicketStaffDirectory();\n  bindTicketPageLifecycle();`,
-    'ticket init directory/lifecycle refresh'
+    `${ticketLifecycleHelpers}async function initTickets() {\n  currentUser = getCurrentUser();\n  bindTicketPageLifecycle();`,
+    'ticket init lifecycle'
   );
 
   source = replaceRequired(
     source,
     '  ensureDeletedTicketsUI();\n  subscribeTickets();\n  subscribeDeletedTickets();\n}',
-    '  ensureDeletedTicketsUI();\n  if (!ticketPageIsActive()) {\n    stopTicketPageSubscriptions();\n    return;\n  }\n  subscribeTickets();\n}',
+    '  ensureDeletedTicketsUI();\n  if (!ticketPageIsActive()) {\n    stopTicketPageSubscriptions();\n    return;\n  }\n  await refreshTicketStaffDirectory();\n  fillAssigneeSelect(el("ticket-assigned"), true);\n  fillAssigneeSelect(el("ticket-detail-assigned"), true);\n  subscribeTickets();\n}',
     'lazy ticket page subscriptions'
   );
 
@@ -64,7 +64,7 @@ function patchTickets(coreSource) {
   source = replaceRequired(
     source,
     'window.addEventListener("telesyriana:user-changed", initTickets);',
-    'window.addEventListener("telesyriana:user-changed", initTickets);\nwindow.addEventListener("telesyriana:employee-directory-changed", initTickets);',
+    'window.addEventListener("telesyriana:user-changed", initTickets);\nwindow.addEventListener("telesyriana:employee-directory-changed", () => { if (currentUser && ticketPageIsActive()) initTickets(); });',
     'ticket directory change listener'
   );
 
@@ -73,6 +73,7 @@ function patchTickets(coreSource) {
   if (!source.includes('const activeStaff = Object.values(STAFF).filter')) throw new Error('Ticket directory validation failed: active assignment filter missing.');
   if (!source.includes('function ticketPageIsActive()') || !source.includes('stopTicketPageSubscriptions()')) throw new Error('Ticket quota validation failed: hidden-page subscriptions remain.');
   if (!source.includes('subscribeDeletedTickets();\n  renderDeletedTicketsList();')) throw new Error('Ticket quota validation failed: deleted tickets are not on-demand.');
+  if (source.includes('currentUser = getCurrentUser();\n  await refreshTicketStaffDirectory();')) throw new Error('Ticket quota validation failed: directory still loads before page/login need.');
   return source;
 }
 
