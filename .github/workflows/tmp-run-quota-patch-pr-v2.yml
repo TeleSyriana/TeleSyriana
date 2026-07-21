@@ -1,4 +1,4 @@
-name: Temporary quota patch PR runner v3
+name: Temporary quota patch PR runner v4
 
 on:
   pull_request:
@@ -17,8 +17,8 @@ jobs:
           ref: agent/firestore-quota-hotfix-v1
           fetch-depth: 0
 
-      - name: Apply deterministic quota hotfix v3
-        run: python tools/apply-quota-hotfix-v3.py
+      - name: Fix Messages quota lifecycle ordering
+        run: python tools/fix-quota-hotfix-messages.py
 
       - name: Syntax check patched stable cores
         run: |
@@ -29,7 +29,7 @@ jobs:
           node --check /tmp/messages-core.mjs
           node --check /tmp/groups-core.mjs
 
-      - name: Verify quota markers after patch
+      - name: Verify quota lifecycle after repair
         shell: bash
         run: |
           grep -q 'setInterval(() => updatePresence(false), 60_000)' app-core.js
@@ -37,16 +37,28 @@ jobs:
           grep -q 'where("status", "in"' app-core.js
           grep -q 'function messagesPageIsActive' messages-core.js
           grep -q 'function stopMessagesPageRealtime' messages-core.js
+          grep -q 'subscribeGroupsCloud();' messages-core.js
+          grep -q 'subscribeRecentsCloud();' messages-core.js
           grep -q 'function groupsMessagesPageIsActive' groups-core.js
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('messages-core.js').read_text()
+          a = s.index('function syncMessagesPageRealtime()')
+          b = s.index('// ---------------- init ----------------', a)
+          helper = s[a:b]
+          if 'syncMessagesPageRealtime();' in helper:
+              raise SystemExit('Messages helper recursion is still present')
+          print('Messages helper recursion check: PASS')
+          PY
 
-      - name: Commit patched stable cores
+      - name: Commit repaired stable core
         run: |
           git config user.name 'TeleSyriana Quota Hotfix'
           git config user.email 'actions@users.noreply.github.com'
-          git add app-core.js messages-core.js groups-core.js
+          git add messages-core.js
           if git diff --cached --quiet; then
-            echo 'No source changes to commit.'
+            echo 'No repair changes to commit.'
             exit 0
           fi
-          git commit -m '[quota-patch] reduce always-on Firestore listeners'
+          git commit -m '[quota-patch] fix Messages page-aware lifecycle'
           git push origin HEAD:agent/firestore-quota-hotfix-v1
