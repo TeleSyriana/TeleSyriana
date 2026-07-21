@@ -6,6 +6,10 @@ on:
     paths:
       - 'app.js'
       - 'app-core.js'
+      - 'messages.js'
+      - 'messages-core.js'
+      - 'groups.js'
+      - 'groups-core.js'
       - 'index.html'
       - '.github/workflows/emergency-login-smoke.yml'
   workflow_dispatch:
