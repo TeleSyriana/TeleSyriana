@@ -62,6 +62,25 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Read-only Firestore employee probe
+        if: steps.preflight.outputs.exit_code == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://firestore.googleapis.com/v1/projects/telesyriana-ccms/databases/(default)/documents/employees/__telesyriana_phase1_read_probe__?key=AIzaSyDSvgD5GEZRE_zBzspoPr3pHQW1XOZr6yQ'
+          code="$(curl --silent --show-error --output firestore-read-probe.json --write-out '%{http_code}' "$url")"
+          echo "Firestore employee read probe HTTP status: $code"
+          case "$code" in
+            200|404)
+              echo 'Read access reached Firestore successfully; probe document was either readable or correctly absent.'
+              ;;
+            *)
+              echo 'Firestore employee read probe failed:' >&2
+              cat firestore-read-probe.json >&2 || true
+              exit 1
+              ;;
+          esac
+
       - name: Fail when preflight failed
         if: steps.preflight.outputs.exit_code != '0'
         shell: bash
