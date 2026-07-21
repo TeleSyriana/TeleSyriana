@@ -134,10 +134,17 @@ function cleanCurrency(value) {
   return /^[A-Z]{3}$/.test(code) ? code : "USD";
 }
 
+function requestedProjectIds(input = {}) {
+  const explicit = normaliseProjectId(input.projectId || input.activeProjectId || "");
+  const listed = normaliseProjectIds(input.projectIds || input.projects || []);
+  if (explicit && !listed.includes(explicit)) listed.unshift(explicit);
+  return listed;
+}
+
 function roleProjectShape(role, input = {}) {
   const canonical = normaliseCanonicalRole(role);
+  const requested = requestedProjectIds(input);
   const inputProjectId = normaliseProjectId(input.projectId || input.activeProjectId || "");
-  let projectIds = normaliseProjectIds(input.projectIds || input.projects || []);
 
   if (canonical === EMPLOYEE_ROLES.CEO) {
     return {
@@ -147,14 +154,13 @@ function roleProjectShape(role, input = {}) {
   }
 
   if (canonical === EMPLOYEE_ROLES.HR) {
-    if (inputProjectId && !projectIds.includes(inputProjectId)) projectIds.unshift(inputProjectId);
     return {
-      projectId: inputProjectId || projectIds[0] || "",
-      projectIds,
+      projectId: inputProjectId || requested[0] || "",
+      projectIds: requested,
     };
   }
 
-  const projectId = inputProjectId || projectIds[0] || "";
+  const projectId = inputProjectId || requested[0] || "";
   return {
     projectId,
     projectIds: projectId ? [projectId] : [],
@@ -189,6 +195,7 @@ export function normaliseEmployeeIdentity(input = {}, options = {}) {
 export function validateEmployeeIdentity(input = {}, options = {}) {
   const employee = normaliseEmployeeIdentity(input, options);
   const errors = [];
+  const requestedProjects = requestedProjectIds(input);
 
   if (!isValidEmployeeUid(employee.employeeUid)) {
     errors.push("A permanent employeeUid is required.");
@@ -214,7 +221,7 @@ export function validateEmployeeIdentity(input = {}, options = {}) {
   }
 
   if (role === EMPLOYEE_ROLES.ACM || role === EMPLOYEE_ROLES.SUPERVISOR) {
-    if (!employee.projectId || employee.projectIds.length !== 1) {
+    if (!employee.projectId || employee.projectIds.length !== 1 || requestedProjects.length !== 1) {
       errors.push(`${role} must belong to exactly one project.`);
     }
     if (employee.supervisorUid || employee.supervisorCcmsId) {
@@ -235,7 +242,7 @@ export function validateEmployeeIdentity(input = {}, options = {}) {
   }
 
   if (role === EMPLOYEE_ROLES.AGENT) {
-    if (!employee.projectId || employee.projectIds.length !== 1) {
+    if (!employee.projectId || employee.projectIds.length !== 1 || requestedProjects.length !== 1) {
       errors.push("Agent must belong to exactly one project.");
     }
     const supervisorRequired = options.allowPendingSupervisor !== true || employee.accountStatus === "active";
