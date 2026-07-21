@@ -44,7 +44,7 @@ const CORE_MARKERS = Object.freeze({
     'import { db, fs } from "./firebase.js";',
     '// Demo users\n',
     'function hasRoleAtLeast(user, role) {',
-    '        const u = JSON.parse(savedUser);\n        if (USERS[u.id]) {',
+    '      const u = JSON.parse(savedUser);\n      if (USERS[u.id]) {',
     '    currentUser = safeUserPayload(id);',
     'let staffSettingsUnsub = null;\nlet issueStatsByDay = {};',
     '/* --------------------------- Widgets (Clock/Date) ------------------------ */',
@@ -156,6 +156,9 @@ function verifyFacadeAndLoaderGuards() {
   const directory = read('employee-directory.js');
   assert(directory.includes("export * from './employee-directory-core.js';"), 'employee-directory.js: core facade export missing');
   assert(directory.includes("telesyriana:employee-directory-changed"), 'employee-directory.js: directory change event missing');
+  assert(directory.includes('assertManagementActor(actor)'), 'employee-directory.js: management actor guard missing');
+  assert(directory.includes('assertSupervisorTeamCanChange'), 'employee-directory.js: Supervisor team guard missing');
+  assert(directory.includes('You cannot change your own management role.'), 'employee-directory.js: self-role service guard missing');
 
   const loaders = {
     'app.js': ['legacy auth code remains', 'profile name can still override directory identity'],
