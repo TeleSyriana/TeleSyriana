@@ -51,7 +51,7 @@ jobs:
           from pathlib import Path
           tasks = Path('tasks.js').read_text()
           meetings = Path('meetings.js').read_text()
-          if 'document.addEventListener("DOMContentLoaded", initNotes);' in tasks:
+          if '\ndocument.addEventListener("DOMContentLoaded", initNotes);' in tasks:
               raise SystemExit('Notes still uses unconditional legacy boot')
           init_pos = meetings.index('function initاجتماعs()')
           init_tail = meetings[init_pos:init_pos+2500]
