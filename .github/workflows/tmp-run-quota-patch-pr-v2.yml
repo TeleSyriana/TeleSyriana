@@ -1,14 +1,14 @@
-name: Temporary quota patch PR runner v2
+name: Temporary quota patch PR runner v3
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  patch:
     if: github.head_ref == 'agent/firestore-quota-hotfix-v1'
     runs-on: ubuntu-latest
     steps:
@@ -17,65 +17,36 @@ jobs:
           ref: agent/firestore-quota-hotfix-v1
           fetch-depth: 0
 
-      - name: Count exact quota patch markers
-        id: marker_counts
-        shell: python
+      - name: Apply deterministic quota hotfix v3
+        run: python tools/apply-quota-hotfix-v3.py
+
+      - name: Syntax check patched stable cores
         run: |
-          from pathlib import Path
+          cp app-core.js /tmp/app-core.mjs
+          cp messages-core.js /tmp/messages-core.mjs
+          cp groups-core.js /tmp/groups-core.mjs
+          node --check /tmp/app-core.mjs
+          node --check /tmp/messages-core.mjs
+          node --check /tmp/groups-core.mjs
 
-          checks = []
-          app = Path('app-core.js').read_text()
-          msg = Path('messages-core.js').read_text()
-          grp = Path('groups-core.js').read_text()
-
-          checks.append(('app presence lifecycle', app.count('''function startPresence() {\n  if (!currentUser) return;\n  subscribePresence();\n  updatePresence(true);\n  if (presenceTimerId) clearInterval(presenceTimerId);\n  presenceTimerId = setInterval(() => updatePresence(false), 30_000);\n}''')))
-          checks.append(('management issue calendar full collection', app.count('if (role !== "agent") return [{ key: "team", source: base }];')))
-          checks.append(('app page switch presence marker', app.count('  updatePresence(false).catch(() => {});\n  try { translateFeaturePages(getLanguage()); applyPhase21LanguagePolish(getLanguage()); setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 80); } catch {}')))
-
-          checks.append(('messages unread watcher registration', msg.count('  updateBadgesForRoom(key);\n  ensureUnreadWatcher(key);')))
-          checks.append(('messages init marker', msg.count('// ---------------- init ----------------\n')))
-          checks.append(('messages initial presence/profile', msg.count('  setCurrentUser();\n  subscribePresenceSidebar();\n  subscribeProfilesSidebar();\n  applyProfileAvatars();')))
-          checks.append(('messages groups/recents pair', msg.count('  subscribeGroupsCloud();\n  subscribeRecentsCloud();')))
-          checks.append(('messages nav lifecycle', msg.count('''  document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {\n    btn.addEventListener("click", () => {\n      if (btn.dataset.page !== "messages") document.body.classList.remove("chat-open");\n    });\n  });''')))
-          checks.append(('messages status listener end', msg.count('  subscribeالحالةDots();\n});')))
-          checks.append(('messages user-change listener bundle', msg.count('''  subscribeGroupsCloud();\n  subscribeRecentsCloud();\n  subscribeالحالةDots();\n  subscribeProfilesSidebar();\n  applyProfileAvatars();\n  applyBirthdayBadges();\n  applyProfileAvatars();''')))
-
-          checks.append(('groups startup/user-change tail', grp.count('''document.addEventListener("DOMContentLoaded", () => {\n  hookMemberSearch();\n  hookUI();\n  subscribeGroupsList();\n});\n\nwindow.addEventListener("telesyriana:user-changed", () => {\n  applySupervisorVisibility();\n  subscribeGroupsList();\n});''')))
-
-          bad = False
-          lines = []
-          for label, count in checks:
-              lines.append(f'{label}: {count}')
-              if label == 'messages groups/recents pair':
-                  if count < 1: bad = True
-              elif count != 1:
-                  bad = True
-
-          lines.append(f'diagnostic_status: {"FAIL" if bad else "PASS"}')
-          Path('quota-marker-diagnostics.txt').write_text('\n'.join(lines) + '\n')
-          print('\n'.join(lines))
-
-          with open(Path().resolve() / Path(str(Path.home())), 'w') if False else open('/dev/null', 'w'):
-              pass
-
-          # Keep this step successful so the artifact is always uploaded.
-          Path('quota-marker-status.txt').write_text('1' if bad else '0')
-
-      - name: Upload quota marker diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quota-marker-diagnostics
-          path: |
-            quota-marker-diagnostics.txt
-            quota-marker-status.txt
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Fail when marker diagnostics found mismatches
+      - name: Verify quota markers after patch
         shell: bash
         run: |
-          cat quota-marker-diagnostics.txt
-          if [ "$(cat quota-marker-status.txt)" != "0" ]; then
-            exit 1
+          grep -q 'setInterval(() => updatePresence(false), 60_000)' app-core.js
+          grep -q 'function syncHomeRealtimeListeners' app-core.js
+          grep -q 'where("status", "in"' app-core.js
+          grep -q 'function messagesPageIsActive' messages-core.js
+          grep -q 'function stopMessagesPageRealtime' messages-core.js
+          grep -q 'function groupsMessagesPageIsActive' groups-core.js
+
+      - name: Commit patched stable cores
+        run: |
+          git config user.name 'TeleSyriana Quota Hotfix'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app-core.js messages-core.js groups-core.js
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
           fi
+          git commit -m '[quota-patch] reduce always-on Firestore listeners'
+          git push origin HEAD:agent/firestore-quota-hotfix-v1
