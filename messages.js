@@ -1,6 +1,7 @@
 // messages.js — TeleSyriana Phase 1 employee-directory migration loader
 // Preserves the current chat engine in messages-core.js and makes Direct
-// Messages/role avatars come from the central employee directory.
+// Messages/role avatars come from the central employee directory while avoiding
+// hidden-page presence/status read amplification.
 
 const CORE_URL = new URL('./messages-core.js', import.meta.url);
 const FIREBASE_URL = new URL('./firebase.js', import.meta.url).href;
@@ -37,7 +38,7 @@ function patchMessages(coreSource) {
   const newDmDisplayName = `function getDmDisplayName(userId) {\n  const id = String(userId || "");\n  const directoryName = employeeDirectoryCache.get(id)?.name;\n  const profileName = profileCache.get(id)?.name;\n  const nameEl = document.querySelector(\`[data-name="\${CSS.escape(id)}"]\`);\n  return String(directoryName || profileName || nameEl?.dataset?.baseName || nameEl?.textContent || \`CCMS \${id}\`).replace("🎂", "").trim();\n}`;
   source = replaceRequired(source, oldDmDisplayName, newDmDisplayName, 'central DM display name');
 
-  const directoryHelpers = `async function refreshMessageEmployeeDirectory() {\n  const rows = await listEmployees({ includeDisabled: false, includeArchived: false });\n  employeeDirectoryCache.clear();\n  rows.forEach((row) => employeeDirectoryCache.set(String(row.id), row));\n\n  if (!dmListEl) dmListEl = document.getElementById("dm-list");\n  if (!dmListEl) return;\n\n  dmListEl.innerHTML = rows.map((row) => {\n    const id = String(row.id || "");\n    const name = String(row.name || id || "User");\n    const initials = getInitials(name);\n    const cls = roleClassForUser(id);\n    return \`<button class="chat-dm" type="button" data-dm="\${id}">\n      <div class="chat-row">\n        <div class="dm-avatar-wrap">\n          <div class="chat-avatar \${cls}" data-avatar="\${id}" data-initial="\${initials}">\${initials}</div>\n          <span class="status-dot dot-offline" data-status-dot="\${id}"></span>\n        </div>\n        <div class="chat-row-text">\n          <div class="chat-room-title" data-name="\${id}">\${name}</div>\n          <div class="chat-room-sub" data-sub="\${id}">\${msgT("directChat")}</div>\n        </div>\n      </div>\n    </button>\`;\n  }).join("");\n}\n\nfunction bindDirectoryDmButtons() {\n  document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {\n    setCurrentUser();\n    const otherId = btn.dataset.dm;\n    if (otherId && currentUser?.id) {\n      const rid = dmRoomId(currentUser.id, otherId);\n      registerRoomButton(String(rid), btn);\n    }\n\n    btn.addEventListener("click", () => {\n      setCurrentUser();\n      if (!currentUser) return;\n      const otherId = btn.dataset.dm;\n      const roomId = dmRoomId(currentUser.id, otherId);\n      const nameEl = btn.querySelector(".chat-room-title");\n      const otherName = getDmDisplayName(otherId) || (nameEl?.textContent || \`CCMS \${otherId}\`).replace("🎂", "").trim();\n      openChat({ type: "dm", roomId, title: otherName, desc: \`\${msgT("directChat")} • CCMS \${otherId}\` }, btn);\n    });\n  });\n}\n\nasync function refreshMessagesForEmployeeDirectory() {\n  await refreshMessageEmployeeDirectory();\n  bindDirectoryDmButtons();\n  applyBirthdayBadges();\n  applyProfileAvatars();\n  applySearchFilter();\n}\n\nwindow.addEventListener("telesyriana:employee-directory-changed", refreshMessagesForEmployeeDirectory);\n\n`;
+  const directoryHelpers = `async function refreshMessageEmployeeDirectory() {\n  const rows = await listEmployees({ includeDisabled: false, includeArchived: false });\n  employeeDirectoryCache.clear();\n  rows.forEach((row) => employeeDirectoryCache.set(String(row.id), row));\n\n  if (!dmListEl) dmListEl = document.getElementById("dm-list");\n  if (!dmListEl) return;\n\n  dmListEl.innerHTML = rows.map((row) => {\n    const id = String(row.id || "");\n    const name = String(row.name || id || "User");\n    const initials = getInitials(name);\n    const cls = roleClassForUser(id);\n    return \`<button class="chat-dm" type="button" data-dm="\${id}">\n      <div class="chat-row">\n        <div class="dm-avatar-wrap">\n          <div class="chat-avatar \${cls}" data-avatar="\${id}" data-initial="\${initials}">\${initials}</div>\n          <span class="status-dot dot-offline" data-status-dot="\${id}"></span>\n        </div>\n        <div class="chat-row-text">\n          <div class="chat-room-title" data-name="\${id}">\${name}</div>\n          <div class="chat-room-sub" data-sub="\${id}">\${msgT("directChat")}</div>\n        </div>\n      </div>\n    </button>\`;\n  }).join("");\n}\n\nfunction bindDirectoryDmButtons() {\n  document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {\n    setCurrentUser();\n    const otherId = btn.dataset.dm;\n    if (otherId && currentUser?.id) {\n      const rid = dmRoomId(currentUser.id, otherId);\n      registerRoomButton(String(rid), btn);\n    }\n\n    btn.addEventListener("click", () => {\n      setCurrentUser();\n      if (!currentUser) return;\n      const otherId = btn.dataset.dm;\n      const roomId = dmRoomId(currentUser.id, otherId);\n      const nameEl = btn.querySelector(".chat-room-title");\n      const otherName = getDmDisplayName(otherId) || (nameEl?.textContent || \`CCMS \${otherId}\`).replace("🎂", "").trim();\n      openChat({ type: "dm", roomId, title: otherName, desc: \`\${msgT("directChat")} • CCMS \${otherId}\` }, btn);\n    });\n  });\n}\n\nfunction messagesPageIsActive() {\n  const page = document.getElementById("page-messages");\n  return Boolean(page && !page.classList.contains("hidden"));\n}\n\nfunction stopMessagePageRealtime() {\n  try { unsubPresence?.(); } catch {}\n  unsubPresence = null;\n  try { unsubscribeProfiles?.(); } catch {}\n  unsubscribeProfiles = null;\n  try { unsubscribeالحالة?.(); } catch {}\n  unsubscribeالحالة = null;\n  presenceCache.clear();\n}\n\nfunction syncMessagePageRealtime() {\n  if (!messagesPageIsActive() || !currentUser?.id) {\n    stopMessagePageRealtime();\n    return;\n  }\n  subscribePresenceSidebar();\n  subscribeProfilesSidebar();\n  subscribeالحالةDots();\n}\n\nfunction bindMessagePageLifecycle() {\n  if (window.__TS_MESSAGE_PAGE_LIFECYCLE__) return;\n  window.__TS_MESSAGE_PAGE_LIFECYCLE__ = true;\n  document.addEventListener("click", (event) => {\n    const nav = event.target?.closest?.(".nav-link[data-page]");\n    if (!nav) return;\n    if (nav.dataset.page === "messages") setTimeout(syncMessagePageRealtime, 0);\n    else stopMessagePageRealtime();\n  });\n}\n\nasync function refreshMessagesForEmployeeDirectory() {\n  await refreshMessageEmployeeDirectory();\n  bindDirectoryDmButtons();\n  applyBirthdayBadges();\n  applyProfileAvatars();\n  applySearchFilter();\n  syncMessagePageRealtime();\n}\n\nwindow.addEventListener("telesyriana:employee-directory-changed", refreshMessagesForEmployeeDirectory);\n\n`;
   source = replaceRequired(source, '// ---------------- init ----------------\n', directoryHelpers + '// ---------------- init ----------------\n', 'chat directory helpers');
 
   source = replaceRequired(
@@ -48,9 +49,9 @@ function patchMessages(coreSource) {
   );
   source = replaceRequired(
     source,
-    '  setCurrentUser();\n  subscribePresenceSidebar();',
-    '  setCurrentUser();\n  await refreshMessageEmployeeDirectory();\n  subscribePresenceSidebar();',
-    'initial chat employee directory load'
+    '  setCurrentUser();\n  subscribePresenceSidebar();\n  subscribeProfilesSidebar();',
+    '  setCurrentUser();\n  await refreshMessageEmployeeDirectory();\n  bindMessagePageLifecycle();\n  syncMessagePageRealtime();',
+    'lazy initial chat realtime'
   );
 
   source = replaceBetweenRequired(
@@ -61,9 +62,31 @@ function patchMessages(coreSource) {
     'static DM binding block'
   );
 
+  source = replaceRequired(
+    source,
+    '  subscribeالحالةDots();\n});',
+    '  syncMessagePageRealtime();\n});',
+    'lazy initial status dots'
+  );
+
+  source = replaceRequired(
+    source,
+    'window.addEventListener("telesyriana:user-changed", () => {\n  setCurrentUser();',
+    'window.addEventListener("telesyriana:user-changed", () => {\n  setCurrentUser();\n  syncMessagePageRealtime();',
+    'chat user-change realtime lifecycle'
+  );
+
+  source = replaceRequired(
+    source,
+    '  subscribeGroupsCloud();\n  subscribeRecentsCloud();\n  subscribeالحالةDots();\n  subscribeProfilesSidebar();\n  applyProfileAvatars();',
+    '  subscribeGroupsCloud();\n  subscribeRecentsCloud();\n  syncMessagePageRealtime();\n  applyProfileAvatars();',
+    'remove hidden user-change realtime subscriptions'
+  );
+
   if (source.includes('if (id === "0001") return "role-admin";')) throw new Error('Messages directory validation failed: hard-coded roles remain.');
   if (!source.includes('const directoryName = employeeDirectoryCache.get(id)?.name;')) throw new Error('Messages directory validation failed: directory names are not authoritative.');
   if (!source.includes('await refreshMessageEmployeeDirectory()')) throw new Error('Messages directory validation failed: directory refresh missing.');
+  if (!source.includes('function messagesPageIsActive()') || !source.includes('stopMessagePageRealtime()')) throw new Error('Messages quota validation failed: hidden-page realtime listeners remain.');
   return source;
 }
 
