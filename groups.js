@@ -38,9 +38,17 @@ function patchGroups(coreSource) {
     'on-demand edit-group member directory'
   );
 
+  source = replaceRequired(
+    source,
+    'document.addEventListener("DOMContentLoaded", () => {\n  hookMemberSearch();\n  hookUI();\n  subscribeGroupsList();\n});',
+    'function bootGroupsPhase1() {\n  hookMemberSearch();\n  hookUI();\n  subscribeGroupsList();\n}\nif (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootGroupsPhase1);\nelse queueMicrotask(() => bootGroupsPhase1());',
+    'groups ready-state boot'
+  );
+
   if (!source.includes('await refreshGroupMemberDirectory();')) throw new Error('Groups directory validation failed: on-demand member refresh missing.');
   if (!source.includes('checkbox.disabled = !active;')) throw new Error('Groups directory validation failed: inactive-member protection missing.');
   if (source.includes('document.addEventListener("DOMContentLoaded", async () => {\n  await refreshGroupMemberDirectory();')) throw new Error('Groups quota validation failed: directory still loads on login screen.');
+  if (!source.includes('bootGroupsPhase1')) throw new Error('Groups boot validation failed: ready-state boot missing.');
   return source;
 }
 
