@@ -52,6 +52,9 @@ const CORE_MARKERS = Object.freeze({
     '  if (nameEl) nameEl.value = currentUser.name || currentUser.id;',
     '  if (cached.name) {\n    currentUser = { ...currentUser, name: cached.name, profilePhoto: cached.profilePhoto || currentUser.profilePhoto || "" };',
     '  const name = document.getElementById("set-name")?.value?.trim() || currentUser.name || currentUser.id;',
+    '  presenceTimerId = setInterval(() => updatePresence(false), 30_000);',
+    '  if (role !== "agent") return [{ key: "team", source: base }];',
+    '  updatePresence(false).catch(() => {});\n  try { translateFeaturePages(getLanguage()); applyPhase21LanguagePolish(getLanguage()); setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 80); } catch {}',
   ],
   'employees-ui-core.js': [
     '} from "./employee-directory.js";',
@@ -66,6 +69,9 @@ const CORE_MARKERS = Object.freeze({
     'const EMERGENCY_TYPES = new Set([',
     'function visibleStaffForAssignment() {',
     'function initTickets() {\n  currentUser = getCurrentUser();',
+    '  ensureDeletedTicketsUI();\n  subscribeTickets();\n  subscribeDeletedTickets();\n}',
+    'function openDeletedTicketsFolder() {',
+    'function closeDeletedTicketsFolder() { el(\'deleted-tickets-modal\')?.classList.add(\'hidden\'); }',
     'window.addEventListener("telesyriana:user-changed", initTickets);',
   ],
   'payroll-core.js': [
@@ -75,13 +81,15 @@ const CORE_MARKERS = Object.freeze({
     '  return ["admin", "manager", "supervisor"].includes(role);',
     '    const editableIds = canSeeAll(currentUser) ? Object.keys(STAFF) : visibleIds;',
     'function init() {\n  translatePayrollStatic();\n  currentUser = getCurrentUser();',
-    'window.addEventListener("telesyriana:user-changed", () => {',
+    '  if (currentUser) subscribePayroll();\n}',
+    'window.addEventListener("telesyriana:user-changed", () => {\n  currentUser = getCurrentUser();\n  populateStaffFilters();\n  setThisWeekFilters();\n  setPermissionsUI();\n  renderPayroll();\n  if (currentUser) subscribePayroll();\n});',
   ],
   'reports-core.js': [
     'import { db, fs } from "./firebase.js";',
     'const STAFF = {\n',
     'const REPORT_LABELS = {',
     'function initReports() {\n  currentUser = getCurrentUser();',
+    '  subscribeReports();\n  subscribeTicketsSnapshot();\n}',
     'window.addEventListener("telesyriana:user-changed", initReports);',
   ],
   'messages-core.js': [
@@ -90,9 +98,11 @@ const CORE_MARKERS = Object.freeze({
     'function getDmDisplayName(userId) {',
     '// ---------------- init ----------------\n',
     'document.addEventListener("DOMContentLoaded", () => {',
-    '  setCurrentUser();\n  subscribePresenceSidebar();',
+    '  setCurrentUser();\n  subscribePresenceSidebar();\n  subscribeProfilesSidebar();',
     '  document.querySelectorAll(".chat-dm[data-dm]").forEach((btn) => {',
     '  const formEl = document.getElementById("chat-form");',
+    '  subscribeالحالةDots();\n});',
+    '  subscribeGroupsCloud();\n  subscribeRecentsCloud();\n  subscribeالحالةDots();\n  subscribeProfilesSidebar();\n  applyProfileAvatars();',
   ],
   'groups-core.js': [
     'import { db, fs } from "./firebase.js";',
@@ -121,9 +131,6 @@ function assert(condition, message) {
 }
 
 function verifySyntax() {
-  // TeleSyriana is a browser ES-module app and intentionally has no package.json.
-  // Copy each source to a temporary .mjs path so Node parses it as an ES module
-  // without changing the repository's runtime/module configuration.
   const scratch = mkdtempSync(join(tmpdir(), 'telesyriana-phase1-'));
   try {
     for (const file of JS_FILES) {
@@ -161,12 +168,17 @@ function verifyFacadeAndLoaderGuards() {
   assert(directory.includes('You cannot change your own management role.'), 'employee-directory.js: self-role service guard missing');
 
   const loaders = {
-    'app.js': ['legacy auth code remains', 'profile name can still override directory identity'],
+    'app.js': [
+      'legacy auth code remains',
+      'profile name can still override directory identity',
+      'quota-safe presence lifecycle missing',
+      'Home issue calendar still reads full ticket history',
+    ],
     'employees-ui.js': ['duplicate CCMS protection missing', 'self-role lock missing', 'active-team protection missing'],
-    'tickets.js': ['legacy STAFF remains', 'active assignment filter missing'],
-    'payroll.js': ['legacy STAFF remains', 'inactive settings targets remain'],
-    'reports.js': ['legacy STAFF remains', 'refresh missing'],
-    'messages.js': ['hard-coded roles remain', 'directory names are not authoritative', 'directory refresh missing'],
+    'tickets.js': ['legacy STAFF remains', 'active assignment filter missing', 'hidden-page subscriptions remain', 'deleted tickets are not on-demand'],
+    'payroll.js': ['legacy STAFF remains', 'inactive settings targets remain', 'hidden-page subscriptions remain'],
+    'reports.js': ['legacy STAFF remains', 'refresh missing', 'hidden-page subscriptions remain'],
+    'messages.js': ['hard-coded roles remain', 'directory names are not authoritative', 'directory refresh missing', 'hidden-page realtime listeners remain'],
     'groups.js': ['initial member refresh missing', 'inactive-member protection missing'],
   };
 
