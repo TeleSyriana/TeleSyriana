@@ -18,6 +18,7 @@ jobs:
           fetch-depth: 0
 
       - name: Count exact quota patch markers
+        id: marker_counts
         shell: python
         run: |
           from pathlib import Path
@@ -42,14 +43,39 @@ jobs:
           checks.append(('groups startup/user-change tail', grp.count('''document.addEventListener("DOMContentLoaded", () => {\n  hookMemberSearch();\n  hookUI();\n  subscribeGroupsList();\n});\n\nwindow.addEventListener("telesyriana:user-changed", () => {\n  applySupervisorVisibility();\n  subscribeGroupsList();\n});''')))
 
           bad = False
+          lines = []
           for label, count in checks:
-              print(f'{label}: {count}')
+              lines.append(f'{label}: {count}')
               if label == 'messages groups/recents pair':
                   if count < 1: bad = True
               elif count != 1:
                   bad = True
 
-          if bad:
-              raise SystemExit('One or more exact marker counts are unexpected.')
+          lines.append(f'diagnostic_status: {"FAIL" if bad else "PASS"}')
+          Path('quota-marker-diagnostics.txt').write_text('\n'.join(lines) + '\n')
+          print('\n'.join(lines))
 
-          print('All marker counts are suitable for the deterministic patch.')
+          with open(Path().resolve() / Path(str(Path.home())), 'w') if False else open('/dev/null', 'w'):
+              pass
+
+          # Keep this step successful so the artifact is always uploaded.
+          Path('quota-marker-status.txt').write_text('1' if bad else '0')
+
+      - name: Upload quota marker diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quota-marker-diagnostics
+          path: |
+            quota-marker-diagnostics.txt
+            quota-marker-status.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail when marker diagnostics found mismatches
+        shell: bash
+        run: |
+          cat quota-marker-diagnostics.txt
+          if [ "$(cat quota-marker-status.txt)" != "0" ]; then
+            exit 1
+          fi
