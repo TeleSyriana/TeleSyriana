@@ -24,7 +24,7 @@ function patchTickets(coreSource) {
   const imports = `import { db, fs } from ${JSON.stringify(FIREBASE_URL)};\nimport { listEmployees } from ${JSON.stringify(DIRECTORY_URL)};`;
   source = replaceRequired(source, 'import { db, fs } from "./firebase.js";', imports, 'firebase import');
 
-  const staffReplacement = `let STAFF = {};\n\nasync function refreshTicketStaffDirectory() {\n  const rows = await listEmployees({ includeDisabled: false, includeArchived: false });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
+  const staffReplacement = `let STAFF = {};\n\nasync function refreshTicketStaffDirectory() {\n  // Keep disabled/archived employees in the lookup cache so historical tickets,\n  // comments and ownership continue showing the correct employee name.\n  const rows = await listEmployees({ includeDisabled: true, includeArchived: true });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
 
   source = replaceBetweenRequired(
     source,
@@ -33,6 +33,10 @@ function patchTickets(coreSource) {
     staffReplacement,
     'hard-coded ticket STAFF map'
   );
+
+  const oldAssignmentScope = `function visibleStaffForAssignment() {\n  if (!currentUser) return [];\n  if (canSeeAll(currentUser)) return Object.values(STAFF);\n  if (currentUser.role === "supervisor") {\n    return Object.values(STAFF).filter((s) => s.id === currentUser.id || s.supervisorId === currentUser.id);\n  }\n  return [currentUser];\n}`;
+  const newAssignmentScope = `function visibleStaffForAssignment() {\n  if (!currentUser) return [];\n  const activeStaff = Object.values(STAFF).filter((s) => String(s.accountStatus || "active") === "active");\n  if (canSeeAll(currentUser)) return activeStaff;\n  if (currentUser.role === "supervisor") {\n    return activeStaff.filter((s) => s.id === currentUser.id || s.supervisorId === currentUser.id);\n  }\n  return activeStaff.filter((s) => s.id === currentUser.id);\n}`;
+  source = replaceRequired(source, oldAssignmentScope, newAssignmentScope, 'active assignment staff scope');
 
   source = replaceRequired(source, 'function initTickets() {\n  currentUser = getCurrentUser();', 'async function initTickets() {\n  currentUser = getCurrentUser();\n  await refreshTicketStaffDirectory();', 'ticket init directory refresh');
 
@@ -45,6 +49,7 @@ function patchTickets(coreSource) {
 
   if (source.includes('const STAFF = {')) throw new Error('Ticket directory validation failed: legacy STAFF remains.');
   if (!source.includes('await refreshTicketStaffDirectory()')) throw new Error('Ticket directory validation failed: refresh missing.');
+  if (!source.includes('const activeStaff = Object.values(STAFF).filter')) throw new Error('Ticket directory validation failed: active assignment filter missing.');
   return source;
 }
 
