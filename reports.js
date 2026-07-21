@@ -32,27 +32,28 @@ function patchReports(coreSource) {
   source = replaceRequired(
     source,
     'function initReports() {\n  currentUser = getCurrentUser();',
-    `${reportsLifecycleHelpers}async function initReports() {\n  currentUser = getCurrentUser();\n  await refreshReportsStaffDirectory();\n  bindReportsPageLifecycle();`,
-    'reports init directory/lifecycle refresh'
+    `${reportsLifecycleHelpers}async function initReports() {\n  currentUser = getCurrentUser();\n  bindReportsPageLifecycle();`,
+    'reports init lifecycle'
   );
 
   source = replaceRequired(
     source,
     '  subscribeReports();\n  subscribeTicketsSnapshot();\n}',
-    '  if (!reportsPageIsActive()) {\n    stopReportsPageSubscriptions();\n    return;\n  }\n  subscribeReports();\n  subscribeTicketsSnapshot();\n}',
+    '  if (!reportsPageIsActive()) {\n    stopReportsPageSubscriptions();\n    return;\n  }\n  await refreshReportsStaffDirectory();\n  renderTicketSnapshot();\n  renderReports();\n  subscribeReports();\n  subscribeTicketsSnapshot();\n}',
     'lazy reports page subscriptions'
   );
 
   source = replaceRequired(
     source,
     'window.addEventListener("telesyriana:user-changed", initReports);',
-    'window.addEventListener("telesyriana:user-changed", initReports);\nwindow.addEventListener("telesyriana:employee-directory-changed", initReports);',
+    'window.addEventListener("telesyriana:user-changed", initReports);\nwindow.addEventListener("telesyriana:employee-directory-changed", () => { if (currentUser && reportsPageIsActive()) initReports(); });',
     'reports directory change listener'
   );
 
   if (source.includes('const STAFF = {')) throw new Error('Reports directory validation failed: legacy STAFF remains.');
   if (!source.includes('await refreshReportsStaffDirectory()')) throw new Error('Reports directory validation failed: refresh missing.');
   if (!source.includes('function reportsPageIsActive()') || !source.includes('stopReportsPageSubscriptions()')) throw new Error('Reports quota validation failed: hidden-page subscriptions remain.');
+  if (source.includes('currentUser = getCurrentUser();\n  await refreshReportsStaffDirectory();')) throw new Error('Reports quota validation failed: directory still loads before page/login need.');
   return source;
 }
 
