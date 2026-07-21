@@ -1,20 +1,20 @@
-name: Temporary quota patch PR runner v5
+name: Temporary quota patch runner v6
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+    branches: [agent/firestore-quota-hotfix-v2]
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: github.head_ref == 'agent/firestore-quota-hotfix-v1'
+    if: ${{ !contains(github.event.head_commit.message, '[quota-v2-patched]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/firestore-quota-hotfix-v1
+          ref: agent/firestore-quota-hotfix-v2
           fetch-depth: 0
 
       - name: Apply Notes and Meetings quota lifecycle patch
@@ -58,5 +58,5 @@ jobs:
             echo 'No Notes/Meetings changes to commit.'
             exit 0
           fi
-          git commit -m '[quota-patch] make Notes and Meetings page-scoped'
-          git push origin HEAD:agent/firestore-quota-hotfix-v1
+          git commit -m '[quota-v2-patched] make Notes and Meetings page-scoped'
+          git push origin HEAD:agent/firestore-quota-hotfix-v2
