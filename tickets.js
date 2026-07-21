@@ -24,28 +24,15 @@ function patchTickets(coreSource) {
   const imports = `import { db, fs } from ${JSON.stringify(FIREBASE_URL)};\nimport { listEmployees } from ${JSON.stringify(DIRECTORY_URL)};`;
   source = replaceRequired(source, 'import { db, fs } from "./firebase.js";', imports, 'firebase import');
 
-  const staffReplacement = `let STAFF = {};\n\nasync function refreshTicketStaffDirectory() {\n  // Keep disabled/archived employees in the lookup cache so historical tickets,\n  // comments and ownership continue showing the correct employee name.\n  const rows = await listEmployees({ includeDisabled: true, includeArchived: true });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
-
-  source = replaceBetweenRequired(
-    source,
-    'const STAFF = {\n',
-    'const EMERGENCY_TYPES = new Set([',
-    staffReplacement,
-    'hard-coded ticket STAFF map'
-  );
+  const staffReplacement = `let STAFF = {};\n\nasync function refreshTicketStaffDirectory() {\n  const rows = await listEmployees({ includeDisabled: true, includeArchived: true });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
+  source = replaceBetweenRequired(source, 'const STAFF = {\n', 'const EMERGENCY_TYPES = new Set([', staffReplacement, 'hard-coded ticket STAFF map');
 
   const oldAssignmentScope = `function visibleStaffForAssignment() {\n  if (!currentUser) return [];\n  if (canSeeAll(currentUser)) return Object.values(STAFF);\n  if (currentUser.role === "supervisor") {\n    return Object.values(STAFF).filter((s) => s.id === currentUser.id || s.supervisorId === currentUser.id);\n  }\n  return [currentUser];\n}`;
   const newAssignmentScope = `function visibleStaffForAssignment() {\n  if (!currentUser) return [];\n  const activeStaff = Object.values(STAFF).filter((s) => String(s.accountStatus || "active") === "active");\n  if (canSeeAll(currentUser)) return activeStaff;\n  if (currentUser.role === "supervisor") {\n    return activeStaff.filter((s) => s.id === currentUser.id || s.supervisorId === currentUser.id);\n  }\n  return activeStaff.filter((s) => s.id === currentUser.id);\n}`;
   source = replaceRequired(source, oldAssignmentScope, newAssignmentScope, 'active assignment staff scope');
 
   const ticketLifecycleHelpers = `function ticketPageIsActive() {\n  const page = el("page-tickets");\n  return Boolean(page && !page.classList.contains("hidden"));\n}\n\nfunction stopTicketPageSubscriptions() {\n  if (unsubTickets) { try { unsubTickets(); } catch {} }\n  unsubTickets = null;\n  if (unsubDeletedTickets) { try { unsubDeletedTickets(); } catch {} }\n  unsubDeletedTickets = null;\n  deletedTickets = [];\n  clearTicketSlowTimer();\n}\n\nfunction bindTicketPageLifecycle() {\n  if (window.__TS_TICKET_PAGE_LIFECYCLE__) return;\n  window.__TS_TICKET_PAGE_LIFECYCLE__ = true;\n  document.addEventListener("click", (event) => {\n    const nav = event.target?.closest?.(".nav-link[data-page]");\n    if (!nav) return;\n    if (nav.dataset.page === "tickets") setTimeout(() => initTickets(), 0);\n    else stopTicketPageSubscriptions();\n  });\n}\n\n`;
-
-  source = replaceRequired(
-    source,
-    'function initTickets() {\n  currentUser = getCurrentUser();',
-    `${ticketLifecycleHelpers}async function initTickets() {\n  currentUser = getCurrentUser();\n  bindTicketPageLifecycle();`,
-    'ticket init lifecycle'
-  );
+  source = replaceRequired(source, 'function initTickets() {\n  currentUser = getCurrentUser();', `${ticketLifecycleHelpers}async function initTickets() {\n  currentUser = getCurrentUser();\n  bindTicketPageLifecycle();`, 'ticket init lifecycle');
 
   source = replaceRequired(
     source,
@@ -63,6 +50,12 @@ function patchTickets(coreSource) {
 
   source = replaceRequired(
     source,
+    'document.addEventListener("DOMContentLoaded", initTickets);',
+    'if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initTickets);\nelse initTickets();',
+    'ticket ready-state boot'
+  );
+  source = replaceRequired(
+    source,
     'window.addEventListener("telesyriana:user-changed", initTickets);',
     'window.addEventListener("telesyriana:user-changed", initTickets);\nwindow.addEventListener("telesyriana:employee-directory-changed", () => { if (currentUser && ticketPageIsActive()) initTickets(); });',
     'ticket directory change listener'
@@ -74,6 +67,7 @@ function patchTickets(coreSource) {
   if (!source.includes('function ticketPageIsActive()') || !source.includes('stopTicketPageSubscriptions()')) throw new Error('Ticket quota validation failed: hidden-page subscriptions remain.');
   if (!source.includes('subscribeDeletedTickets();\n  renderDeletedTicketsList();')) throw new Error('Ticket quota validation failed: deleted tickets are not on-demand.');
   if (source.includes('currentUser = getCurrentUser();\n  await refreshTicketStaffDirectory();')) throw new Error('Ticket quota validation failed: directory still loads before page/login need.');
+  if (!source.includes('document.readyState === "loading"')) throw new Error('Ticket boot validation failed: ready-state boot missing.');
   return source;
 }
 
