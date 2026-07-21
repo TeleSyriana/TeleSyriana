@@ -66,12 +66,7 @@ function patchCoreApp(coreSource) {
   const loginAssignment = '    setAppLoading(24, loadingText("تسجيل الدخول صحيح", "Login accepted"), loadingText("تحميل دور المستخدم والصلاحيات…", "Loading user role and permissions…"));\n    currentUser = safeUserPayload(id);';
   const directoryLogin = `    const auth = await authenticateEmployee(id, pw);\n    if (!auth.ok) {\n      hideAppLoading(0);\n      const authMessages = {\n        not_found: loadingText("المستخدم غير موجود.", "Employee not found."),\n        incorrect_password: loadingText("كلمة المرور غير صحيحة.", "Incorrect password."),\n        disabled: loadingText("هذا الحساب معطّل. تواصل مع الإدارة.", "This account is disabled. Contact management."),\n        archived: loadingText("هذا الحساب مؤرشف.", "This account is archived."),\n      };\n      showError(authMessages[auth.reason] || loadingText("تعذر تسجيل الدخول.", "Login unavailable."));\n      return;\n    }\n\n    setAppLoading(24, loadingText("تسجيل الدخول صحيح", "Login accepted"), loadingText("تحميل دور المستخدم والصلاحيات…", "Loading user role and permissions…"));\n    currentUser = auth.employee;`;
 
-  source = replaceRequired(
-    source,
-    loginAssignment,
-    directoryLogin,
-    'directory login assignment'
-  );
+  source = replaceRequired(source, loginAssignment, directoryLogin, 'directory login assignment');
 
   source = replaceRequired(
     source,
@@ -80,7 +75,7 @@ function patchCoreApp(coreSource) {
     'current employee watcher state'
   );
 
-  const employeeWatcher = `function subscribeCurrentEmployeeAccount() {\n  if (!currentUser?.id) return;\n  try { employeeAccountUnsub?.(); } catch {}\n  employeeAccountUnsub = null;\n\n  const ref = doc(collection(db, "employees"), String(currentUser.id));\n  employeeAccountUnsub = onSnapshot(ref, async (snap) => {\n    if (!snap.exists() || !currentUser?.id) return;\n    try {\n      const employee = await getEmployee(currentUser.id, { allowLegacyFallback: true });\n      if (!employee) return;\n      if (!employeeIsActive(employee)) {\n        showToast(getLanguage() === "ar" ? "تم تعطيل أو أرشفة هذا الحساب من الإدارة." : "This account was disabled or archived by management.", "warning", 5000);\n        await handleLogout();\n        return;\n      }\n\n      const nextUser = safeEmployeePayload(employee);\n      const changed = ["name", "role", "supervisorId", "hourlyRate", "currency", "timezone", "language", "accountStatus"]\n        .some((key) => String(currentUser?.[key] ?? "") !== String(nextUser?.[key] ?? ""));\n      if (!changed) return;\n\n      currentUser = nextUser;\n      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n\n      if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();\n      else if (supUnsub) { try { supUnsub(); } catch {} supUnsub = null; }\n\n      updateDashboardUI();\n      window.dispatchEvent(new Event("telesyriana:user-changed"));\n    } catch (err) {\n      console.warn("Employee account refresh failed", err);\n    }\n  }, (err) => console.warn("Employee account listener failed", err));\n}\n\n`;
+  const employeeWatcher = `function subscribeCurrentEmployeeAccount() {\n  if (!currentUser?.id) return;\n  try { employeeAccountUnsub?.(); } catch {}\n  employeeAccountUnsub = null;\n\n  const ref = doc(collection(db, "employees"), String(currentUser.id));\n  employeeAccountUnsub = onSnapshot(ref, async (snap) => {\n    if (!snap.exists() || !currentUser?.id) return;\n    try {\n      const employee = await getEmployee(currentUser.id, { allowLegacyFallback: true });\n      if (!employee) return;\n      if (!employeeIsActive(employee)) {\n        showToast(getLanguage() === "ar" ? "تم تعطيل أو أرشفة هذا الحساب من الإدارة." : "This account was disabled or archived by management.", "warning", 5000);\n        await handleLogout();\n        return;\n      }\n\n      const nextUser = safeEmployeePayload(employee);\n      const changed = ["name", "role", "supervisorId", "hourlyRate", "currency", "timezone", "language", "accountStatus"]\n        .some((key) => String(currentUser?.[key] ?? "") !== String(nextUser?.[key] ?? ""));\n      if (!changed) return;\n\n      currentUser = nextUser;\n      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n      const officialNameInput = document.getElementById("set-name");\n      if (officialNameInput) officialNameInput.value = currentUser.name || currentUser.id;\n\n      if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();\n      else if (supUnsub) { try { supUnsub(); } catch {} supUnsub = null; }\n\n      updateDashboardUI();\n      window.dispatchEvent(new Event("telesyriana:user-changed"));\n    } catch (err) {\n      console.warn("Employee account refresh failed", err);\n    }\n  }, (err) => console.warn("Employee account listener failed", err));\n}\n\n`;
   source = replaceRequired(
     source,
     '/* --------------------------- Widgets (Clock/Date) ------------------------ */',
@@ -102,11 +97,58 @@ function patchCoreApp(coreSource) {
     'stop current employee watcher on logout'
   );
 
+  // Official account identity now belongs to the employee directory. Keep the
+  // existing profile system for photo/birthday/language/theme/notes only.
+  source = replaceRequired(
+    source,
+    '  if (nameEl) nameEl.value = currentUser.name || currentUser.id;',
+    '  if (nameEl) {\n    nameEl.value = currentUser.name || currentUser.id;\n    nameEl.readOnly = true;\n    nameEl.title = getLanguage() === "ar" ? "الاسم الرسمي يُدار من صفحة الموظفين." : "Official name is managed from Employees & Accounts.";\n  }',
+    'official name settings field'
+  );
+
+  source = replaceRequired(
+    source,
+    '  if (cached.name) {\n    currentUser = { ...currentUser, name: cached.name, profilePhoto: cached.profilePhoto || currentUser.profilePhoto || "" };\n    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n    if (nameEl) nameEl.value = cached.name;\n  }',
+    '  if (cached.profilePhoto) {\n    currentUser = { ...currentUser, profilePhoto: cached.profilePhoto || currentUser.profilePhoto || "" };\n    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n  }',
+    'ignore cached profile name'
+  );
+
+  source = replaceRequired(
+    source,
+    '  renderSettingsProfilePhoto(cached.profilePhoto || "", cached.name || currentUser.name);',
+    '  renderSettingsProfilePhoto(cached.profilePhoto || "", currentUser.name);',
+    'central name in cached profile render'
+  );
+
+  source = replaceRequired(
+    source,
+    '      const savedName = d.name || currentUser.name || currentUser.id;\n      const savedProfilePhoto = d.profilePhoto || cached.profilePhoto || "";\n      currentUser = { ...currentUser, name: savedName, profilePhoto: savedProfilePhoto };\n      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n      if (nameEl) nameEl.value = savedName;',
+    '      const savedName = currentUser.name || currentUser.id;\n      const savedProfilePhoto = d.profilePhoto || cached.profilePhoto || "";\n      currentUser = { ...currentUser, profilePhoto: savedProfilePhoto };\n      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n      if (nameEl) nameEl.value = savedName;',
+    'ignore Firestore profile name'
+  );
+
+  source = replaceRequired(
+    source,
+    '        name: d.name || currentUser.name || "",',
+    '        name: currentUser.name || "",',
+    'central name in profile cache'
+  );
+
+  source = replaceRequired(
+    source,
+    '  const name = document.getElementById("set-name")?.value?.trim() || currentUser.name || currentUser.id;',
+    '  const name = currentUser.name || currentUser.id;\n  if (document.getElementById("set-name")) document.getElementById("set-name").value = name;',
+    'prevent self profile rename'
+  );
+
   if (source.includes('const USERS = {') || source.includes('safeUserPayload(id)')) {
     throw new Error('Phase 1 loader validation failed: legacy auth code remains.');
   }
   if (!source.includes('authenticateEmployee(id, pw)') || !source.includes('getEmployee(u?.id') || !source.includes('subscribeCurrentEmployeeAccount()')) {
     throw new Error('Phase 1 loader validation failed: directory auth was not injected.');
+  }
+  if (!source.includes('nameEl.readOnly = true;') || source.includes('name: cached.name, profilePhoto')) {
+    throw new Error('Phase 1 loader validation failed: profile name can still override directory identity.');
   }
 
   return source;
