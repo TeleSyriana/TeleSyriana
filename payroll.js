@@ -24,21 +24,10 @@ function patchPayroll(coreSource) {
   const imports = `import { db, fs } from ${JSON.stringify(FIREBASE_URL)};\nimport { listEmployees } from ${JSON.stringify(DIRECTORY_URL)};`;
   source = replaceRequired(source, 'import { db, fs } from "./firebase.js";', imports, 'firebase import');
 
-  const staffReplacement = `let STAFF = {};\n\nasync function refreshPayrollStaffDirectory() {\n  // Keep inactive employees for historical payroll/reporting labels.\n  const rows = await listEmployees({ includeDisabled: true, includeArchived: true });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
-  source = replaceBetweenRequired(
-    source,
-    'const STAFF = {\n',
-    'let currentUser = null;',
-    staffReplacement,
-    'hard-coded payroll STAFF map'
-  );
+  const staffReplacement = `let STAFF = {};\n\nasync function refreshPayrollStaffDirectory() {\n  const rows = await listEmployees({ includeDisabled: true, includeArchived: true });\n  STAFF = Object.fromEntries(rows.map((row) => [String(row.id), row]));\n}\n\n`;
+  source = replaceBetweenRequired(source, 'const STAFF = {\n', 'let currentUser = null;', staffReplacement, 'hard-coded payroll STAFF map');
 
-  source = replaceRequired(
-    source,
-    '  return ["admin", "manager", "supervisor"].includes(role);',
-    '  return ["admin", "manager", "hr"].includes(role);',
-    'payroll management visibility'
-  );
+  source = replaceRequired(source, '  return ["admin", "manager", "supervisor"].includes(role);', '  return ["admin", "manager", "hr"].includes(role);', 'payroll management visibility');
 
   source = replaceRequired(
     source,
@@ -67,12 +56,20 @@ function patchPayroll(coreSource) {
   const newUserChanged = `async function refreshPayrollForCurrentDirectory({ resetRange = false } = {}) {\n  currentUser = getCurrentUser();\n  if (resetRange) setThisWeekFilters();\n\n  if (!currentUser || !payrollPageIsActive()) {\n    stopPayrollPageSubscriptions();\n    setPermissionsUI();\n    renderPayroll();\n    return;\n  }\n\n  await refreshPayrollStaffDirectory();\n  populateStaffFilters();\n  setPermissionsUI();\n  renderPayroll();\n  subscribePayroll();\n}\n\nwindow.addEventListener("telesyriana:user-changed", () => refreshPayrollForCurrentDirectory({ resetRange: true }));\nwindow.addEventListener("telesyriana:employee-directory-changed", () => refreshPayrollForCurrentDirectory({ resetRange: false }));`;
   source = replaceRequired(source, oldUserChanged, newUserChanged, 'payroll user/directory refresh');
 
+  source = replaceRequired(
+    source,
+    'document.addEventListener("DOMContentLoaded", () => {\n  hookPayroll();\n  init();\n});',
+    'function bootPayrollPhase1() {\n  hookPayroll();\n  init();\n}\nif (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootPayrollPhase1);\nelse bootPayrollPhase1();',
+    'payroll ready-state boot'
+  );
+
   if (source.includes('const STAFF = {')) throw new Error('Payroll directory validation failed: legacy STAFF remains.');
   if (!source.includes('await refreshPayrollStaffDirectory()')) throw new Error('Payroll directory validation failed: refresh missing.');
   if (source.includes('["admin", "manager", "supervisor"].includes(role)')) throw new Error('Payroll visibility validation failed.');
   if (!source.includes('.filter((id) => String(STAFF[id]?.accountStatus || "active") === "active")')) throw new Error('Payroll directory validation failed: inactive settings targets remain.');
   if (!source.includes('function payrollPageIsActive()') || !source.includes('stopPayrollPageSubscriptions()')) throw new Error('Payroll quota validation failed: hidden-page subscriptions remain.');
   if (source.includes('currentUser = getCurrentUser();\n  await refreshPayrollStaffDirectory();')) throw new Error('Payroll quota validation failed: directory still loads before page/login need.');
+  if (!source.includes('bootPayrollPhase1')) throw new Error('Payroll boot validation failed: ready-state boot missing.');
   return source;
 }
 
