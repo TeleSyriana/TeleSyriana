@@ -229,7 +229,7 @@ function registerRoomButton(roomId, btnEl) {
   roomButtons.get(key).add(btnEl);
 
   updateBadgesForRoom(key);
-  ensureUnreadWatcher(key);
+  if (currentUser?.id) ensureUnreadWatcher(key);
 }
 
 function restartUnreadWatcher(roomId) {
@@ -1444,6 +1444,38 @@ function subscribePresenceSidebar() {
   }, (err) => console.warn("message presence listener failed", err));
 }
 
+function messagesPageIsActive() {
+  const page = document.getElementById("page-messages");
+  return Boolean(page && !page.classList.contains("hidden"));
+}
+
+function stopMessagesPageRealtime() {
+  try { unsubPresence?.(); } catch {}
+  unsubPresence = null;
+  try { unsubscribeProfiles?.(); } catch {}
+  unsubscribeProfiles = null;
+  try { unsubscribeالحالة?.(); } catch {}
+  unsubscribeالحالة = null;
+  unsubscribeGroupsCloud();
+  unsubscribeRecentsCloud();
+  presenceCache.clear();
+}
+
+function syncMessagesPageRealtime() {
+  setCurrentUser();
+  if (!currentUser?.id || !messagesPageIsActive()) {
+    stopMessagesPageRealtime();
+    return;
+  }
+  subscribePresenceSidebar();
+  subscribeProfilesSidebar();
+  subscribeGroupsCloud();
+  subscribeRecentsCloud();
+  subscribeالحالةDots();
+  applyProfileAvatars();
+  applyBirthdayBadges();
+}
+
 // ---------------- init ----------------
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1463,9 +1495,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   setCurrentUser();
-  subscribePresenceSidebar();
-  subscribeProfilesSidebar();
-  applyProfileAvatars();
+  syncMessagesPageRealtime();
 
   makeCollapsible("Rooms", "rooms-list");
   makeCollapsible("Groups", "groups-list");
@@ -1479,12 +1509,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   hookSearch();
 
-  subscribeGroupsCloud();
-  subscribeRecentsCloud();
+  syncMessagesPageRealtime();
 
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (btn.dataset.page !== "messages") document.body.classList.remove("chat-open");
+      if (btn.dataset.page !== "messages") {
+        document.body.classList.remove("chat-open");
+        stopMessagesPageRealtime();
+      } else {
+        setTimeout(syncMessagesPageRealtime, 0);
+      }
     });
   });
 
@@ -1606,7 +1640,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  subscribeالحالةDots();
+  syncMessagesPageRealtime();
 });
 
 // user change (login/logout) ✅ ONLY ONE listener
@@ -1632,13 +1666,11 @@ window.addEventListener("telesyriana:user-changed", () => {
   ensureNavBadge();
   updateNavBadge();
 
-  subscribeGroupsCloud();
-  subscribeRecentsCloud();
-  subscribeالحالةDots();
-  subscribeProfilesSidebar();
-  applyProfileAvatars();
-  applyBirthdayBadges();
-  applyProfileAvatars();
+  syncMessagesPageRealtime();
+  if (messagesPageIsActive()) {
+    applyProfileAvatars();
+    applyBirthdayBadges();
+  }
 
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.addEventListener("click", () => {

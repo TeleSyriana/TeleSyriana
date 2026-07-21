@@ -355,13 +355,34 @@ function hookUI() {
   applySupervisorVisibility();
 }
 
+function groupsMessagesPageIsActive() {
+  const page = document.getElementById("page-messages");
+  return Boolean(page && !page.classList.contains("hidden"));
+}
+
+function stopGroupsList() {
+  try { unsubGroups?.(); } catch {}
+  unsubGroups = null;
+}
+
+function syncGroupsListLifecycle() {
+  if (getCurrentUser()?.id && groupsMessagesPageIsActive()) subscribeGroupsList();
+  else stopGroupsList();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   hookMemberSearch();
   hookUI();
-  subscribeGroupsList();
+  syncGroupsListLifecycle();
+  document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.page === "messages") setTimeout(syncGroupsListLifecycle, 0);
+      else stopGroupsList();
+    });
+  });
 });
 
 window.addEventListener("telesyriana:user-changed", () => {
   applySupervisorVisibility();
-  subscribeGroupsList();
+  syncGroupsListLifecycle();
 });
