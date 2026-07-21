@@ -290,16 +290,14 @@ export async function seedCurrentEmployeeIdentities(actor = null) {
 }
 
 // Optional helper used by Phase 1B after HR/CEO/ACM chooses a new role and CCMS.
-// updateEmployeeIdentity preserves employeeUid while moving the CCMS index.
-export async function reclassifyEmployee(employeeUid, { roleKey, ccmsId, projectId, projectIds, supervisorUid, supervisorCcmsId } = {}, actor = null) {
-  return updateEmployeeIdentity(employeeUid, {
-    roleKey,
-    ccmsId,
-    projectId,
-    projectIds,
-    supervisorUid,
-    supervisorCcmsId,
-  }, actor);
+// Only explicitly supplied fields are forwarded so an omitted Supervisor/project
+// value can never be cleared accidentally by JavaScript `undefined`.
+export async function reclassifyEmployee(employeeUid, options = {}, actor = null) {
+  const patch = {};
+  for (const key of ["roleKey", "ccmsId", "projectId", "projectIds", "supervisorUid", "supervisorCcmsId"]) {
+    if (Object.prototype.hasOwnProperty.call(options, key)) patch[key] = options[key];
+  }
+  return updateEmployeeIdentity(employeeUid, patch, actor);
 }
 
 // Intentionally explicit. Nothing in Phase 1A calls this automatically on app
