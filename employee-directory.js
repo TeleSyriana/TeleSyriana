@@ -1,8 +1,8 @@
 // employee-directory.js — TeleSyriana Phase 1 synchronising facade
 // The full directory implementation is preserved byte-for-byte in
-// employee-directory-core.js. This facade adds operational permission guards
-// plus a browser event after successful employee writes so dependent modules
-// refresh immediately.
+// employee-directory-core.js. This facade adds operational permission guards,
+// a short shared employee-list cache, and a browser event after successful
+// employee writes so dependent modules refresh immediately.
 //
 // These guards are defense-in-depth for the current custom-login model. They do
 // not replace server-enforced authorization/Firebase Auth, which is a separate
@@ -21,9 +21,60 @@ import {
 } from './employee-directory-core.js';
 
 const MANAGEMENT_ROLES = new Set(['admin', 'manager', 'hr']);
+const DIRECTORY_CACHE_TTL_MS = 30_000;
+
+let employeeListCache = null;
+let employeeListCacheAt = 0;
+let employeeListCachePromise = null;
 
 function cleanId(value) {
   return String(value || '').trim();
+}
+
+function cloneEmployeeRows(rows = []) {
+  return rows.map((row) => ({ ...row }));
+}
+
+function invalidateEmployeeListCache() {
+  employeeListCache = null;
+  employeeListCacheAt = 0;
+  employeeListCachePromise = null;
+}
+
+async function allEmployeesCached({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && employeeListCache && now - employeeListCacheAt < DIRECTORY_CACHE_TTL_MS) {
+    return cloneEmployeeRows(employeeListCache);
+  }
+
+  // Coalesce simultaneous startup requests from Tickets/Payroll/Reports/Chat/
+  // Groups into one Firestore employee-list read instead of five duplicate reads.
+  if (!force && employeeListCachePromise) {
+    return cloneEmployeeRows(await employeeListCachePromise);
+  }
+
+  employeeListCachePromise = listEmployeesCore({ includeDisabled: true, includeArchived: true })
+    .then((rows) => {
+      employeeListCache = cloneEmployeeRows(rows);
+      employeeListCacheAt = Date.now();
+      return employeeListCache;
+    })
+    .finally(() => {
+      employeeListCachePromise = null;
+    });
+
+  return cloneEmployeeRows(await employeeListCachePromise);
+}
+
+export async function listEmployees(options = {}) {
+  const includeDisabled = options.includeDisabled === true;
+  const includeArchived = options.includeArchived === true;
+  const rows = await allEmployeesCached({ force: options.force === true });
+
+  return rows
+    .filter((row) => includeDisabled || normaliseAccountStatus(row.accountStatus) !== 'disabled')
+    .filter((row) => includeArchived || normaliseAccountStatus(row.accountStatus) !== 'archived')
+    .map((row) => ({ ...row }));
 }
 
 function actorRole(actor = null) {
@@ -74,6 +125,8 @@ async function assertSupervisorTeamCanChange(target, nextRole = target?.role, ne
   if (!target || normaliseRole(target.role) !== 'supervisor') return;
   if (normaliseRole(nextRole) === 'supervisor' && normaliseAccountStatus(nextStatus) === 'active') return;
 
+  // This is a destructive-role/status safety decision, so intentionally bypass
+  // the short display cache and read the latest directory state.
   const rows = await listEmployeesCore({ includeDisabled: true, includeArchived: true });
   const directReports = rows.filter((row) =>
     cleanId(row.id) !== cleanId(target.id) &&
@@ -89,6 +142,7 @@ async function assertSupervisorTeamCanChange(target, nextRole = target?.role, ne
 }
 
 function notifyDirectoryChanged(detail = {}) {
+  invalidateEmployeeListCache();
   try {
     window.dispatchEvent(new CustomEvent('telesyriana:employee-directory-changed', { detail }));
   } catch {}
