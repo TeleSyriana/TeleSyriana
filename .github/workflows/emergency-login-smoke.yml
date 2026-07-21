@@ -68,6 +68,19 @@ jobs:
             page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
             page.on('console', (message) => consoleRows.push(`[${message.type()}] ${message.text()}`));
 
+            // This is a no-write/no-read production smoke test. The application
+            // must be able to reach its compatibility/offline path when Firestore
+            // is unavailable or quota-exhausted.
+            await page.setRequestInterception(true);
+            page.on('request', (request) => {
+              const url = request.url();
+              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) {
+                request.abort();
+              } else {
+                request.continue();
+              }
+            });
+
             await page.goto('http://127.0.0.1:4173/index.html', {
               waitUntil: 'domcontentloaded',
               timeout: 30_000,
@@ -84,12 +97,14 @@ jobs:
               throw new Error(`Login screen did not initialise correctly: ${JSON.stringify(before)}`);
             }
 
+            // Invalid credentials prove the submit handler is attached without
+            // causing any Firestore activity.
             await page.type('#ccmsId', '9999');
             await page.type('#password', 'invalid-smoke-password');
             await page.click('#login-form button[type="submit"]');
             await new Promise((resolve) => setTimeout(resolve, 300));
 
-            const after = await page.evaluate(() => {
+            const invalidResult = await page.evaluate(() => {
               const error = document.getElementById('login-error');
               return {
                 errorVisible: Boolean(error && !error.classList.contains('hidden')),
@@ -98,16 +113,49 @@ jobs:
               };
             });
 
-            console.log('before=' + JSON.stringify(before));
-            console.log('after=' + JSON.stringify(after));
-            console.log('page_errors=' + JSON.stringify(pageErrors));
-            console.log('console_tail=' + JSON.stringify(consoleRows.slice(-30)));
-
-            if (!after.errorVisible || !after.errorText) {
+            if (!invalidResult.errorVisible || !invalidResult.errorText) {
               throw new Error('Invalid CCMS login did not reach the login submit handler.');
             }
-            if (!after.dashboardHidden) {
+            if (!invalidResult.dashboardHidden) {
               throw new Error('Invalid credentials unexpectedly opened the dashboard.');
+            }
+
+            // Now prove an existing production account can enter the dashboard
+            // while Firestore is completely unavailable. This uses the same
+            // compatibility credentials already present in the preserved core.
+            await page.evaluate(() => {
+              document.getElementById('ccmsId').value = '';
+              document.getElementById('password').value = '';
+              const error = document.getElementById('login-error');
+              if (error) {
+                error.textContent = '';
+                error.classList.add('hidden');
+              }
+            });
+            await page.type('#ccmsId', '1001');
+            await page.type('#password', '0951');
+            await page.click('#login-form button[type="submit"]');
+            await new Promise((resolve) => setTimeout(resolve, 2500));
+
+            const validResult = await page.evaluate(() => {
+              let stored = null;
+              try { stored = JSON.parse(localStorage.getItem('telesyrianaUser') || 'null'); } catch {}
+              return {
+                loginHidden: document.getElementById('login-screen')?.classList.contains('hidden') === true,
+                dashboardVisible: document.getElementById('dashboard-screen')?.classList.contains('hidden') === false,
+                userId: stored?.id || '',
+                userRole: stored?.role || '',
+              };
+            });
+
+            console.log('before=' + JSON.stringify(before));
+            console.log('invalid_result=' + JSON.stringify(invalidResult));
+            console.log('valid_result=' + JSON.stringify(validResult));
+            console.log('page_errors=' + JSON.stringify(pageErrors));
+            console.log('console_tail=' + JSON.stringify(consoleRows.slice(-40)));
+
+            if (!validResult.loginHidden || !validResult.dashboardVisible || validResult.userId !== '1001') {
+              throw new Error(`Existing Manager login did not open dashboard with Firestore blocked: ${JSON.stringify(validResult)}`);
             }
             if (pageErrors.length) {
               throw new Error(`Uncaught browser errors: ${pageErrors.join(' | ')}`);
