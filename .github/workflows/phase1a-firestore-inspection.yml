@@ -1,0 +1,69 @@
+name: Phase 1A Firestore migration inspection
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'employee-identity-migration.js'
+      - 'phase1a-collections.js'
+      - 'phase1a-migration-plan.js'
+      - 'phase1a-migration-guard.js'
+      - 'employee-identity-store.js'
+      - 'project-directory.js'
+      - 'tools/phase1a-firestore-inspection.mjs'
+      - '.github/workflows/phase1a-firestore-inspection.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Read-only inspect planned identity documents
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Read-only Firestore migration inspection
+        id: inspect
+        shell: bash
+        run: |
+          set +e
+          node tools/phase1a-firestore-inspection.mjs
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload migration inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1a-firestore-inspection
+          path: phase1a-firestore-inspection.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Report quota exhaustion
+        if: steps.inspect.outputs.exit_code == '2'
+        run: |
+          echo '::warning::Firestore returned 429 RESOURCE_EXHAUSTED during the bounded read-only Phase 1A inspection. No writes were attempted.'
+
+      - name: Fail on conflict, permission, or unexpected inspection error
+        if: steps.inspect.outputs.exit_code == '3'
+        run: |
+          echo 'Phase 1A Firestore inspection found a conflict, permission failure, or unexpected response.' >&2
+          cat phase1a-firestore-inspection.json || true
+          exit 1
+
+      - name: Confirm inspection is clean
+        if: steps.inspect.outputs.exit_code == '0'
+        run: |
+          echo 'Phase 1A Firestore inspection completed without conflicts. No writes were attempted.'
