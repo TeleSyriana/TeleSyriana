@@ -52,6 +52,7 @@ const conflicts = [];
 let quotaExhausted = false;
 let permissionDenied = false;
 let unexpectedError = false;
+let stoppedEarlyReason = '';
 let readCount = 0;
 
 const planned = [
@@ -133,6 +134,13 @@ for (const item of planned) {
   }
 
   rows.push(row);
+
+  // Quota exhaustion is already conclusive for this inspection. Stop immediately
+  // so a single bounded diagnostic does not add 14 more useless requests.
+  if (response.status === 429) {
+    stoppedEarlyReason = 'quota_exhausted';
+    break;
+  }
 }
 
 const summary = {
@@ -142,13 +150,14 @@ const summary = {
   plannedDocumentCount: plan.plannedDocumentCount,
   actualReadAttempts: readCount,
   maximumReads: 15,
+  stoppedEarlyReason,
   existingDocuments: rows.filter((row) => row.status === 'exists').length,
   missingDocuments: rows.filter((row) => row.status === 'missing').length,
   quotaExhausted,
   permissionDenied,
   unexpectedError,
   conflicts,
-  safeToApply: !quotaExhausted && !permissionDenied && !unexpectedError && conflicts.length === 0,
+  safeToApply: !quotaExhausted && !permissionDenied && !unexpectedError && conflicts.length === 0 && readCount === plan.plannedDocumentCount,
   rows,
 };
 
