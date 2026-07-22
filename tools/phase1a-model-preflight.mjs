@@ -16,12 +16,13 @@ function copyAsModule(sourcePath, targetName, replacements = []) {
 }
 
 const modelPath = copyAsModule('employee-model.js', 'employee-model.mjs');
-copyAsModule('project-model.js', 'project-model.mjs');
+const projectModelPath = copyAsModule('project-model.js', 'project-model.mjs');
 const seedPath = copyAsModule('employee-identity-seed.js', 'employee-identity-seed.mjs', [
   ['./employee-model.js', './employee-model.mjs'],
 ]);
 
 const model = await import(pathToFileURL(modelPath).href);
+const projectModel = await import(pathToFileURL(projectModelPath).href);
 const seed = await import(pathToFileURL(seedPath).href);
 
 const {
@@ -62,9 +63,15 @@ assert.equal(nextAvailableCcmsId('supervisor', ['2001']), '2002');
 assert.equal(nextAvailableCcmsId('hr', ['3001']), '3002');
 assert.equal(nextAvailableCcmsId('agent', ['9001', '9002', '9003']), '9004');
 
+assert.equal(projectModel.DEFAULT_PROJECT_ID, 'ipro');
+assert.equal(projectModel.DEFAULT_PROJECT.name, 'iPro');
+assert.equal(projectModel.DEFAULT_PROJECT.accountStatus, 'active');
+assert.equal(projectModel.DEFAULT_PROJECT.isDefault, true);
+
 assert.equal(seed.CURRENT_EMPLOYEE_IDENTITY_SEED.length, 7);
 for (const employee of seed.CURRENT_EMPLOYEE_IDENTITY_SEED) {
   assert.doesNotThrow(() => validateEmployeeIdentity(employee));
+  assert.equal(Object.prototype.hasOwnProperty.call(employee, 'password'), false, 'Identity seed must never duplicate passwords.');
 }
 
 const ceo = seed.seedIdentityByCcms('0001');
@@ -144,12 +151,21 @@ assert.equal(promotedValidated.projectId, 'ipro');
 assert.equal(promotedValidated.supervisorUid, '');
 
 // Firestore-facing modules are syntax checked without executing/importing Firebase.
-for (const file of ['employee-identity-store.js', 'project-directory.js']) {
-  const source = fs.readFileSync(path.join(root, file), 'utf8');
-  assert.match(source, /from "\.\/firebase\.js"/);
-}
+const identityStoreSource = fs.readFileSync(path.join(root, 'employee-identity-store.js'), 'utf8');
+assert.match(identityStoreSource, /from "\.\/firebase\.js"/);
+assert.match(identityStoreSource, /EMPLOYEE_IDENTITIES_COL = "employeeIdentities"/);
+assert.match(identityStoreSource, /EMPLOYEE_CCMS_INDEX_COL = "employeeCcmsIndex"/);
+assert.match(identityStoreSource, /Agent and Supervisor must belong to the same project/);
+assert.match(identityStoreSource, /Agent can only be assigned to a Supervisor account/);
+assert.match(identityStoreSource, /employeeUid is permanent and cannot be changed/);
+assert.match(identityStoreSource, /hasOwnProperty\.call\(options, key\)/);
+
+const projectDirectorySource = fs.readFileSync(path.join(root, 'project-directory.js'), 'utf8');
+assert.match(projectDirectorySource, /from "\.\/firebase\.js"/);
+assert.match(projectDirectorySource, /CEO permission is required to manage projects/);
+assert.match(projectDirectorySource, /The default iPro project cannot be archived during Phase 1A migration/);
 
 console.log('Phase 1A employee identity model preflight: PASS');
 console.log(`Validated ${seed.CURRENT_EMPLOYEE_IDENTITY_SEED.length} current employee identity seed rows.`);
 console.log('Verified CCMS roles: 0xxx CEO, 1xxx ACM, 2xxx Supervisor, 3xxx HR, 9xxx Agent.');
-console.log('Verified HR multi-project, single-project ACM/Supervisor/Agent, Agent Supervisor requirement, and permanent UID promotion behavior.');
+console.log('Verified HR multi-project, single-project ACM/Supervisor/Agent, Agent Supervisor requirement, same-project Supervisor guard, permanent UID promotion behavior, and password-free identity seed.');
