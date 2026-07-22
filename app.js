@@ -5,7 +5,9 @@
 // The previous production application is preserved byte-for-byte in app-core.js.
 // Use it directly until the Phase 1 bootstrap is repaired and browser-tested.
 //
-// This does not delete or migrate any Firestore data. Existing employee-directory
-// and feature-module files remain in place for the follow-up repair.
+// The read-only Employees & Accounts preview is mounted separately. It uses only
+// the approved local Phase 1A identity seed, performs no Firestore operations,
+// and does not change login or account-management behaviour.
 
 import './app-core.js';
+import './employees-accounts-readonly.js';
