@@ -14,6 +14,7 @@ import {
   validateProject,
 } from "./project-model.js";
 import { normaliseCanonicalRole } from "./employee-model.js";
+import { assertPhase1AMigrationWriteGate } from "./phase1a-migration-guard.js";
 
 const { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } = fs;
 
@@ -129,12 +130,12 @@ export async function setProjectStatus(projectId, status, actor = null) {
   return { ...existing, accountStatus: nextStatus };
 }
 
-export async function ensureDefaultIProProject(actor = null) {
+export async function ensureDefaultIProProject(actor = null, options = {}) {
   // Explicit migration helper only. It is not called at app startup.
   const existing = await getProject(DEFAULT_PROJECT_ID, { allowDefaultFallback: false });
   if (existing) return existing;
 
-  if (actor) assertCEO(actor);
+  assertPhase1AMigrationWriteGate({ actor, confirmation: options.confirmation });
   await setDoc(doc(db, PROJECTS_COL, DEFAULT_PROJECT_ID), projectPayload(DEFAULT_PROJECT, actor, { isCreate: true }), { merge: true });
   return { ...DEFAULT_PROJECT };
 }
