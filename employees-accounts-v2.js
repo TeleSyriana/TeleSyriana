@@ -13,15 +13,22 @@ import {
   legacySessionToEmployeeIdentity,
 } from "./employee-identity-compat.js";
 import {
-  createManagedEmployee,
-  demoteSupervisorToAgent,
   getEmployeesAccountsContext,
   listEligibleSupervisors,
   nextManagedCcmsId,
-  promoteAgentToSupervisor,
   setManagedEmployeeStatus,
   updateManagedEmployee,
 } from "./employee-management-service.js";
+import {
+  createManagedEmployeeAccount,
+  demoteManagedEmployeeAccount,
+  promoteManagedEmployeeAccount,
+  resetManagedEmployeeTemporaryPassword,
+} from "./employee-account-provisioning.js";
+import {
+  credentialPromptText,
+  requestTemporaryPassword,
+} from "./employee-credential-prompt.js";
 import {
   canManageEmployeeTarget,
   canModifyDirectoryRow,
@@ -102,7 +109,7 @@ function injectStyles() {
     .empv2-banner.warn{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25)}
     .empv2-stats{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px}.empv2-stat{padding:12px;border-radius:14px;border:1px solid rgba(100,116,139,.16)}.empv2-stat strong{display:block;font-size:22px}.empv2-stat small{opacity:.7}
     .empv2-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) 170px 170px;gap:10px}.empv2-toolbar input,.empv2-toolbar select,.empv2-form-grid input,.empv2-form-grid select{width:100%;box-sizing:border-box}
-    .empv2-table-wrap{overflow:auto;border:1px solid rgba(100,116,139,.16);border-radius:16px}.empv2-table{width:100%;border-collapse:collapse;min-width:1180px}.empv2-table th,.empv2-table td{padding:11px 10px;text-align:start;border-bottom:1px solid rgba(100,116,139,.13);vertical-align:middle}.empv2-table th{font-size:12px;opacity:.72;white-space:nowrap}
+    .empv2-table-wrap{overflow:auto;border:1px solid rgba(100,116,139,.16);border-radius:16px}.empv2-table{width:100%;border-collapse:collapse;min-width:1240px}.empv2-table th,.empv2-table td{padding:11px 10px;text-align:start;border-bottom:1px solid rgba(100,116,139,.13);vertical-align:middle}.empv2-table th{font-size:12px;opacity:.72;white-space:nowrap}
     .empv2-name strong{display:block}.empv2-name small{opacity:.65}.empv2-pill{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800;background:rgba(148,163,184,.16)}.empv2-pill.active,.empv2-pill.permanent{background:rgba(34,197,94,.14);color:#15803d}.empv2-pill.disabled,.empv2-pill.compatibility{background:rgba(245,158,11,.15);color:#a16207}
     .empv2-row-actions button{padding:7px 9px;border-radius:9px;border:1px solid rgba(100,116,139,.24);background:var(--card,#fff);color:inherit;cursor:pointer;font:inherit;font-size:12px}.empv2-row-actions button:disabled{opacity:.42;cursor:not-allowed}.empv2-row-actions button.danger{color:#b91c1c}.empv2-empty{padding:28px;text-align:center;opacity:.7}
     .empv2-modal{position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px}.empv2-modal.hidden{display:none}.empv2-modal-card{width:min(820px,100%);max-height:92vh;overflow:auto;background:var(--card,#fff);color:inherit;border-radius:20px;padding:20px;box-shadow:0 26px 80px rgba(15,23,42,.32)}
@@ -152,6 +159,7 @@ function ensureModal() {
         <label>${t("المشروع الرئيسي", "Primary project")}<select id="empv2-project"></select></label>
         <label id="empv2-projects-wrap" class="empv2-span-2">${t("مشاريع HR", "HR projects")}<select id="empv2-projects" multiple size="4"></select></label>
         <label id="empv2-supervisor-wrap">${t("المشرف", "Supervisor")}<select id="empv2-supervisor"></select></label>
+        <label id="empv2-password-wrap" class="empv2-span-2">${t("كلمة المرور المؤقتة", "Temporary password")}<input id="empv2-password" type="password" autocomplete="new-password" minlength="8" /><small class="empv2-note">${t("8 أحرف على الأقل. تُخزّن بشكل مشفّر ولا تُحفظ كنص صريح.", "Minimum 8 characters. Stored as a salted hash, never plaintext.")}</small></label>
         <label>${t("الأجر بالساعة", "Hourly rate")}<input id="empv2-rate" type="number" min="0" step="0.01" value="1.15" /></label>
         <label>${t("العملة", "Currency")}<select id="empv2-currency"><option>USD</option><option>GBP</option><option>EUR</option></select></label>
         <label>${t("المنطقة الزمنية", "Timezone")}<input id="empv2-timezone" value="Asia/Damascus" /></label>
@@ -170,6 +178,11 @@ function supervisorName(row) {
 function projectsText(row) {
   if (row.roleKey === EMPLOYEE_ROLES.CEO) return t("كل المشاريع", "All projects");
   return (row.projectIds || []).join(", ") || row.projectId || "—";
+}
+
+function directoryWritable() {
+  const health = pageState.context?.directoryHealth;
+  return Boolean(health && !health.migrationPending && health.accountProvisioningReady);
 }
 
 function filteredRows() {
@@ -194,12 +207,16 @@ function render() {
   if (!body || !empty) return;
 
   const health = context.directoryHealth;
-  const writable = !health.migrationPending;
+  const writable = directoryWritable();
   const banner = document.getElementById("empv2-banner");
-  banner.classList.toggle("warn", health.migrationPending);
-  banner.textContent = health.migrationPending
+  const waitingMigration = health.migrationPending;
+  const waitingProvisioning = !waitingMigration && !health.accountProvisioningReady;
+  banner.classList.toggle("warn", waitingMigration || waitingProvisioning);
+  banner.textContent = waitingMigration
     ? t("الترحيل الدائم ما زال معلّقاً بسبب جاهزية Firestore. حسابات التوافق ظاهرة للقراءة فقط ولن نسمح بتعديلها أو إنشاء حالة مختلطة.", "Permanent migration is still pending because Firestore is not ready. Compatibility accounts are view-only; unsafe mixed-directory writes are disabled.")
-    : t("الدليل الدائم جاهز. يمكن إدارة الحسابات ضمن صلاحيات المشروع.", "Permanent directory is ready. Accounts can be managed within project permissions.");
+    : waitingProvisioning
+      ? t("الدليل الدائم جاهز، لكن إنشاء الحسابات ما زال مقفلاً حتى يكتمل اختبار ربط تسجيل الدخول وكلمات المرور المشفّرة.", "The permanent directory is ready, but account writes remain locked until the hashed-credential login bridge is fully validated.")
+      : t("الدليل الدائم وربط الحسابات جاهزان. يمكن إدارة الحسابات ضمن صلاحيات المشروع.", "Permanent directory and account provisioning are ready. Accounts can be managed within project permissions.");
 
   document.getElementById("empv2-add").disabled = !writable;
   document.getElementById("empv2-total").textContent = String(context.employees.length);
@@ -211,13 +228,14 @@ function render() {
   empty.classList.toggle("hidden", rows.length > 0);
   rows.forEach((row) => {
     const manageable = canManageEmployeeTarget(pageState.actor, row);
-    const rowWritable = canModifyDirectoryRow(pageState.actor, row);
+    const rowWritable = writable && canModifyDirectoryRow(pageState.actor, row);
     const isAgent = row.roleKey === EMPLOYEE_ROLES.AGENT;
     const isSupervisor = row.roleKey === EMPLOYEE_ROLES.SUPERVISOR;
     const status = row.accountStatus || "active";
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="empv2-name"><strong>${esc(row.fullName)}</strong><small>${esc(row.employeeUid)}</small></td><td>${esc(row.ccmsId)}</td><td>${esc(roleLabel(row.roleKey))}</td><td>${esc(projectsText(row))}</td><td>${esc(supervisorName(row))}</td><td><span class="empv2-pill ${esc(status)}">${esc(statusLabel(status))}</span></td><td><span class="empv2-pill ${row.directorySource === "firestore" ? "permanent" : "compatibility"}">${esc(sourceLabel(row.directorySource))}</span></td><td>${esc(row.currency || "USD")} ${Number(row.hourlyRate || 0).toFixed(2)}/h</td><td><div class="empv2-row-actions">
       ${manageable ? `<button data-act="edit" data-uid="${esc(row.employeeUid)}" ${rowWritable ? "" : "disabled"}>${t("تعديل", "Edit")}</button>` : ""}
+      ${manageable && row.directorySource === "firestore" ? `<button data-act="reset-password" data-uid="${esc(row.employeeUid)}" ${rowWritable ? "" : "disabled"}>${t("كلمة مرور جديدة", "Reset password")}</button>` : ""}
       ${manageable && isAgent ? `<button data-act="promote" data-uid="${esc(row.employeeUid)}" ${rowWritable ? "" : "disabled"}>${t("ترقية", "Promote")}</button>` : ""}
       ${manageable && isSupervisor ? `<button data-act="demote" data-uid="${esc(row.employeeUid)}" ${rowWritable ? "" : "disabled"}>${t("تخفيض", "Demote")}</button>` : ""}
       ${manageable && status === "active" ? `<button data-act="disable" data-uid="${esc(row.employeeUid)}" ${rowWritable ? "" : "disabled"}>${t("تعطيل", "Disable")}</button>` : ""}
@@ -279,7 +297,7 @@ async function syncRoleFields() {
 }
 
 async function openModal(row = null) {
-  if (pageState.context?.directoryHealth?.migrationPending) return;
+  if (!directoryWritable()) return;
   ensureModal();
   pageState.editingUid = row?.employeeUid || "";
   document.getElementById("empv2-modal-title").textContent = row ? t("تعديل الموظف", "Edit employee") : t("إضافة موظف", "Add employee");
@@ -290,6 +308,10 @@ async function openModal(row = null) {
   document.getElementById("empv2-rate").value = Number(row?.hourlyRate ?? 1.15);
   document.getElementById("empv2-currency").value = row?.currency || "USD";
   document.getElementById("empv2-timezone").value = row?.timezone || "Asia/Damascus";
+  const passwordWrap = document.getElementById("empv2-password-wrap");
+  const passwordInput = document.getElementById("empv2-password");
+  passwordWrap?.classList.toggle("hidden", Boolean(row));
+  if (passwordInput) passwordInput.value = "";
   const multiple = document.getElementById("empv2-projects");
   Array.from(multiple.options).forEach((opt) => { opt.selected = (row?.projectIds || []).includes(opt.value); });
   await syncRoleFields();
@@ -306,6 +328,7 @@ function closeModal() {
 
 async function saveForm(event) {
   event.preventDefault();
+  if (!directoryWritable()) return;
   const save = document.getElementById("empv2-save");
   if (save) save.disabled = true;
   try {
@@ -332,8 +355,13 @@ async function saveForm(event) {
       accountStatus: "active",
     };
 
-    if (pageState.editingUid) await updateManagedEmployee(pageState.actor, pageState.editingUid, payload);
-    else await createManagedEmployee(pageState.actor, payload);
+    if (pageState.editingUid) {
+      await updateManagedEmployee(pageState.actor, pageState.editingUid, payload);
+    } else {
+      await createManagedEmployeeAccount(pageState.actor, payload, {
+        temporaryPassword: document.getElementById("empv2-password")?.value || "",
+      });
+    }
     closeModal();
     await refreshContext();
   } catch (error) {
@@ -345,19 +373,40 @@ async function saveForm(event) {
 
 async function action(type, employeeUid) {
   const row = pageState.context?.employees?.find((item) => item.employeeUid === employeeUid);
-  if (!row || !canManageEmployeeTarget(pageState.actor, row) || !canModifyDirectoryRow(pageState.actor, row)) return;
+  if (!directoryWritable() || !row || !canManageEmployeeTarget(pageState.actor, row) || !canModifyDirectoryRow(pageState.actor, row)) return;
   try {
     if (type === "edit") return openModal(row);
-    if (type === "promote") {
+    if (type === "reset-password") {
+      const temporaryPassword = await requestTemporaryPassword({
+        title: t("كلمة مرور مؤقتة جديدة", "New temporary password"),
+        message: credentialPromptText(row.fullName, "reset"),
+      });
+      if (!temporaryPassword) return;
+      await resetManagedEmployeeTemporaryPassword(pageState.actor, employeeUid, temporaryPassword);
+    } else if (type === "promote") {
       if (!confirm(t(`ترقية ${row.fullName} من ${row.ccmsId} إلى مشرف مع CCMS جديد؟`, `Promote ${row.fullName} from ${row.ccmsId} to Supervisor with a new CCMS?`))) return;
-      await promoteAgentToSupervisor(pageState.actor, employeeUid);
+      const temporaryPassword = await requestTemporaryPassword({
+        title: t("ترقية وتغيير CCMS", "Promotion and CCMS change"),
+        message: credentialPromptText(row.fullName, "promotion"),
+      });
+      if (!temporaryPassword) return;
+      await promoteManagedEmployeeAccount(pageState.actor, employeeUid, { temporaryPassword });
     } else if (type === "demote") {
       const supervisors = await listEligibleSupervisors(pageState.actor, row.projectId);
       const eligible = supervisors.filter((sup) => sup.employeeUid !== employeeUid);
       if (!eligible.length) throw new Error(t("لا يوجد مشرف آخر في نفس المشروع لاستلام الموظف.", "No other Supervisor in this project is available for the demoted Agent."));
       const target = eligible[0];
       if (!confirm(t(`سيتم تخفيض ${row.fullName} إلى Agent وتعيينه إلى ${target.fullName}. متابعة؟`, `Demote ${row.fullName} to Agent and assign to ${target.fullName}?`))) return;
-      await demoteSupervisorToAgent(pageState.actor, employeeUid, { supervisorUid: target.employeeUid, supervisorCcmsId: target.ccmsId });
+      const temporaryPassword = await requestTemporaryPassword({
+        title: t("تخفيض وتغيير CCMS", "Demotion and CCMS change"),
+        message: credentialPromptText(row.fullName, "demotion"),
+      });
+      if (!temporaryPassword) return;
+      await demoteManagedEmployeeAccount(pageState.actor, employeeUid, {
+        supervisorUid: target.employeeUid,
+        supervisorCcmsId: target.ccmsId,
+        temporaryPassword,
+      });
     } else if (type === "disable") {
       if (!confirm(t(`تعطيل ${row.fullName}؟ ستبقى كل السجلات محفوظة.`, `Disable ${row.fullName}? All history will remain preserved.`))) return;
       await setManagedEmployeeStatus(pageState.actor, employeeUid, "disabled");
