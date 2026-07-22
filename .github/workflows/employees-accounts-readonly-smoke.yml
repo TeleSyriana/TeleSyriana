@@ -75,7 +75,8 @@ jobs:
           });
 
           async function testRole({ ccmsId, password, expectedVisible, expectedRows }) {
-            const page = await browser.newPage();
+            const context = await browser.createBrowserContext();
+            const page = await context.newPage();
             const pageErrors = [];
             const consoleRows = [];
             page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
@@ -142,7 +143,7 @@ jobs:
               console.log(JSON.stringify({ ccmsId, visibility, details, pageErrors, consoleTail: consoleRows.slice(-15) }));
               if (pageErrors.length) throw new Error(`Browser errors for ${ccmsId}: ${pageErrors.join(' | ')}`);
             } finally {
-              await page.close();
+              await context.close();
             }
           }
 
