@@ -1,0 +1,174 @@
+name: Employees & Accounts read-only smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'employees-accounts-readonly.js'
+      - 'employee-identity-seed.js'
+      - 'employee-model.js'
+      - '.github/workflows/employees-accounts-readonly-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readonly-employees:
+    name: Verify role-scoped read-only employee tab
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Static read-only guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp employees-accounts-readonly.js /tmp/employees-accounts-readonly.mjs
+          node --check /tmp/employees-accounts-readonly.mjs
+          grep -q "CURRENT_EMPLOYEE_IDENTITY_SEED" employees-accounts-readonly.js
+          grep -q "View only" employees-accounts-readonly.js
+          grep -q "zero Firestore imports" employees-accounts-readonly.js
+          if grep -Eq "from [\"']\\./firebase\\.js|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(|onSnapshot\\(" employees-accounts-readonly.js; then
+            echo 'Read-only employee preview contains a Firestore import or write/listener API.' >&2
+            exit 1
+          fi
+          if grep -Eq "Add employee|Promote|Demote|Disable|Reactivate|Archive|Reset Password" employees-accounts-readonly.js; then
+            echo 'Read-only employee preview unexpectedly exposes account-management actions.' >&2
+            exit 1
+          fi
+          grep -Fq "import './employees-accounts-readonly.js';" app.js
+          echo 'Read-only source guard: PASS'
+
+      - name: Browser role and visibility smoke with Firestore blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/telesyriana-employees-browser
+          cd /tmp/telesyriana-employees-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > employees-readonly-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-employees-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/employees-readonly-smoke.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = [
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/chromium',
+          ].find((path) => fs.existsSync(path));
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+          });
+
+          async function testRole({ ccmsId, password, expectedVisible, expectedRows }) {
+            const page = await browser.newPage();
+            const pageErrors = [];
+            const consoleRows = [];
+            page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
+            page.on('console', (message) => consoleRows.push(`[${message.type()}] ${message.text()}`));
+
+            await page.setRequestInterception(true);
+            page.on('request', (request) => {
+              const url = request.url();
+              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) {
+                request.abort();
+              } else {
+                request.continue();
+              }
+            });
+
+            try {
+              await page.goto('http://127.0.0.1:4173/index.html', {
+                waitUntil: 'domcontentloaded',
+                timeout: 30_000,
+              });
+              await page.waitForSelector('#login-form', { timeout: 10_000 });
+              await page.type('#ccmsId', ccmsId);
+              await page.type('#password', password);
+              await page.click('#login-form button[type="submit"]');
+              await page.waitForFunction(() => {
+                const dashboard = document.getElementById('dashboard-screen');
+                return dashboard && !dashboard.classList.contains('hidden');
+              }, { timeout: 12_000 });
+              await new Promise((resolve) => setTimeout(resolve, 700));
+
+              const visibility = await page.evaluate(() => {
+                const nav = document.getElementById('nav-employees-readonly');
+                return Boolean(nav && !nav.classList.contains('hidden'));
+              });
+              if (visibility !== expectedVisible) {
+                throw new Error(`Unexpected tab visibility for ${ccmsId}: ${visibility}`);
+              }
+
+              let details = { rows: 0, pageVisible: false, actionButtons: 0, mode: '' };
+              if (expectedVisible) {
+                await page.evaluate(() => document.getElementById('nav-employees-readonly')?.click());
+                await page.waitForFunction(() => {
+                  const section = document.getElementById('page-employees-readonly');
+                  return section && !section.classList.contains('hidden');
+                }, { timeout: 5_000 });
+                details = await page.evaluate(() => {
+                  const pageSection = document.getElementById('page-employees-readonly');
+                  return {
+                    rows: document.querySelectorAll('#employees-ro-body tr').length,
+                    pageVisible: Boolean(pageSection && !pageSection.classList.contains('hidden')),
+                    actionButtons: pageSection?.querySelectorAll('button').length || 0,
+                    mode: String(document.getElementById('employees-ro-mode')?.textContent || '').trim(),
+                  };
+                });
+                if (!details.pageVisible || details.rows !== expectedRows) {
+                  throw new Error(`Unexpected employee page for ${ccmsId}: ${JSON.stringify(details)}`);
+                }
+                if (details.actionButtons !== 0) {
+                  throw new Error(`Read-only page exposed action buttons for ${ccmsId}: ${details.actionButtons}`);
+                }
+                if (!details.mode) throw new Error(`Read-only mode badge missing for ${ccmsId}.`);
+              }
+
+              console.log(JSON.stringify({ ccmsId, visibility, details, pageErrors, consoleTail: consoleRows.slice(-15) }));
+              if (pageErrors.length) throw new Error(`Browser errors for ${ccmsId}: ${pageErrors.join(' | ')}`);
+            } finally {
+              await page.close();
+            }
+          }
+
+          try {
+            await testRole({ ccmsId: '0001', password: 'Aa095142332415!', expectedVisible: true, expectedRows: 7 });
+            await testRole({ ccmsId: '1001', password: '0951', expectedVisible: true, expectedRows: 6 });
+            await testRole({ ccmsId: '3001', password: '2411', expectedVisible: true, expectedRows: 6 });
+            await testRole({ ccmsId: '2001', password: '2411', expectedVisible: false, expectedRows: 0 });
+          } finally {
+            await browser.close();
+          }
+          NODE
+
+          cat "$GITHUB_WORKSPACE/employees-readonly-smoke.log"
+
+      - name: Upload browser output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: employees-accounts-readonly-smoke-output
+          path: |
+            employees-readonly-smoke.log
+            employees-readonly-server.log
+          if-no-files-found: warn
+          retention-days: 7
