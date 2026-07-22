@@ -8,6 +8,7 @@ on:
       - 'employee-management-service.js'
       - 'employees-accounts-v2.js'
       - 'employee-credential-crypto.js'
+      - 'employee-credential-prompt.js'
       - 'employee-auth-v2.js'
       - 'employee-account-provisioning.js'
       - 'tools/phase1b-policy-preflight.mjs'
@@ -50,13 +51,14 @@ jobs:
             employee-management-service.js \
             employees-accounts-v2.js \
             employee-credential-crypto.js \
+            employee-credential-prompt.js \
             employee-auth-v2.js \
             employee-account-provisioning.js; do
             cp "$file" "/tmp/${file%.js}.mjs"
             node --check "/tmp/${file%.js}.mjs"
           done
 
-      - name: Confirm V2 page is explicit-mount only
+      - name: Confirm V2 page is explicit-mount only and credential-coordinated
         shell: bash
         run: |
           set -euo pipefail
@@ -67,9 +69,15 @@ jobs:
             exit 1
           fi
           grep -q 'migrationPending' employees-accounts-v2.js
+          grep -q 'accountProvisioningReady' employees-accounts-v2.js
           grep -q 'canModifyDirectoryRow' employees-accounts-v2.js
+          grep -q 'createManagedEmployeeAccount' employees-accounts-v2.js
+          grep -q 'promoteManagedEmployeeAccount' employees-accounts-v2.js
+          grep -q 'demoteManagedEmployeeAccount' employees-accounts-v2.js
+          grep -q 'resetManagedEmployeeTemporaryPassword' employees-accounts-v2.js
+          grep -q 'requestTemporaryPassword' employees-accounts-v2.js
           grep -q 'EMPLOYEE_ACCOUNT_PROVISIONING_READY = false' employee-management-service.js
-          echo 'Explicit-mount, compatibility read-only, and provisioning-lock checks: PASS'
+          echo 'Explicit-mount, compatibility read-only, credential-coordinator, and provisioning-lock checks: PASS'
 
       - name: Confirm stacked Phase 1B does not modify live runtime
         shell: bash
