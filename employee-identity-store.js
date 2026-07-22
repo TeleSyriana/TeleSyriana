@@ -20,6 +20,7 @@ import {
   seedIdentityByCcms,
   seedIdentityByUid,
 } from "./employee-identity-seed.js";
+import { assertPhase1AMigrationWriteGate } from "./phase1a-migration-guard.js";
 
 const {
   collection,
@@ -40,6 +41,22 @@ function clean(value) {
 
 function clone(row) {
   return row ? { ...row, projectIds: [...(row.projectIds || [])] } : null;
+}
+
+function withDirectorySource(row, directorySource) {
+  const copy = clone(row);
+  return copy ? { ...copy, directorySource } : null;
+}
+
+function assertNotReservedLegacyIdentity(employee) {
+  const reservedByCcms = seedIdentityByCcms(employee?.ccmsId);
+  const reservedByUid = seedIdentityByUid(employee?.employeeUid);
+  if (!reservedByCcms && !reservedByUid) return;
+
+  throw new Error(
+    "This CCMS or employee UID is reserved for an existing TeleSyriana employee. " +
+    "Complete the controlled Phase 1A migration instead of creating a duplicate identity."
+  );
 }
 
 function identityPayload(employee, actor = null, { isCreate = false } = {}) {
@@ -94,13 +111,16 @@ export async function getEmployeeIdentityByUid(employeeUid, options = {}) {
   try {
     const snap = await getDoc(doc(db, EMPLOYEE_IDENTITIES_COL, uid));
     if (snap.exists()) {
-      return clone(normaliseEmployeeIdentity({ ...snap.data(), employeeUid: uid }));
+      return withDirectorySource(
+        normaliseEmployeeIdentity({ ...snap.data(), employeeUid: uid }),
+        "firestore"
+      );
     }
   } catch (err) {
     console.warn("Employee identity UID lookup failed; using compatibility seed when available.", err);
   }
 
-  return allowSeedFallback ? clone(seedIdentityByUid(uid)) : null;
+  return allowSeedFallback ? withDirectorySource(seedIdentityByUid(uid), "seed") : null;
 }
 
 export async function getEmployeeIdentityByCcms(ccmsId, options = {}) {
@@ -121,7 +141,7 @@ export async function getEmployeeIdentityByCcms(ccmsId, options = {}) {
     console.warn("Employee CCMS index lookup failed; using compatibility seed when available.", err);
   }
 
-  return allowSeedFallback ? clone(seedIdentityByCcms(id)) : null;
+  return allowSeedFallback ? withDirectorySource(seedIdentityByCcms(id), "seed") : null;
 }
 
 export async function listEmployeeIdentities(options = {}) {
@@ -131,14 +151,16 @@ export async function listEmployeeIdentities(options = {}) {
   const rows = new Map();
 
   if (includeSeedFallback) {
-    CURRENT_EMPLOYEE_IDENTITY_SEED.forEach((row) => rows.set(row.employeeUid, clone(row)));
+    CURRENT_EMPLOYEE_IDENTITY_SEED.forEach((row) => {
+      rows.set(row.employeeUid, withDirectorySource(row, "seed"));
+    });
   }
 
   try {
     const snap = await getDocs(collection(db, EMPLOYEE_IDENTITIES_COL));
     snap.forEach((item) => {
       const row = normaliseEmployeeIdentity({ ...item.data(), employeeUid: item.id });
-      if (row.employeeUid) rows.set(row.employeeUid, row);
+      if (row.employeeUid) rows.set(row.employeeUid, withDirectorySource(row, "firestore"));
     });
   } catch (err) {
     console.warn("Employee identity list failed; using compatibility identity seed.", err);
@@ -182,6 +204,13 @@ export async function createEmployeeIdentity(input = {}, actor = null) {
     employeeUid: clean(input.employeeUid) || createEmployeeUid(),
   });
   const employee = validateEmployeeIdentity(initial);
+
+  // The seven legacy staff identities remain reserved even before the permanent
+  // migration can be written. This prevents an empty Firestore index (for example
+  // while quota is exhausted) from allowing CCMS 9001 or another legacy ID to be
+  // claimed by a new person.
+  assertNotReservedLegacyIdentity(employee);
+
   const supervisor = await resolveSupervisorForAgent(employee);
 
   if (supervisor) {
@@ -205,7 +234,7 @@ export async function createEmployeeIdentity(input = {}, actor = null) {
     tx.set(indexRef, indexPayload(employee.employeeUid, employee.ccmsId, actor));
   });
 
-  return clone(employee);
+  return withDirectorySource(employee, "firestore");
 }
 
 export async function updateEmployeeIdentity(employeeUid, patch = {}, actor = null) {
@@ -242,6 +271,11 @@ export async function updateEmployeeIdentity(employeeUid, patch = {}, actor = nu
     if (!identitySnap.exists()) throw new Error("Employee identity no longer exists.");
 
     if (next.ccmsId !== existing.ccmsId) {
+      const reserved = seedIdentityByCcms(next.ccmsId);
+      if (reserved && reserved.employeeUid !== uid) {
+        throw new Error(`CCMS ${next.ccmsId} is reserved for an existing TeleSyriana employee.`);
+      }
+
       const newIndexSnap = await tx.get(newIndexRef);
       if (newIndexSnap.exists() && clean(newIndexSnap.data()?.employeeUid) !== uid) {
         throw new Error(`CCMS ${next.ccmsId} is already assigned.`);
@@ -255,10 +289,11 @@ export async function updateEmployeeIdentity(employeeUid, patch = {}, actor = nu
     tx.set(identityRef, identityPayload(next, actor), { merge: true });
   });
 
-  return clone(next);
+  return withDirectorySource(next, "firestore");
 }
 
-export async function seedCurrentEmployeeIdentities(actor = null) {
+export async function seedCurrentEmployeeIdentities(actor = null, options = {}) {
+  assertPhase1AMigrationWriteGate({ actor, confirmation: options.confirmation });
   const results = [];
 
   for (const seed of CURRENT_EMPLOYEE_IDENTITY_SEED) {
@@ -283,7 +318,7 @@ export async function seedCurrentEmployeeIdentities(actor = null) {
       }
     });
 
-    results.push(clone(seed));
+    results.push(withDirectorySource(seed, "firestore"));
   }
 
   return results;
@@ -300,10 +335,15 @@ export async function reclassifyEmployee(employeeUid, options = {}, actor = null
   return updateEmployeeIdentity(employeeUid, patch, actor);
 }
 
-// Intentionally explicit. Nothing in Phase 1A calls this automatically on app
-// startup because production Firestore is currently quota-sensitive.
-export async function ensureIdentityIndex(employee, actor = null) {
+// Explicit migration/repair helper only. It is gated just like the seed path so
+// it cannot be used to bypass reservation protection for a legacy CCMS.
+export async function ensureIdentityIndex(employee, actor = null, options = {}) {
+  assertPhase1AMigrationWriteGate({ actor, confirmation: options.confirmation });
   const row = validateEmployeeIdentity(employee);
-  await setDoc(doc(db, EMPLOYEE_CCMS_INDEX_COL, row.ccmsId), indexPayload(row.employeeUid, row.ccmsId, actor), { merge: true });
-  return clone(row);
+  await setDoc(
+    doc(db, EMPLOYEE_CCMS_INDEX_COL, row.ccmsId),
+    indexPayload(row.employeeUid, row.ccmsId, actor),
+    { merge: true }
+  );
+  return withDirectorySource(row, "firestore");
 }

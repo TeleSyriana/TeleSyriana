@@ -7,9 +7,15 @@ on:
       - 'employee-model.js'
       - 'employee-identity-seed.js'
       - 'employee-identity-store.js'
+      - 'employee-identity-migration.js'
+      - 'employee-identity-compat.js'
+      - 'phase1a-collections.js'
+      - 'phase1a-migration-plan.js'
+      - 'phase1a-migration-guard.js'
       - 'project-model.js'
       - 'project-directory.js'
       - 'tools/phase1a-model-preflight.mjs'
+      - 'tools/phase1a-reservation-preflight.mjs'
       - 'docs/phase-1a-employee-identity.md'
       - '.github/workflows/phase1a-model-preflight.yml'
   workflow_dispatch:
@@ -37,11 +43,24 @@ jobs:
       - name: Run pure model tests
         run: node tools/phase1a-model-preflight.mjs
 
+      - name: Verify legacy identity reservations
+        run: node tools/phase1a-reservation-preflight.mjs
+
       - name: Syntax check new browser modules
         shell: bash
         run: |
           set -euo pipefail
-          for file in employee-model.js employee-identity-seed.js employee-identity-store.js project-model.js project-directory.js; do
+          for file in \
+            employee-model.js \
+            employee-identity-seed.js \
+            employee-identity-store.js \
+            employee-identity-migration.js \
+            employee-identity-compat.js \
+            phase1a-collections.js \
+            phase1a-migration-plan.js \
+            phase1a-migration-guard.js \
+            project-model.js \
+            project-directory.js; do
             cp "$file" "/tmp/${file%.js}.mjs"
             node --check "/tmp/${file%.js}.mjs"
           done
