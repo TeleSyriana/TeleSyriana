@@ -7,6 +7,10 @@ on:
       - 'employee-model.js'
       - 'employee-identity-seed.js'
       - 'employee-identity-store.js'
+      - 'employee-identity-migration.js'
+      - 'phase1a-collections.js'
+      - 'phase1a-migration-plan.js'
+      - 'phase1a-migration-guard.js'
       - 'project-model.js'
       - 'project-directory.js'
       - 'tools/phase1a-model-preflight.mjs'
@@ -41,7 +45,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in employee-model.js employee-identity-seed.js employee-identity-store.js project-model.js project-directory.js; do
+          for file in \
+            employee-model.js \
+            employee-identity-seed.js \
+            employee-identity-store.js \
+            employee-identity-migration.js \
+            phase1a-collections.js \
+            phase1a-migration-plan.js \
+            phase1a-migration-guard.js \
+            project-model.js \
+            project-directory.js; do
             cp "$file" "/tmp/${file%.js}.mjs"
             node --check "/tmp/${file%.js}.mjs"
           done
