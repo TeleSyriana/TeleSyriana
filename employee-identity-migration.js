@@ -6,13 +6,15 @@
 
 import { db, fs } from "./firebase.js";
 import { CURRENT_EMPLOYEE_IDENTITY_SEED } from "./employee-identity-seed.js";
+import { seedCurrentEmployeeIdentities } from "./employee-identity-store.js";
+import { DEFAULT_PROJECT_ID } from "./project-model.js";
+import { ensureDefaultIProProject } from "./project-directory.js";
 import {
   EMPLOYEE_CCMS_INDEX_COL,
   EMPLOYEE_IDENTITIES_COL,
-  seedCurrentEmployeeIdentities,
-} from "./employee-identity-store.js";
-import { DEFAULT_PROJECT, DEFAULT_PROJECT_ID } from "./project-model.js";
-import { PROJECTS_COL, ensureDefaultIProProject } from "./project-directory.js";
+  PROJECTS_COL,
+} from "./phase1a-collections.js";
+import { buildPhase1AMigrationPlan } from "./phase1a-migration-plan.js";
 import {
   PHASE1A_MIGRATION_CONFIRMATION,
   assertPhase1AMigrationWriteGate,
@@ -20,58 +22,10 @@ import {
 
 const { doc, getDoc } = fs;
 
-export { PHASE1A_MIGRATION_CONFIRMATION };
+export { PHASE1A_MIGRATION_CONFIRMATION, buildPhase1AMigrationPlan };
 
 function clean(value) {
   return String(value ?? "").trim();
-}
-
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-export function buildPhase1AMigrationPlan() {
-  const identities = CURRENT_EMPLOYEE_IDENTITY_SEED.map((employee) => ({
-    collection: EMPLOYEE_IDENTITIES_COL,
-    documentId: employee.employeeUid,
-    employeeUid: employee.employeeUid,
-    ccmsId: employee.ccmsId,
-    fullName: employee.fullName,
-    roleKey: employee.roleKey,
-    projectId: employee.projectId,
-    projectIds: [...employee.projectIds],
-    supervisorUid: employee.supervisorUid || "",
-    supervisorCcmsId: employee.supervisorCcmsId || "",
-    accountStatus: employee.accountStatus,
-  }));
-
-  const ccmsIndexes = CURRENT_EMPLOYEE_IDENTITY_SEED.map((employee) => ({
-    collection: EMPLOYEE_CCMS_INDEX_COL,
-    documentId: employee.ccmsId,
-    employeeUid: employee.employeeUid,
-    ccmsId: employee.ccmsId,
-  }));
-
-  const projects = [{
-    collection: PROJECTS_COL,
-    documentId: DEFAULT_PROJECT_ID,
-    projectId: DEFAULT_PROJECT.projectId,
-    name: DEFAULT_PROJECT.name,
-    accountStatus: DEFAULT_PROJECT.accountStatus,
-    isDefault: DEFAULT_PROJECT.isDefault,
-  }];
-
-  return clone({
-    mode: "preview",
-    writesPerformed: false,
-    employeeCount: identities.length,
-    plannedDocumentCount: identities.length + ccmsIndexes.length + projects.length,
-    collections: {
-      identities,
-      ccmsIndexes,
-      projects,
-    },
-  });
 }
 
 async function inspectDocument(ref) {
