@@ -7,7 +7,10 @@ on:
       - 'employee-management-policy.js'
       - 'employee-management-service.js'
       - 'employees-accounts-v2.js'
+      - 'employee-credential-crypto.js'
+      - 'employee-auth-v2.js'
       - 'tools/phase1b-policy-preflight.mjs'
+      - 'tools/phase1b-auth-preflight.mjs'
       - '.github/workflows/phase1b-employees-preflight.yml'
   workflow_dispatch:
 
@@ -34,11 +37,19 @@ jobs:
       - name: Run management policy tests
         run: node tools/phase1b-policy-preflight.mjs
 
+      - name: Run credential/auth tests
+        run: node tools/phase1b-auth-preflight.mjs
+
       - name: Syntax check Phase 1B modules
         shell: bash
         run: |
           set -euo pipefail
-          for file in employee-management-policy.js employee-management-service.js employees-accounts-v2.js; do
+          for file in \
+            employee-management-policy.js \
+            employee-management-service.js \
+            employees-accounts-v2.js \
+            employee-credential-crypto.js \
+            employee-auth-v2.js; do
             cp "$file" "/tmp/${file%.js}.mjs"
             node --check "/tmp/${file%.js}.mjs"
           done
@@ -55,7 +66,8 @@ jobs:
           fi
           grep -q 'migrationPending' employees-accounts-v2.js
           grep -q 'canModifyDirectoryRow' employees-accounts-v2.js
-          echo 'Explicit-mount and compatibility read-only checks: PASS'
+          grep -q 'EMPLOYEE_ACCOUNT_PROVISIONING_READY = false' employee-management-service.js
+          echo 'Explicit-mount, compatibility read-only, and provisioning-lock checks: PASS'
 
       - name: Confirm stacked Phase 1B does not modify live runtime
         shell: bash
