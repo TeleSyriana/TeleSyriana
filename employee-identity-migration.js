@@ -11,33 +11,19 @@ import {
   EMPLOYEE_IDENTITIES_COL,
   seedCurrentEmployeeIdentities,
 } from "./employee-identity-store.js";
-import { EMPLOYEE_ROLES, normaliseCanonicalRole } from "./employee-model.js";
 import { DEFAULT_PROJECT, DEFAULT_PROJECT_ID } from "./project-model.js";
 import { PROJECTS_COL, ensureDefaultIProProject } from "./project-directory.js";
+import {
+  PHASE1A_MIGRATION_CONFIRMATION,
+  assertPhase1AMigrationWriteGate,
+} from "./phase1a-migration-guard.js";
 
 const { doc, getDoc } = fs;
 
-export const PHASE1A_MIGRATION_CONFIRMATION = "APPLY_PHASE_1A_IDENTITY_MIGRATION";
+export { PHASE1A_MIGRATION_CONFIRMATION };
 
 function clean(value) {
   return String(value ?? "").trim();
-}
-
-function actorRole(actor = null) {
-  return normaliseCanonicalRole(actor?.roleKey || actor?.role);
-}
-
-function assertMigrationActor(actor = null) {
-  const actorId = clean(actor?.employeeUid || actor?.uid || actor?.ccmsId || actor?.id);
-  if (!actorId || actorRole(actor) !== EMPLOYEE_ROLES.CEO) {
-    throw new Error("CEO permission is required to apply the Phase 1A identity migration.");
-  }
-}
-
-function assertMigrationConfirmation(confirmation) {
-  if (clean(confirmation) !== PHASE1A_MIGRATION_CONFIRMATION) {
-    throw new Error("Phase 1A identity migration confirmation token is required.");
-  }
 }
 
 function clone(value) {
@@ -155,8 +141,7 @@ export async function inspectPhase1AMigrationState() {
 }
 
 export async function applyPhase1AIdentityMigration({ actor, confirmation } = {}) {
-  assertMigrationActor(actor);
-  assertMigrationConfirmation(confirmation);
+  assertPhase1AMigrationWriteGate({ actor, confirmation });
 
   // Re-check for collisions immediately before the write stage. The inspection
   // itself is read-only and bounded; writes remain delegated to transactional
