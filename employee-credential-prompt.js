@@ -3,12 +3,6 @@
 
 import { validateTemporaryPassword } from "./employee-credential-crypto.js";
 
-function esc(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
-  }[char]));
-}
-
 function language() {
   return (document.body?.dataset?.language || document.documentElement.lang || "en") === "ar" ? "ar" : "en";
 }
@@ -93,10 +87,10 @@ export function requestTemporaryPassword({ title = "", message = "" } = {}) {
 }
 
 export function credentialPromptText(name, action) {
-  const safeName = esc(name);
+  const displayName = String(name || "").trim();
   return action === "promotion"
-    ? t(`سيتم تغيير CCMS لـ ${safeName}. أنشئ كلمة مرور مؤقتة جديدة للحساب.`, `${safeName}'s CCMS will change. Set a new temporary password for the account.`)
+    ? t(`سيتم تغيير CCMS لـ ${displayName}. أنشئ كلمة مرور مؤقتة جديدة للحساب.`, `${displayName}'s CCMS will change. Set a new temporary password for the account.`)
     : action === "demotion"
-      ? t(`سيتم تغيير CCMS لـ ${safeName}. أنشئ كلمة مرور مؤقتة جديدة للحساب.`, `${safeName}'s CCMS will change. Set a new temporary password for the account.`)
-      : t(`إعداد كلمة مرور مؤقتة جديدة لـ ${safeName}.`, `Set a new temporary password for ${safeName}.`);
+      ? t(`سيتم تغيير CCMS لـ ${displayName}. أنشئ كلمة مرور مؤقتة جديدة للحساب.`, `${displayName}'s CCMS will change. Set a new temporary password for the account.`)
+      : t(`إعداد كلمة مرور مؤقتة جديدة لـ ${displayName}.`, `Set a new temporary password for ${displayName}.`);
 }
