@@ -47,6 +47,38 @@ function stringField(doc, key) {
   return String(doc?.fields?.[key]?.stringValue || '');
 }
 
+function safeErrorDetails(body) {
+  const error = body?.error;
+  if (!error || typeof error !== 'object') return null;
+
+  const details = Array.isArray(error.details)
+    ? error.details.map((detail) => {
+        if (!detail || typeof detail !== 'object') return detail;
+        const safe = {};
+        for (const key of ['@type', 'reason', 'domain', 'metadata', 'violations']) {
+          if (Object.prototype.hasOwnProperty.call(detail, key)) safe[key] = detail[key];
+        }
+        return safe;
+      })
+    : [];
+
+  return {
+    code: Number(error.code) || null,
+    status: String(error.status || ''),
+    message: String(error.message || ''),
+    details,
+  };
+}
+
+function diagnosticHeaders(response) {
+  const headers = {};
+  for (const name of ['retry-after', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset']) {
+    const value = response.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  return headers;
+}
+
 const rows = [];
 const conflicts = [];
 let quotaExhausted = false;
@@ -104,6 +136,12 @@ for (const item of planned) {
             ? 'permission_denied'
             : 'unexpected',
   };
+
+  if (response.status >= 400) {
+    row.error = safeErrorDetails(body);
+    const headers = diagnosticHeaders(response);
+    if (Object.keys(headers).length) row.responseHeaders = headers;
+  }
 
   if (response.status === 200 && item.kind === 'identity') {
     const actualCcmsId = stringField(body, 'ccmsId');
