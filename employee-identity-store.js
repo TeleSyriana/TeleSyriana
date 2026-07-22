@@ -20,6 +20,7 @@ import {
   seedIdentityByCcms,
   seedIdentityByUid,
 } from "./employee-identity-seed.js";
+import { assertPhase1AMigrationWriteGate } from "./phase1a-migration-guard.js";
 
 const {
   collection,
@@ -258,7 +259,8 @@ export async function updateEmployeeIdentity(employeeUid, patch = {}, actor = nu
   return clone(next);
 }
 
-export async function seedCurrentEmployeeIdentities(actor = null) {
+export async function seedCurrentEmployeeIdentities(actor = null, options = {}) {
+  assertPhase1AMigrationWriteGate({ actor, confirmation: options.confirmation });
   const results = [];
 
   for (const seed of CURRENT_EMPLOYEE_IDENTITY_SEED) {
