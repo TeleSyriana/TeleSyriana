@@ -8,6 +8,7 @@ on:
       - 'employee-identity-seed.js'
       - 'employee-identity-store.js'
       - 'employee-identity-migration.js'
+      - 'employee-identity-compat.js'
       - 'phase1a-collections.js'
       - 'phase1a-migration-plan.js'
       - 'phase1a-migration-guard.js'
@@ -50,6 +51,7 @@ jobs:
             employee-identity-seed.js \
             employee-identity-store.js \
             employee-identity-migration.js \
+            employee-identity-compat.js \
             phase1a-collections.js \
             phase1a-migration-plan.js \
             phase1a-migration-guard.js \
