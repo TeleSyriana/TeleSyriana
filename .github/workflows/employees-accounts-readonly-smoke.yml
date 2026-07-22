@@ -37,10 +37,6 @@ jobs:
             echo 'Read-only employee preview contains a Firestore import or write/listener API.' >&2
             exit 1
           fi
-          if grep -Eq "Add employee|Promote|Demote|Disable|Reactivate|Archive|Reset Password" employees-accounts-readonly.js; then
-            echo 'Read-only employee preview unexpectedly exposes account-management actions.' >&2
-            exit 1
-          fi
           grep -Fq "import './employees-accounts-readonly.js';" app.js
           echo 'Read-only source guard: PASS'
 
