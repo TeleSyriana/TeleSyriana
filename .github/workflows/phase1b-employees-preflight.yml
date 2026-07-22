@@ -1,0 +1,96 @@
+name: Phase 1B Employees & Accounts preflight
+
+on:
+  pull_request:
+    branches: [agent/phase-1a-controlled-migration]
+    paths:
+      - 'employee-management-policy.js'
+      - 'employee-management-service.js'
+      - 'employees-accounts-v2.js'
+      - 'employee-credential-crypto.js'
+      - 'employee-credential-prompt.js'
+      - 'employee-auth-v2.js'
+      - 'employee-account-provisioning.js'
+      - 'tools/phase1b-policy-preflight.mjs'
+      - 'tools/phase1b-auth-preflight.mjs'
+      - '.github/workflows/phase1b-employees-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase1b-preflight:
+    name: Validate Employees & Accounts V2 foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run management policy tests
+        run: node tools/phase1b-policy-preflight.mjs
+
+      - name: Run credential/auth tests
+        run: node tools/phase1b-auth-preflight.mjs
+
+      - name: Syntax check Phase 1B modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            employee-management-policy.js \
+            employee-management-service.js \
+            employees-accounts-v2.js \
+            employee-credential-crypto.js \
+            employee-credential-prompt.js \
+            employee-auth-v2.js \
+            employee-account-provisioning.js; do
+            cp "$file" "/tmp/${file%.js}.mjs"
+            node --check "/tmp/${file%.js}.mjs"
+          done
+
+      - name: Confirm V2 page is explicit-mount only and credential-coordinated
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'export async function mountEmployeesAccountsV2' employees-accounts-v2.js
+          grep -q 'export async function openEmployeesAccountsV2' employees-accounts-v2.js
+          if grep -Eq 'DOMContentLoaded.*(mountEmployeesAccountsV2|openEmployeesAccountsV2)' employees-accounts-v2.js; then
+            echo 'Employees V2 must not auto-mount during Phase 1B development.' >&2
+            exit 1
+          fi
+          grep -q 'migrationPending' employees-accounts-v2.js
+          grep -q 'accountProvisioningReady' employees-accounts-v2.js
+          grep -q 'canModifyDirectoryRow' employees-accounts-v2.js
+          grep -q 'createManagedEmployeeAccount' employees-accounts-v2.js
+          grep -q 'promoteManagedEmployeeAccount' employees-accounts-v2.js
+          grep -q 'demoteManagedEmployeeAccount' employees-accounts-v2.js
+          grep -q 'resetManagedEmployeeTemporaryPassword' employees-accounts-v2.js
+          grep -q 'requestTemporaryPassword' employees-accounts-v2.js
+          grep -q 'EMPLOYEE_ACCOUNT_PROVISIONING_READY = false' employee-management-service.js
+          echo 'Explicit-mount, compatibility read-only, credential-coordinator, and provisioning-lock checks: PASS'
+
+      - name: Confirm stacked Phase 1B does not modify live runtime
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          printf '%s\n' "$changed"
+          forbidden='^(app\.js|app-core\.js|tickets\.js|tickets-core\.js|payroll\.js|payroll-core\.js|reports\.js|reports-core\.js|messages\.js|messages-core\.js|groups\.js|groups-core\.js|tasks\.js|meetings\.js|index\.html)$'
+          if printf '%s\n' "$changed" | grep -Eq "$forbidden"; then
+            echo 'Phase 1B unexpectedly changes a production runtime module.' >&2
+            exit 1
+          fi
+          echo 'Phase 1B runtime isolation check: PASS'
