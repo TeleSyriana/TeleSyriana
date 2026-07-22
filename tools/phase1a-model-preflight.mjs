@@ -21,6 +21,10 @@ const collectionsPath = copyAsModule('phase1a-collections.js', 'phase1a-collecti
 const seedPath = copyAsModule('employee-identity-seed.js', 'employee-identity-seed.mjs', [
   ['./employee-model.js', './employee-model.mjs'],
 ]);
+const compatPath = copyAsModule('employee-identity-compat.js', 'employee-identity-compat.mjs', [
+  ['./employee-identity-seed.js', './employee-identity-seed.mjs'],
+  ['./employee-model.js', './employee-model.mjs'],
+]);
 const guardPath = copyAsModule('phase1a-migration-guard.js', 'phase1a-migration-guard.mjs', [
   ['./employee-model.js', './employee-model.mjs'],
 ]);
@@ -34,6 +38,7 @@ const model = await import(pathToFileURL(modelPath).href);
 const projectModel = await import(pathToFileURL(projectModelPath).href);
 const collections = await import(pathToFileURL(collectionsPath).href);
 const seed = await import(pathToFileURL(seedPath).href);
+const compat = await import(pathToFileURL(compatPath).href);
 const guard = await import(pathToFileURL(guardPath).href);
 const migrationPlanModule = await import(pathToFileURL(migrationPlanPath).href);
 
@@ -88,16 +93,38 @@ assert.equal(seed.CURRENT_EMPLOYEE_IDENTITY_SEED.length, 7);
 for (const employee of seed.CURRENT_EMPLOYEE_IDENTITY_SEED) {
   assert.doesNotThrow(() => validateEmployeeIdentity(employee));
   assert.equal(Object.prototype.hasOwnProperty.call(employee, 'password'), false, 'Identity seed must never duplicate passwords.');
+
+  const legacySession = compat.employeeIdentityToLegacySession(employee);
+  assert.equal(Object.prototype.hasOwnProperty.call(legacySession, 'password'), false, 'Compatibility session must never contain a password.');
+  assert.equal(legacySession.id, employee.ccmsId);
+  assert.equal(legacySession.employeeUid, employee.employeeUid);
+
+  const roundTrip = compat.legacySessionToEmployeeIdentity(legacySession);
+  assert.ok(roundTrip, `Compatibility round trip failed for ${employee.ccmsId}`);
+  assert.equal(roundTrip.employeeUid, employee.employeeUid);
+  assert.equal(roundTrip.ccmsId, employee.ccmsId);
+  assert.equal(roundTrip.roleKey, employee.roleKey);
+  assert.deepEqual(roundTrip.projectIds, employee.projectIds);
 }
 
 const ceo = seed.seedIdentityByCcms('0001');
 assert.equal(ceo.roleKey, 'ceo');
 assert.deepEqual(ceo.projectIds, [GLOBAL_PROJECT_ID]);
+assert.equal(compat.employeeIdentityToLegacySession(ceo).role, 'admin');
 
 const acm = seed.seedIdentityByCcms('1001');
 assert.equal(acm.roleKey, 'acm');
 assert.equal(acm.projectId, 'ipro');
 assert.deepEqual(acm.projectIds, ['ipro']);
+assert.equal(compat.employeeIdentityToLegacySession(acm).role, 'manager');
+
+const safeMergedSession = compat.mergeIdentityIntoLegacySession(
+  { id: '9003', password: 'must-not-survive', arbitraryRuntimeFlag: true },
+  seed.seedIdentityByCcms('9003')
+);
+assert.equal(Object.prototype.hasOwnProperty.call(safeMergedSession, 'password'), false);
+assert.equal(safeMergedSession.arbitraryRuntimeFlag, true);
+assert.equal(safeMergedSession.employeeUid, 'emp_legacy_9003');
 
 const hrMultiProject = validateEmployeeIdentity({
   employeeUid: 'emp_test_hr_3002',
@@ -217,9 +244,14 @@ assert.match(migrationSource, /maximumReads: 15/);
 assert.match(migrationSource, /safeToApply: conflicts\.length === 0/);
 assert.match(migrationSource, /assertPhase1AMigrationWriteGate\(\{ actor, confirmation \}\)/);
 
+const compatSource = fs.readFileSync(path.join(root, 'employee-identity-compat.js'), 'utf8');
+assert.doesNotMatch(compatSource, /from "\.\/firebase\.js"/);
+assert.match(compatSource, /const \{ password, \.\.\.safeSession \} = session \|\| \{\}/);
+
 console.log('Phase 1A employee identity model preflight: PASS');
 console.log(`Validated ${seed.CURRENT_EMPLOYEE_IDENTITY_SEED.length} current employee identity seed rows.`);
 console.log('Verified CCMS roles: 0xxx CEO, 1xxx ACM, 2xxx Supervisor, 3xxx HR, 9xxx Agent.');
+console.log('Verified seven legacy-session identity round trips and password stripping.');
 console.log('Verified migration preview: 15 planned documents, zero writes, no passwords.');
 console.log('Verified migration write gate: CEO + exact confirmation token only.');
 console.log('Verified HR multi-project, single-project ACM/Supervisor/Agent, Agent Supervisor requirement, same-project Supervisor guard, and permanent UID promotion behavior.');
