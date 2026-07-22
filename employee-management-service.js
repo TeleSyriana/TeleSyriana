@@ -27,6 +27,11 @@ import {
   visibleProjectsForActor,
 } from "./employee-management-policy.js";
 
+// Phase 1B deliberately remains false until the controlled dynamic login /
+// credential provisioning bridge is implemented and browser-tested. This stops
+// an accidentally mounted UI from creating an identity that cannot sign in.
+export const EMPLOYEE_ACCOUNT_PROVISIONING_READY = false;
+
 function clean(value) {
   return String(value ?? "").trim();
 }
@@ -34,6 +39,12 @@ function clean(value) {
 function assertManagementAccess(actor) {
   if (!canOpenEmployeesAccounts(actor)) {
     throw new Error("CEO, ACM or HR permission is required for Employees & Accounts.");
+  }
+}
+
+function assertAccountProvisioningReady() {
+  if (!EMPLOYEE_ACCOUNT_PROVISIONING_READY) {
+    throw new Error("Account provisioning is locked until the controlled login/credential bridge is ready.");
   }
 }
 
@@ -89,6 +100,7 @@ export async function getEmployeesAccountsContext(actor) {
       firestoreCount,
       compatibilityCount,
       migrationPending: compatibilityCount > 0,
+      accountProvisioningReady: EMPLOYEE_ACCOUNT_PROVISIONING_READY,
     },
   };
 }
@@ -112,6 +124,7 @@ function normaliseCreationProjects(input, role) {
 
 export async function createManagedEmployee(actor, input = {}) {
   assertManagementAccess(actor);
+  assertAccountProvisioningReady();
   const roleKey = normaliseCanonicalRole(input.roleKey || input.role);
   if (!allowedRolesForCreation(actor).includes(roleKey)) {
     throw new Error(`You do not have permission to create a ${roleKey} account.`);
@@ -129,11 +142,13 @@ export async function createManagedEmployee(actor, input = {}) {
     roleKey,
     projectId,
     projectIds,
+    supervisorCcmsId: clean(input.supervisorCcmsId || input.supervisorId),
   }, actor);
 }
 
 export async function updateManagedEmployee(actor, employeeUid, patch = {}) {
   assertManagementAccess(actor);
+  assertAccountProvisioningReady();
   const rows = await listEmployeeIdentities({ includeDisabled: true, includeArchived: true, includeSeedFallback: true });
   const target = rows.find((row) => clean(row.employeeUid) === clean(employeeUid));
   assertWritableTarget(actor, target);
@@ -185,6 +200,7 @@ async function assertSupervisorHasNoActiveTeam(target) {
 
 export async function promoteAgentToSupervisor(actor, employeeUid) {
   assertManagementAccess(actor);
+  assertAccountProvisioningReady();
   const rows = await listEmployeeIdentities({ includeDisabled: true, includeArchived: true, includeSeedFallback: true });
   const target = rows.find((row) => clean(row.employeeUid) === clean(employeeUid));
   assertWritableTarget(actor, target);
@@ -203,6 +219,7 @@ export async function promoteAgentToSupervisor(actor, employeeUid) {
 
 export async function demoteSupervisorToAgent(actor, employeeUid, { supervisorUid = "", supervisorCcmsId = "" } = {}) {
   assertManagementAccess(actor);
+  assertAccountProvisioningReady();
   const rows = await listEmployeeIdentities({ includeDisabled: true, includeArchived: true, includeSeedFallback: true });
   const target = rows.find((row) => clean(row.employeeUid) === clean(employeeUid));
   assertWritableTarget(actor, target);
@@ -226,6 +243,7 @@ export async function demoteSupervisorToAgent(actor, employeeUid, { supervisorUi
 
 export async function setManagedEmployeeStatus(actor, employeeUid, accountStatus) {
   assertManagementAccess(actor);
+  assertAccountProvisioningReady();
   const status = clean(accountStatus).toLowerCase();
   if (!["active", "disabled", "archived"].includes(status)) throw new Error("Invalid account status.");
 
