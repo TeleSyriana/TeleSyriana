@@ -41,6 +41,16 @@ assert.match(serviceSource, /Account provisioning is locked until the controlled
 const gateCalls = (serviceSource.match(/assertAccountProvisioningReady\(\);/g) || []).length;
 assert.ok(gateCalls >= 5, `Expected write operations to be provisioning-gated; found ${gateCalls} gate calls.`);
 
+const provisioningSource = fs.readFileSync(path.join(root, 'employee-account-provisioning.js'), 'utf8');
+assert.match(provisioningSource, /validateTemporaryPassword\(temporaryPassword\)/);
+assert.match(provisioningSource, /provisionTemporaryEmployeeCredential\(identity, temporaryPassword, actor\)/);
+assert.match(provisioningSource, /accountStatus: "disabled"/);
+assert.match(provisioningSource, /credential_provisioning_failed_after_identity_create/);
+assert.match(provisioningSource, /promotion_credential_failed_rolled_back/);
+assert.match(provisioningSource, /demotion_credential_failed_rolled_back/);
+assert.match(provisioningSource, /await reclassifyEmployee\(promoted\.employeeUid/);
+assert.match(provisioningSource, /await reclassifyEmployee\(demoted\.employeeUid/);
+
 console.log('Phase 1B credential/auth preflight: PASS');
 console.log('Verified PBKDF2 hashing, random salts, wrong-password rejection, and no plaintext credential storage.');
-console.log('Verified permanent-UID credential records, legacy-seed fallback rules, and provisioning write lock.');
+console.log('Verified permanent-UID credential records, legacy-seed fallback rules, provisioning write lock, and rollback safeguards.');
