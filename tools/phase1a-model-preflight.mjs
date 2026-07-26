@@ -34,6 +34,12 @@ const migrationPlanPath = copyAsModule('phase1a-migration-plan.js', 'phase1a-mig
   ['./phase1a-collections.js', './phase1a-collections.mjs'],
 ]);
 
+// Phase 1A is the seven-person legacy migration foundation. Pin it to the state
+// immediately before the effective-dated Monday organisation change so this test
+// remains deterministic after 27 July 2026.
+const originalDateNow = Date.now;
+Date.now = () => Date.parse('2026-07-26T20:00:00Z');
+
 const model = await import(pathToFileURL(modelPath).href);
 const projectModel = await import(pathToFileURL(projectModelPath).href);
 const collections = await import(pathToFileURL(collectionsPath).href);
@@ -56,21 +62,25 @@ const {
 
 assert.equal(normaliseCanonicalRole('admin'), EMPLOYEE_ROLES.CEO);
 assert.equal(normaliseCanonicalRole('manager'), EMPLOYEE_ROLES.ACM);
+assert.equal(normaliseCanonicalRole('it'), EMPLOYEE_ROLES.IT);
 assert.equal(legacyRoleForCanonical('ceo'), 'admin');
 assert.equal(legacyRoleForCanonical('acm'), 'manager');
+assert.equal(legacyRoleForCanonical('it'), 'it');
 
 assert.equal(roleFromCcmsId('0001'), 'ceo');
 assert.equal(roleFromCcmsId('1001'), 'acm');
 assert.equal(roleFromCcmsId('2001'), 'supervisor');
 assert.equal(roleFromCcmsId('3001'), 'hr');
+assert.equal(roleFromCcmsId('4001'), 'it');
 assert.equal(roleFromCcmsId('9001'), 'agent');
-assert.equal(roleFromCcmsId('4001'), null);
+assert.equal(roleFromCcmsId('5001'), null);
 assert.equal(roleFromCcmsId('0000'), null);
 
 assert.equal(assertCcmsMatchesRole('0001', 'ceo'), '0001');
 assert.equal(assertCcmsMatchesRole('1001', 'acm'), '1001');
 assert.equal(assertCcmsMatchesRole('2001', 'supervisor'), '2001');
 assert.equal(assertCcmsMatchesRole('3001', 'hr'), '3001');
+assert.equal(assertCcmsMatchesRole('4001', 'it'), '4001');
 assert.equal(assertCcmsMatchesRole('9001', 'agent'), '9001');
 assert.throws(() => assertCcmsMatchesRole('9001', 'supervisor'));
 
@@ -78,6 +88,7 @@ assert.equal(nextAvailableCcmsId('ceo', ['0001']), '0002');
 assert.equal(nextAvailableCcmsId('acm', ['1001']), '1002');
 assert.equal(nextAvailableCcmsId('supervisor', ['2001']), '2002');
 assert.equal(nextAvailableCcmsId('hr', ['3001']), '3002');
+assert.equal(nextAvailableCcmsId('it', []), '4001');
 assert.equal(nextAvailableCcmsId('agent', ['9001', '9002', '9003']), '9004');
 
 assert.equal(projectModel.DEFAULT_PROJECT_ID, 'ipro');
@@ -136,6 +147,28 @@ const hrMultiProject = validateEmployeeIdentity({
   accountStatus: 'active',
 });
 assert.deepEqual(hrMultiProject.projectIds, ['ipro', 'happy-tails']);
+
+const itSupport = validateEmployeeIdentity({
+  employeeUid: 'emp_test_it_4001',
+  ccmsId: '4001',
+  fullName: 'IT Support',
+  roleKey: 'it',
+  accountStatus: 'active',
+});
+assert.equal(itSupport.roleKey, 'it');
+assert.deepEqual(itSupport.projectIds, []);
+assert.equal(itSupport.projectId, '');
+assert.equal(compat.employeeIdentityToLegacySession(itSupport).role, 'it');
+
+assert.throws(() => validateEmployeeIdentity({
+  employeeUid: 'emp_test_it_4002',
+  ccmsId: '4002',
+  fullName: 'Invalid Project IT',
+  roleKey: 'it',
+  projectId: 'ipro',
+  projectIds: ['ipro'],
+  accountStatus: 'active',
+}), /must not be assigned operational projects/i);
 
 assert.throws(() => validateEmployeeIdentity({
   employeeUid: 'emp_test_acm_1002',
@@ -222,7 +255,6 @@ assert.throws(() => guard.assertPhase1AMigrationWriteGate({
   actor: { employeeUid: ceo.employeeUid, ccmsId: '0001', roleKey: 'ceo' },
 }), /confirmation token/i);
 
-// Firestore-facing modules are syntax checked without executing/importing Firebase.
 const identityStoreSource = fs.readFileSync(path.join(root, 'employee-identity-store.js'), 'utf8');
 assert.match(identityStoreSource, /from "\.\/firebase\.js"/);
 assert.match(identityStoreSource, /EMPLOYEE_IDENTITIES_COL = "employeeIdentities"/);
@@ -248,10 +280,12 @@ const compatSource = fs.readFileSync(path.join(root, 'employee-identity-compat.j
 assert.doesNotMatch(compatSource, /from "\.\/firebase\.js"/);
 assert.match(compatSource, /const \{ password, \.\.\.safeSession \} = session \|\| \{\}/);
 
+Date.now = originalDateNow;
+
 console.log('Phase 1A employee identity model preflight: PASS');
-console.log(`Validated ${seed.CURRENT_EMPLOYEE_IDENTITY_SEED.length} current employee identity seed rows.`);
-console.log('Verified CCMS roles: 0xxx CEO, 1xxx ACM, 2xxx Supervisor, 3xxx HR, 9xxx Agent.');
-console.log('Verified seven legacy-session identity round trips and password stripping.');
+console.log(`Validated ${seed.CURRENT_EMPLOYEE_IDENTITY_SEED.length} legacy employee identity seed rows.`);
+console.log('Verified CCMS roles: 0xxx CEO, 1xxx ACM, 2xxx Supervisor, 3xxx HR, 4xxx IT Support, 9xxx Agent.');
+console.log('Verified legacy-session identity round trips and password stripping.');
 console.log('Verified migration preview: 15 planned documents, zero writes, no passwords.');
 console.log('Verified migration write gate: CEO + exact confirmation token only.');
-console.log('Verified HR multi-project, single-project ACM/Supervisor/Agent, Agent Supervisor requirement, same-project Supervisor guard, and permanent UID promotion behavior.');
+console.log('Verified IT no-project boundary, HR multi-project, single-project ACM/Supervisor/Agent, Agent Supervisor requirement, same-project Supervisor guard, and permanent UID promotion behavior.');
