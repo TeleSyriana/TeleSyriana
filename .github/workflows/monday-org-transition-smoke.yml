@@ -128,7 +128,11 @@ jobs:
                 if (!raw) return false;
                 try { return Boolean(JSON.parse(raw)?.id); } catch { return false; }
               }, { timeout:15_000 });
-              await page.waitForSelector('#welcome-subtitle', { timeout:10_000 });
+              await page.waitForFunction(() => {
+                const dashboard = document.getElementById('dashboard-screen');
+                const subtitle = String(document.getElementById('welcome-subtitle')?.textContent || '').trim();
+                return Boolean(dashboard && !dashboard.classList.contains('hidden') && subtitle);
+              }, { timeout:15_000 });
               const result = await page.evaluate(() => ({
                 session:JSON.parse(localStorage.getItem('telesyrianaUser') || 'null'),
                 subtitle:String(document.getElementById('welcome-subtitle')?.textContent || ''),
