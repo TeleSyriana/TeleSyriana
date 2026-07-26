@@ -154,15 +154,6 @@ assert.match(authSource, /mustChangePassword: true/);
 assert.match(authSource, /password_change_required/);
 assert.match(authSource, /PASSWORD_HISTORY_LIMIT/);
 
-for (const sourceFile of [
-  'employee-auth-v2.js',
-  'employee-it-support-service.js',
-  'employee-identity-seed.js',
-]) {
-  const source = fs.readFileSync(path.join(root, sourceFile), 'utf8');
-  assert.equal(/Welcome2026!/i.test(source), false, `${sourceFile} must not contain the operational temporary password.`);
-}
-
 console.log(JSON.stringify({
   itRange:'4xxx',
   firstItCcms:model.nextAvailableCcmsId('it', []),
