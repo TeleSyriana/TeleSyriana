@@ -45,7 +45,8 @@ jobs:
           grep -q 'runtimeCanViewTicket(currentUser, ticket, Object.values(STAFF))' tickets.js
           grep -q 'runtimeCanSetTicketAssignment(currentUser, t, assignedTo, Object.values(STAFF))' tickets.js
           grep -q 'projectId: runtimeTicketProjectId(currentUser, Object.values(STAFF))' tickets.js
-          grep -q 'Never download the full Tickets collection for staff search' tickets.js
+          grep -q 'function shouldUseTeamSearchIndex()' tickets.js
+          grep -q 'disable full-collection staff search index' tickets.js
           grep -q 'function canSeeAll(u) { return \["admin", "manager"\]' tickets.js
           grep -Fq "import './phase5-ticket-quick-filters.js';" app.js
 
@@ -165,8 +166,6 @@ jobs:
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
-          # Reuse the server/background process from the previous step if it survived;
-          # otherwise start a fresh one for this isolated shell step.
           if ! curl -fsS http://127.0.0.1:4173/index.html >/dev/null 2>&1; then
             python3 -m http.server 4173 --bind 127.0.0.1 > phase5-runtime-server.log 2>&1 &
             echo $! > /tmp/phase5-runtime-server.pid
