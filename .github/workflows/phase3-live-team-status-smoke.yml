@@ -1,0 +1,116 @@
+name: Phase 3 Live Team Status smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'team-live-projection.js'
+      - 'phase3-team-status-live.js'
+      - 'employee-model.js'
+      - 'employee-identity-seed.js'
+      - 'project-hierarchy-shadow.js'
+      - 'project-access-policy.js'
+      - 'tools/phase3-team-live-preflight.mjs'
+      - '.github/workflows/phase3-live-team-status-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase3-live-team:
+    name: Verify project-scoped live team status
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Static safety guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp team-live-projection.js /tmp/team-live-projection.mjs
+          cp phase3-team-status-live.js /tmp/phase3-team-status-live.mjs
+          node --check /tmp/team-live-projection.mjs
+          node --check /tmp/phase3-team-status-live.mjs
+          grep -Fq "import './phase3-team-status-live.js';" app.js
+          grep -q 'query(collection(db, "agentDays"), where("day", "==", day))' phase3-team-status-live.js
+          grep -q 'stopListener' phase3-team-status-live.js
+          count="$(grep -o 'onSnapshot(' phase3-team-status-live.js | wc -l | tr -d ' ')"
+          test "$count" = "1" || { echo "Expected exactly one Phase 3 onSnapshot call, found $count" >&2; exit 1; }
+          if grep -Eq 'setDoc\(|addDoc\(|updateDoc\(|deleteDoc\(|runTransaction\(' phase3-team-status-live.js; then
+            echo 'Phase 3 live team module must remain read-only.' >&2
+            exit 1
+          fi
+          echo 'Phase 3 static safety: PASS'
+
+      - name: Run deterministic team projection tests
+        run: node tools/phase3-team-live-preflight.mjs
+
+      - name: Browser startup regression with Firestore blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/telesyriana-phase3-browser
+          cd /tmp/telesyriana-phase3-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > phase3-browser-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-phase3-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/phase3-browser-smoke.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+          try {
+            const page = await browser.newPage();
+            const errors = [];
+            const consoleRows = [];
+            page.on('pageerror', (error) => errors.push(String(error?.stack || error)));
+            page.on('console', (message) => consoleRows.push(`[${message.type()}] ${message.text()}`));
+            await page.setRequestInterception(true);
+            page.on('request', (request) => {
+              const url = request.url();
+              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) request.abort();
+              else request.continue();
+            });
+            await page.goto('http://127.0.0.1:4173/index.html', { waitUntil:'domcontentloaded', timeout:30_000 });
+            await page.waitForSelector('#login-form', { timeout:10_000 });
+            await new Promise((resolve) => setTimeout(resolve, 700));
+            const result = await page.evaluate(() => ({
+              loginVisible: Boolean(document.getElementById('login-form')),
+              phase3StyleLoaded: Boolean(document.getElementById('phase3-live-team-styles')),
+              dashboardCardBeforeLogin: Boolean(document.getElementById('phase3-live-team-card')),
+            }));
+            console.log(JSON.stringify({ result, errors, consoleTail:consoleRows.slice(-20) }));
+            if (!result.loginVisible) throw new Error('Login UI did not load.');
+            if (!result.phase3StyleLoaded) throw new Error('Phase 3 module did not initialize.');
+            if (result.dashboardCardBeforeLogin) throw new Error('Phase 3 exposed management UI before login.');
+            if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat "$GITHUB_WORKSPACE/phase3-browser-smoke.log"
+
+      - name: Upload smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase3-live-team-status-output
+          path: |
+            phase3-browser-smoke.log
+            phase3-browser-server.log
+          if-no-files-found: warn
+          retention-days: 7
