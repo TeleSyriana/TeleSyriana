@@ -123,8 +123,27 @@ assert.equal(runtime.runtimeCanViewTicket({ id:'9003', role:'agent' }, { assigne
 assert.equal(runtime.runtimeCanViewTicket({ id:'9003', role:'agent' }, { assignedTo:'9003', projectId:'ipro' }, legacyDirectory), true);
 assert.equal(runtime.runtimeCanViewTicket({ id:'9003', role:'agent' }, { assignedTo:'9002', projectId:'ipro' }, legacyDirectory), false);
 
+// Transition-forced inactive rows stay inactive even if the old live directory is stale.
 assert.equal(runtime.runtimeCanOpenTickets({ id:'2001', role:'supervisor' }, legacyDirectory), false);
 assert.equal(runtime.runtimeCanOpenTickets({ id:'9002', role:'agent' }, legacyDirectory), false);
+
+// For unaffected staff, a later live disable/archive must override the static seed.
+const disabledRaghadDirectory = legacyDirectory.map((row) =>
+  row.id === '9001' ? { ...row, accountStatus:'disabled' } : row
+);
+const disabledRaghad = runtime.runtimeEmployeeIdentity(
+  disabledRaghadDirectory.find((row) => row.id === '9001'),
+  disabledRaghadDirectory
+);
+assert.equal(disabledRaghad.accountStatus, 'disabled');
+assert.equal(runtime.runtimeCanOpenTickets({ id:'9001', role:'agent' }, disabledRaghadDirectory), false);
+const reemaScopeAfterLiveDisable = runtime.runtimeTicketScope({ id:'9003', role:'agent' }, disabledRaghadDirectory);
+assert.equal(reemaScopeAfterLiveDisable.assignmentIds.includes('9001'), false);
+assert.equal(
+  runtime.runtimeAssignmentCandidates({ id:'9003', role:'agent' }, disabledRaghadDirectory)
+    .some((row) => row.ccmsId === '9001'),
+  false
+);
 
 const raghadTarget = runtime.runtimeEscalationTarget({ id:'9001', role:'agent' }, legacyDirectory);
 const lanaTarget = runtime.runtimeEscalationTarget({ id:'9004', role:'agent' }, legacyDirectory);
@@ -163,6 +182,7 @@ console.log(JSON.stringify({
   inactive:hierarchy.inactiveEmployees.map((row) => row.ccmsId),
   lanaCredentialSetupRequired:lana.credentialSetupRequired,
   reemaTicketScope:reemaScope.assignmentIds,
+  liveDisabledRaghadExcluded:true,
   escalationTargetForRaghad:raghadTarget?.ccmsId,
   escalationTargetForLana:lanaTarget?.ccmsId,
   result:'PASS',
