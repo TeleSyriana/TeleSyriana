@@ -105,7 +105,7 @@ assert.equal(safeJson.includes('salt'), false);
 
 assert.equal(projectPolicy.actorCanAccessProject(it, 'ipro'), false);
 assert.equal(ticketPolicy.canViewTicket(it, { projectId:'ipro', assignedTo:'9001', status:'open' }, [agent]), false);
-assert.equal(chatPolicy.visibleChatContacts(it, [agent, ceo]), 0);
+assert.equal(chatPolicy.visibleChatContacts(it, [agent, ceo]).length, 0);
 assert.equal(chatPolicy.canInitiateDirectChat(it, agent), false);
 assert.equal(chatPolicy.canSeeDetailedPresence(it, agent), false);
 assert.equal(chatPolicy.canAddGroupMember(it, agent, 'ipro'), false);
