@@ -1,0 +1,131 @@
+name: Phase 4B Server Inactivity Watchdog smoke
+
+on:
+  pull_request:
+    branches: [main, agent/phase-4a-inactivity-attendance-policy]
+    paths:
+      - 'app.js'
+      - 'activity-telemetry-policy.js'
+      - 'phase4b-activity-telemetry.js'
+      - 'firebase.phase4b.json'
+      - 'functions-phase4b/**'
+      - 'tools/phase4b-watchdog-preflight.mjs'
+      - '.github/workflows/phase4b-server-watchdog-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase4b-watchdog:
+    name: Verify server inactivity watchdog
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Static deployment safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check functions-phase4b/index.js
+          node --check functions-phase4b/watchdog-policy.js
+          cp activity-telemetry-policy.js /tmp/activity-telemetry-policy.mjs
+          cp phase4b-activity-telemetry.js /tmp/phase4b-activity-telemetry.mjs
+          node --check /tmp/activity-telemetry-policy.mjs
+          node --check /tmp/phase4b-activity-telemetry.mjs
+          grep -Fq "import './phase4b-activity-telemetry.js';" app.js
+          grep -q '"runtime": "nodejs22"' firebase.phase4b.json
+          grep -q '"source": "functions-phase4b"' firebase.phase4b.json
+          if grep -q '"hosting"' firebase.phase4b.json; then
+            echo 'Phase 4B config must not take ownership of Firebase Hosting.' >&2
+            exit 1
+          fi
+          grep -q "schedule: '\* \* \* \* \*'" functions-phase4b/index.js
+          grep -q "where('watchdogDueMs', '<=', nowMs)" functions-phase4b/index.js
+          grep -q "status: 'unavailable'" functions-phase4b/index.js
+          grep -q 'ACTIVITY_WATCHDOG_MS = 15 \* 60 \* 1000' activity-telemetry-policy.js
+          if grep -q 'onSnapshot(' phase4b-activity-telemetry.js; then
+            echo 'Activity telemetry must not add a Firestore listener.' >&2
+            exit 1
+          fi
+          echo 'Phase 4B static deployment safety: PASS'
+
+      - name: Run watchdog policy preflight
+        run: node tools/phase4b-watchdog-preflight.mjs
+
+      - name: Re-run Phase 4A policy regression
+        run: node tools/phase4a-policy-preflight.mjs
+
+      - name: Install isolated Functions dependencies
+        run: npm install --prefix functions-phase4b --ignore-scripts --no-audit --no-fund
+
+      - name: Load Functions module without invoking Firestore
+        run: node -e "require('./functions-phase4b/index.js'); console.log('Phase 4B Functions module loaded')"
+
+      - name: Browser startup regression with Firestore blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/telesyriana-phase4b-browser
+          cd /tmp/telesyriana-phase4b-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > phase4b-browser-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-phase4b-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/phase4b-browser-smoke.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+          try {
+            const page = await browser.newPage();
+            const errors = [];
+            page.on('pageerror', (error) => errors.push(String(error?.stack || error)));
+            await page.setRequestInterception(true);
+            page.on('request', (request) => {
+              const url = request.url();
+              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) request.abort();
+              else request.continue();
+            });
+            await page.goto('http://127.0.0.1:4173/index.html', { waitUntil:'domcontentloaded', timeout:30_000 });
+            await page.waitForSelector('#login-form', { timeout:10_000 });
+            await new Promise((resolve) => setTimeout(resolve, 700));
+            const result = await page.evaluate(() => ({
+              loginVisible:Boolean(document.getElementById('login-form')),
+              noActivityDocBeforeLogin:!localStorage.getItem('telesyrianaUser'),
+            }));
+            console.log(JSON.stringify({ result, errors }));
+            if (!result.loginVisible) throw new Error('Login UI did not load.');
+            if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat "$GITHUB_WORKSPACE/phase4b-browser-smoke.log"
+
+      - name: Upload smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4b-server-watchdog-output
+          path: |
+            phase4b-browser-smoke.log
+            phase4b-browser-server.log
+          if-no-files-found: warn
+          retention-days: 7
