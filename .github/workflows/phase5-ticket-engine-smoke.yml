@@ -1,0 +1,230 @@
+name: Phase 5 Project-aware Ticket Engine smoke
+
+on:
+  pull_request:
+    branches: [main, agent/phase-4b-server-inactivity-watchdog]
+    paths:
+      - 'app.js'
+      - 'tickets.js'
+      - 'tickets-core.js'
+      - 'ticket-access-policy.js'
+      - 'ticket-runtime-policy-adapter.js'
+      - 'phase5-ticket-quick-filters.js'
+      - 'employee-identity-seed.js'
+      - 'project-access-policy.js'
+      - 'tools/phase5-ticket-runtime-preflight.mjs'
+      - '.github/workflows/phase5-ticket-engine-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase5-ticket-engine:
+    name: Verify Ticket project/team scope and queue UX
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Static Ticket runtime safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp tickets.js /tmp/tickets-loader.mjs
+          cp ticket-runtime-policy-adapter.js /tmp/ticket-runtime-policy-adapter.mjs
+          cp phase5-ticket-quick-filters.js /tmp/phase5-ticket-quick-filters.mjs
+          node --check /tmp/tickets-loader.mjs
+          node --check /tmp/ticket-runtime-policy-adapter.mjs
+          node --check /tmp/phase5-ticket-quick-filters.mjs
+
+          grep -q 'ticket-runtime-policy-adapter.js' tickets.js
+          grep -q 'runtimeTicketScope(user, Object.values(STAFF))' tickets.js
+          grep -q 'runtimeCanViewTicket(currentUser, ticket, Object.values(STAFF))' tickets.js
+          grep -q 'runtimeCanSetTicketAssignment(currentUser, t, assignedTo, Object.values(STAFF))' tickets.js
+          grep -q 'projectId: runtimeTicketProjectId(currentUser, Object.values(STAFF))' tickets.js
+          grep -q 'Never download the full Tickets collection for staff search' tickets.js
+          grep -q 'function canSeeAll(u) { return \["admin", "manager"\]' tickets.js
+          grep -Fq "import './phase5-ticket-quick-filters.js';" app.js
+
+          if grep -Eq 'firebase|firestore|onSnapshot\(|getDocs\(|setDoc\(|addDoc\(|updateDoc\(|deleteDoc\(' phase5-ticket-quick-filters.js; then
+            echo 'Quick-filter UI must not own Firebase/Firestore operations.' >&2
+            exit 1
+          fi
+          echo 'Phase 5 static safety: PASS'
+
+      - name: Run Phase 5 role/project policy preflight
+        run: node tools/phase5-ticket-runtime-preflight.mjs
+
+      - name: Re-run shared Ticket policy regression
+        run: node tools/ticket-access-preflight.mjs
+
+      - name: Browser quick-filter behaviour
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > phase5-ticket-filter-fixture.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head><meta charset="utf-8"></head>
+          <body>
+            <section id="page-tickets">
+              <div class="ticket-filters">
+                <input id="ticket-search" />
+                <select id="ticket-filter-status">
+                  <option value="active" selected>Unresolved</option>
+                  <option value="open">Open</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+                <select id="ticket-filter-date">
+                  <option value="all" selected>All days</option>
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="last_week">Last week</option>
+                  <option value="last_month">Last month</option>
+                </select>
+                <select id="ticket-filter-priority">
+                  <option value="all" selected>All</option>
+                  <option value="emergency">Emergency</option>
+                </select>
+              </div>
+            </section>
+            <script type="module" src="./phase5-ticket-quick-filters.js"></script>
+          </body>
+          </html>
+          HTML
+
+          mkdir -p /tmp/telesyriana-phase5-browser
+          cd /tmp/telesyriana-phase5-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > phase5-filter-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-phase5-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/phase5-filter-browser.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+          try {
+            const page = await browser.newPage();
+            const errors = [];
+            page.on('pageerror', (error) => errors.push(String(error?.stack || error)));
+            await page.goto('http://127.0.0.1:4173/phase5-ticket-filter-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
+            await page.waitForSelector('#phase5-ticket-quick-filters', { timeout:5_000 });
+
+            async function state() {
+              return page.evaluate(() => ({
+                status:document.getElementById('ticket-filter-status').value,
+                priority:document.getElementById('ticket-filter-priority').value,
+                date:document.getElementById('ticket-filter-date').value,
+                hasAll:Boolean(document.querySelector('#ticket-filter-status option[value="all"]')),
+              }));
+            }
+
+            await page.click('[data-p5-ticket-queue="emergency"]');
+            let value = await state();
+            if (value.status !== 'active' || value.priority !== 'emergency') throw new Error(`Emergency filter failed: ${JSON.stringify(value)}`);
+
+            await page.click('[data-p5-ticket-queue="resolved"]');
+            value = await state();
+            if (value.status !== 'resolved' || value.priority !== 'all') throw new Error(`Resolved filter failed: ${JSON.stringify(value)}`);
+
+            await page.click('[data-p5-ticket-queue="all"]');
+            value = await state();
+            if (!value.hasAll || value.status !== 'all') throw new Error(`All queue filter failed: ${JSON.stringify(value)}`);
+
+            await page.click('[data-p5-ticket-date="today"]');
+            value = await state();
+            if (value.date !== 'today') throw new Error(`Today filter failed: ${JSON.stringify(value)}`);
+
+            await page.click('[data-p5-ticket-date="last_month"]');
+            value = await state();
+            if (value.date !== 'last_month') throw new Error(`Last month filter failed: ${JSON.stringify(value)}`);
+
+            console.log(JSON.stringify({ final:value, errors }));
+            if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat "$GITHUB_WORKSPACE/phase5-filter-browser.log"
+
+      - name: Real Ticket loader browser regression with Firestore blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          # Reuse the server/background process from the previous step if it survived;
+          # otherwise start a fresh one for this isolated shell step.
+          if ! curl -fsS http://127.0.0.1:4173/index.html >/dev/null 2>&1; then
+            python3 -m http.server 4173 --bind 127.0.0.1 > phase5-runtime-server.log 2>&1 &
+            echo $! > /tmp/phase5-runtime-server.pid
+            sleep 1
+          fi
+
+          cd /tmp/telesyriana-phase5-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/phase5-runtime-browser.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+          try {
+            const page = await browser.newPage();
+            const consoleRows = [];
+            const pageErrors = [];
+            page.on('console', (message) => consoleRows.push(`[${message.type()}] ${message.text()}`));
+            page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
+            await page.setRequestInterception(true);
+            page.on('request', (request) => {
+              const url = request.url();
+              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) request.abort();
+              else request.continue();
+            });
+            await page.goto('http://127.0.0.1:4173/index.html', { waitUntil:'domcontentloaded', timeout:30_000 });
+            await page.waitForSelector('#login-form', { timeout:10_000 });
+            await page.waitForFunction(() => window.__TS_TICKET_PAGE_LIFECYCLE__ === true, { timeout:10_000 });
+            await page.waitForSelector('#phase5-ticket-quick-filters', { timeout:5_000 });
+            await new Promise((resolve) => setTimeout(resolve, 600));
+
+            const fallback = consoleRows.filter((row) => /Central ticket staff-directory bridge failed/i.test(row));
+            const result = await page.evaluate(() => ({
+              loginVisible:Boolean(document.getElementById('login-form')),
+              ticketLifecycle:window.__TS_TICKET_PAGE_LIFECYCLE__ === true,
+              phase5Filters:Boolean(document.getElementById('phase5-ticket-quick-filters')),
+            }));
+            console.log(JSON.stringify({ result, fallback, pageErrors, consoleTail:consoleRows.slice(-25) }));
+            if (!result.loginVisible || !result.ticketLifecycle || !result.phase5Filters) throw new Error(`Runtime result failed: ${JSON.stringify(result)}`);
+            if (fallback.length) throw new Error(`Ticket loader fell back to untouched core: ${fallback.join(' | ')}`);
+            if (pageErrors.length) throw new Error(`Browser errors: ${pageErrors.join(' | ')}`);
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat "$GITHUB_WORKSPACE/phase5-runtime-browser.log"
+          if [ -f /tmp/phase5-runtime-server.pid ]; then kill "$(cat /tmp/phase5-runtime-server.pid)" >/dev/null 2>&1 || true; fi
+
+      - name: Upload Phase 5 smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-ticket-engine-output
+          path: |
+            phase5-filter-browser.log
+            phase5-filter-server.log
+            phase5-runtime-browser.log
+            phase5-runtime-server.log
+          if-no-files-found: warn
+          retention-days: 7
