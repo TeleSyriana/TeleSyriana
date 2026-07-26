@@ -1,9 +1,8 @@
-// employee-auth-v2.js — Phase 1B controlled dynamic authentication bridge
+// employee-auth-v2.js — controlled permanent authentication bridge
 //
-// Not wired into production app.js yet.
-// Existing seven CCMS accounts continue to use the known-good legacy fallback.
-// New/permanently reclassified identities can use hashed credentials keyed by the
-// permanent employeeUid, so a future CCMS promotion does not create a new person.
+// New credentials are keyed by permanent employeeUid. Temporary credentials always
+// require a first-login password change. Permanent passwords expire after 90 days.
+// Password hashes/salts/history are never returned through account-support metadata.
 
 import { db, fs } from "./firebase.js";
 import { authenticateEmployee as authenticateLegacyEmployee } from "./employee-directory-core.js";
@@ -14,6 +13,14 @@ import {
   createPasswordCredential,
   verifyPasswordCredential,
 } from "./employee-credential-crypto.js";
+import {
+  PASSWORD_HISTORY_LIMIT,
+  PASSWORD_MAX_AGE_DAYS,
+  credentialHistoryEntry,
+  passwordLifecycleState,
+  trimCredentialHistory,
+  validateEmployeePassword,
+} from "./employee-password-policy.js";
 
 const { doc, getDoc, serverTimestamp, setDoc } = fs;
 
@@ -37,14 +44,20 @@ function assertProvisioningActor(actor = null) {
   }
 }
 
-function safeCredentialMetadata(record = {}) {
+function safeCredentialMetadata(record = {}, nowMs = Date.now()) {
+  const lifecycle = passwordLifecycleState(record, nowMs);
   return {
     employeeUid: clean(record.employeeUid),
     ccmsId: clean(record.ccmsId),
     credentialVersion: Number(record.credentialVersion) || 0,
     algorithm: String(record.algorithm || ""),
     iterations: Number(record.iterations) || 0,
-    mustChangePassword: record.mustChangePassword !== false,
+    mustChangePassword: lifecycle.mustChangePassword,
+    passwordExpired: lifecycle.passwordExpired,
+    passwordChangeRequired: lifecycle.passwordChangeRequired,
+    passwordChangedAtMs: lifecycle.changedAtMs,
+    passwordExpiresAtMs: lifecycle.expiresAtMs,
+    passwordMaxAgeDays: lifecycle.maxAgeDays,
   };
 }
 
@@ -71,25 +84,47 @@ export async function getEmployeeCredentialState(employeeUid) {
   }
 }
 
+async function candidateMatchesCredentialHistory(password, record = {}) {
+  if (await verifyPasswordCredential(password, record)) return true;
+  const history = trimCredentialHistory(record.passwordHistory, PASSWORD_HISTORY_LIMIT);
+  for (const previous of history) {
+    if (await verifyPasswordCredential(password, previous)) return true;
+  }
+  return false;
+}
+
+function nextPasswordHistory(record = {}) {
+  const current = credentialHistoryEntry(record);
+  return trimCredentialHistory([
+    ...(current ? [current] : []),
+    ...(Array.isArray(record.passwordHistory) ? record.passwordHistory : []),
+  ], PASSWORD_HISTORY_LIMIT);
+}
+
 export async function provisionTemporaryEmployeeCredential(identity, temporaryPassword, actor = null) {
   assertProvisioningActor(actor);
+  validateEmployeePassword(temporaryPassword);
   const employeeUid = clean(identity?.employeeUid);
   const ccmsId = clean(identity?.ccmsId);
   if (!employeeUid || !ccmsId) throw new Error("Permanent employeeUid and CCMS are required before provisioning credentials.");
 
+  const ref = doc(db, EMPLOYEE_CREDENTIALS_COL, employeeUid);
+  const existingSnap = await getDoc(ref);
+  const existing = existingSnap.exists() ? { ...existingSnap.data(), employeeUid } : null;
   const credential = await createPasswordCredential(temporaryPassword);
   const payload = {
     employeeUid,
     ccmsId,
     ...credential,
+    passwordHistory: existing ? nextPasswordHistory(existing) : [],
+    passwordMaxAgeDays: PASSWORD_MAX_AGE_DAYS,
     mustChangePassword: true,
+    passwordChangedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     ...actorFields(actor),
   };
 
-  const ref = doc(db, EMPLOYEE_CREDENTIALS_COL, employeeUid);
-  const existing = await getDoc(ref);
-  if (!existing.exists()) {
+  if (!existing) {
     payload.createdAt = serverTimestamp();
     payload.createdByUid = clean(actor?.employeeUid || actor?.uid);
     payload.createdByCcmsId = clean(actor?.ccmsId || actor?.id);
@@ -97,6 +132,38 @@ export async function provisionTemporaryEmployeeCredential(identity, temporaryPa
 
   await setDoc(ref, payload, { merge: true });
   return safeCredentialMetadata(payload);
+}
+
+export async function changeEmployeePassword({
+  employeeUid,
+  currentPassword,
+  newPassword,
+  actor = null,
+} = {}) {
+  const uid = clean(employeeUid || actor?.employeeUid || actor?.uid);
+  if (!uid) throw new Error("employeeUid is required.");
+  validateEmployeePassword(newPassword);
+
+  const record = await readCredentialRecord(uid);
+  if (!record) throw new Error("Credential is not provisioned for this employee.");
+  const currentOk = await verifyPasswordCredential(currentPassword, record);
+  if (!currentOk) throw new Error("Current password is incorrect.");
+  if (await candidateMatchesCredentialHistory(newPassword, record)) {
+    throw new Error(`New password cannot match the current password or the last ${PASSWORD_HISTORY_LIMIT} passwords.`);
+  }
+
+  const credential = await createPasswordCredential(newPassword);
+  const payload = {
+    ...credential,
+    passwordHistory: nextPasswordHistory(record),
+    passwordMaxAgeDays: PASSWORD_MAX_AGE_DAYS,
+    mustChangePassword: false,
+    passwordChangedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    ...actorFields(actor || { employeeUid: uid }),
+  };
+  await setDoc(doc(db, EMPLOYEE_CREDENTIALS_COL, uid), payload, { merge: true });
+  return safeCredentialMetadata({ ...record, ...payload, employeeUid: uid });
 }
 
 export async function syncEmployeeCredentialCcms(employeeUid, ccmsId, actor = null) {
@@ -122,13 +189,16 @@ function legacyFallbackAllowed(identity, ccmsId) {
   return Boolean(
     legacyIdentity &&
     clean(legacyIdentity.employeeUid) === clean(identity?.employeeUid) &&
-    clean(legacyIdentity.ccmsId) === clean(identity?.ccmsId)
+    (clean(legacyIdentity.ccmsId) === clean(identity?.ccmsId) || legacyIdentity.previousCcmsIds?.includes(clean(ccmsId)))
   );
 }
 
 async function authenticateThroughLegacyFallback(identity, ccmsId, password) {
   if (!legacyFallbackAllowed(identity, ccmsId)) return null;
-  const legacy = await authenticateLegacyEmployee(ccmsId, password);
+  const authCcmsId = identity.previousCcmsIds?.includes(clean(ccmsId))
+    ? clean(ccmsId)
+    : clean(identity.previousCcmsIds?.[0] || ccmsId);
+  const legacy = await authenticateLegacyEmployee(authCcmsId, password);
   if (!legacy?.ok) return legacy;
 
   return {
@@ -138,6 +208,9 @@ async function authenticateThroughLegacyFallback(identity, ccmsId, password) {
       ...employeeIdentityToLegacySession(identity),
       authSource: "legacy_compatibility",
       mustChangePassword: false,
+      passwordExpired: false,
+      passwordChangeRequired: false,
+      passwordPolicyMigrationRequired: true,
     },
   };
 }
@@ -152,8 +225,6 @@ export async function authenticateEmployeeV2(ccmsId, password) {
     return { ok: false, reason: identity.accountStatus || "disabled", employee: null };
   }
 
-  // While Phase 1A Firestore is unavailable, seed identities intentionally go
-  // straight to the proven legacy path instead of creating another failed read.
   if (identity.directorySource === "seed") {
     const legacy = await authenticateThroughLegacyFallback(identity, id, password);
     return legacy || { ok: false, reason: "credential_unavailable", employee: null };
@@ -174,26 +245,25 @@ export async function authenticateEmployeeV2(ccmsId, password) {
   }
 
   if (credential && clean(credential.ccmsId) === identity.ccmsId) {
-    let passwordOk = false;
-    try { passwordOk = await verifyPasswordCredential(password, credential); }
-    catch { passwordOk = false; }
+    const passwordOk = await verifyPasswordCredential(password, credential);
     if (!passwordOk) return { ok: false, reason: "incorrect_password", employee: null };
+    const lifecycle = passwordLifecycleState(credential);
 
     return {
       ok: true,
-      reason: "ok",
+      reason: lifecycle.passwordChangeRequired ? "password_change_required" : "ok",
       employee: {
         ...employeeIdentityToLegacySession(identity),
         authSource: "permanent_hashed_credential",
-        mustChangePassword: credential.mustChangePassword !== false,
+        mustChangePassword: lifecycle.mustChangePassword,
+        passwordExpired: lifecycle.passwordExpired,
+        passwordChangeRequired: lifecycle.passwordChangeRequired,
+        passwordExpiresAtMs: lifecycle.expiresAtMs,
+        passwordMaxAgeDays: lifecycle.maxAgeDays,
       },
     };
   }
 
-  // Migrated legacy staff may not yet have a hashed credential. As long as their
-  // CCMS is still exactly the original seed CCMS, the old credential remains a
-  // safe compatibility fallback. Once their CCMS changes, this fallback is no
-  // longer allowed and a permanent credential is mandatory.
   const legacy = await authenticateThroughLegacyFallback(identity, id, password);
   if (legacy) return legacy;
 
