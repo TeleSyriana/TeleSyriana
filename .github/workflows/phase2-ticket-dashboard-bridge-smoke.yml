@@ -1,0 +1,140 @@
+name: Phase 2 Ticket dashboard bridge smoke
+
+on:
+  pull_request:
+    branches: [agent/phase-2-visible-projects-teams, main]
+    paths:
+      - 'app.js'
+      - 'tickets.js'
+      - 'phase2-projects-teams.js'
+      - 'phase2-ticket-dashboard-live.js'
+      - 'role-dashboard-shadow.js'
+      - 'ticket-access-policy.js'
+      - 'employee-identity-seed.js'
+      - '.github/workflows/phase2-ticket-dashboard-bridge-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ticket-dashboard-bridge:
+    name: Verify reused Ticket snapshot metrics
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Static bridge safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp tickets.js /tmp/tickets-loader.mjs
+          cp phase2-ticket-dashboard-live.js /tmp/phase2-ticket-dashboard-live.mjs
+          node --check /tmp/tickets-loader.mjs
+          node --check /tmp/phase2-ticket-dashboard-live.mjs
+          grep -q 'window.__TS_TICKET_DASHBOARD_SNAPSHOT__' tickets.js
+          grep -q 'telesyriana:ticket-dashboard-snapshot' tickets.js
+          grep -q 'safeTicketDashboardRows' tickets.js
+          grep -q 'buildAcmDashboard' phase2-ticket-dashboard-live.js
+          grep -q 'buildSupervisorDashboard' phase2-ticket-dashboard-live.js
+          grep -Fq "import './phase2-ticket-dashboard-live.js';" app.js
+          if grep -Eq "from [\"']\\./firebase\\.js|onSnapshot\\(|getDocs\\(|getDoc\\(|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(" phase2-ticket-dashboard-live.js; then
+            echo 'Dashboard bridge must not create its own Firebase/Firestore operation.' >&2
+            exit 1
+          fi
+          echo 'Ticket dashboard bridge static safety: PASS'
+
+      - name: Browser dashboard metrics from synthetic existing snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > phase2-ticket-bridge-fixture.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head><meta charset="utf-8"><style>.hidden{display:none!important}</style></head>
+          <body>
+            <nav id="main-nav">
+              <button class="nav-link" data-page="home">Home</button>
+              <button class="nav-link" data-page="settings">Settings</button>
+            </nav>
+            <main id="dashboard-screen"><section id="page-home" class="page-section"></section></main>
+            <script>
+              const now = Date.now();
+              const hour = 60 * 60 * 1000;
+              const rows = [
+                { id:'t1', projectId:'ipro', status:'open', priority:'normal', assignedTo:'9001', updatedAt:now-hour, dueAt:now+hour },
+                { id:'t2', projectId:'ipro', status:'open', priority:'emergency', assignedTo:'9002', updatedAt:now-hour, dueAt:now-hour },
+                { id:'t3', projectId:'ipro', status:'resolved', priority:'normal', assignedTo:'9003', updatedAt:now-hour, resolvedAt:now-hour },
+                { id:'t4', projectId:'ipro', status:'escalated', priority:'high', assignedTo:'2001', updatedAt:now-hour, dueAt:now+hour },
+                { id:'t5', projectId:'ipro', status:'open', priority:'normal', assignedTo:'1001', updatedAt:now-hour, dueAt:now+hour },
+              ];
+              window.__TS_TICKET_DASHBOARD_SNAPSHOT__ = () => rows.map((row) => ({...row}));
+            </script>
+            <script type="module" src="./phase2-projects-teams.js"></script>
+            <script type="module" src="./phase2-ticket-dashboard-live.js"></script>
+          </body>
+          </html>
+          HTML
+
+          mkdir -p /tmp/telesyriana-phase2-ticket-browser
+          cd /tmp/telesyriana-phase2-ticket-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > phase2-ticket-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-phase2-ticket-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/phase2-ticket-browser.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless: true, args: ['--no-sandbox','--disable-dev-shm-usage'] });
+
+          async function test({ id, expected }) {
+            const context = await browser.createBrowserContext();
+            const page = await context.newPage();
+            const errors = [];
+            page.on('pageerror', (error) => errors.push(String(error?.stack || error)));
+            await page.evaluateOnNewDocument((ccms) => localStorage.setItem('telesyrianaUser', JSON.stringify({ id: ccms })), id);
+            await page.goto('http://127.0.0.1:4173/phase2-ticket-bridge-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
+            await page.click('#nav-projects-teams-v2');
+            await page.waitForFunction(() => document.querySelectorAll('#page-projects-teams-v2 .p2-live strong[data-metric-state="loaded"]').length === 4, { timeout:5_000 });
+            const values = await page.$$eval('#page-projects-teams-v2 .p2-live strong', (nodes) => nodes.map((node) => Number(node.textContent)));
+            const note = await page.$eval('#page-projects-teams-v2 .p2-live-grid + .p2-muted', (node) => node.textContent);
+            console.log(JSON.stringify({ id, values, note, errors }));
+            if (JSON.stringify(values) !== JSON.stringify(expected)) throw new Error(`${id} expected ${expected} but got ${values}`);
+            if (!note.includes('Latest Tickets snapshot')) throw new Error(`${id} live snapshot note missing`);
+            if (errors.length) throw new Error(`${id} browser errors: ${errors.join(' | ')}`);
+            await context.close();
+          }
+
+          try {
+            // ACM sees all five iPro tickets: 4 active, 1 emergency, 1 resolved today, 1 overdue.
+            await test({ id:'1001', expected:[4,1,1,1] });
+            // Supervisor sees 9001/9002/9003 + own 2001 ticket, but not the ACM-owned ticket.
+            await test({ id:'2001', expected:[3,1,1,1] });
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat "$GITHUB_WORKSPACE/phase2-ticket-browser.log"
+
+      - name: Upload bridge smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-ticket-dashboard-bridge-output
+          path: |
+            phase2-ticket-browser.log
+            phase2-ticket-server.log
+          if-no-files-found: warn
+          retention-days: 7
