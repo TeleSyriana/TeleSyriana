@@ -1,0 +1,75 @@
+name: Account Security & IT Support smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'employee-model.js'
+      - 'employee-password-policy.js'
+      - 'employee-credential-crypto.js'
+      - 'employee-auth-v2.js'
+      - 'employee-it-support-policy.js'
+      - 'employee-it-support-service.js'
+      - 'employee-management-policy.js'
+      - 'ticket-runtime-policy-adapter.js'
+      - 'chat-access-policy.js'
+      - 'tools/account-security-it-preflight.mjs'
+      - 'tools/phase1a-model-preflight.mjs'
+      - 'tools/phase1b-policy-preflight.mjs'
+      - 'tools/phase1b-auth-preflight.mjs'
+      - '.github/workflows/account-security-it-support-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  account-security:
+    name: Verify 4xxx IT and 90-day password policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Syntax safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            employee-model.js \
+            employee-password-policy.js \
+            employee-credential-crypto.js \
+            employee-auth-v2.js \
+            employee-it-support-policy.js \
+            employee-it-support-service.js \
+            employee-management-policy.js \
+            ticket-runtime-policy-adapter.js \
+            chat-access-policy.js; do
+            cp "$file" "/tmp/${file%.js}.mjs"
+            node --check "/tmp/${file%.js}.mjs"
+          done
+          grep -q '\[EMPLOYEE_ROLES.IT\]: "4"' employee-model.js
+          grep -q 'PASSWORD_MAX_AGE_DAYS = 90' employee-password-policy.js
+          grep -q 'PASSWORD_HISTORY_LIMIT = 5' employee-password-policy.js
+          grep -q 'mustChangePassword: true' employee-auth-v2.js
+          grep -q 'password_change_required' employee-auth-v2.js
+          grep -q 'EMPLOYEE_ACCOUNT_PROVISIONING_READY' employee-it-support-service.js
+          if grep -R -n --exclude='account-security-it-preflight.mjs' --exclude='*.md' 'Welcome2026!' .; then
+            echo 'Temporary onboarding password must not be committed to repository source.' >&2
+            exit 1
+          fi
+          echo 'Account security static safety: PASS'
+
+      - name: Run account security and IT boundary preflight
+        run: node tools/account-security-it-preflight.mjs
+
+      - name: Re-run Phase 1A identity model regression
+        run: node tools/phase1a-model-preflight.mjs
+
+      - name: Re-run Phase 1B management policy regression
+        run: node tools/phase1b-policy-preflight.mjs
+
+      - name: Re-run Phase 1B credential regression
+        run: node tools/phase1b-auth-preflight.mjs
