@@ -1,18 +1,14 @@
-// employee-model.js — TeleSyriana Phase 1A pure employee identity model
+// employee-model.js — TeleSyriana permanent employee identity model
 //
-// This module contains no Firestore or DOM dependencies. It defines the permanent
-// employee identity rules that future Employees & Accounts, Projects, Chat and
-// permissions will share.
-//
-// Important distinction:
-//   employeeUid = permanent person identity (never changes on promotion)
-//   ccmsId      = operational role-coded identifier (may change on promotion)
+// employeeUid = permanent person identity (never changes on promotion)
+// ccmsId      = operational role-coded identifier (may change on promotion)
 
 export const EMPLOYEE_ROLES = Object.freeze({
   CEO: "ceo",
   ACM: "acm",
   SUPERVISOR: "supervisor",
   HR: "hr",
+  IT: "it",
   AGENT: "agent",
 });
 
@@ -25,16 +21,19 @@ export const ROLE_CCMS_PREFIX = Object.freeze({
   [EMPLOYEE_ROLES.ACM]: "1",
   [EMPLOYEE_ROLES.SUPERVISOR]: "2",
   [EMPLOYEE_ROLES.HR]: "3",
+  [EMPLOYEE_ROLES.IT]: "4",
   [EMPLOYEE_ROLES.AGENT]: "9",
 });
 
-// Compatibility only. Existing production modules still call these roles
-// "admin" and "manager". New architecture uses CEO and ACM.
+// Compatibility only. Existing production modules still call CEO/ACM admin/manager.
+// IT is intentionally not mapped to admin; legacy surfaces must not gain elevated
+// permissions just because an employee can reset account credentials.
 export const LEGACY_ROLE_TO_CANONICAL = Object.freeze({
   admin: EMPLOYEE_ROLES.CEO,
   manager: EMPLOYEE_ROLES.ACM,
   supervisor: EMPLOYEE_ROLES.SUPERVISOR,
   hr: EMPLOYEE_ROLES.HR,
+  it: EMPLOYEE_ROLES.IT,
   agent: EMPLOYEE_ROLES.AGENT,
   ceo: EMPLOYEE_ROLES.CEO,
   acm: EMPLOYEE_ROLES.ACM,
@@ -45,6 +44,7 @@ export const CANONICAL_ROLE_TO_LEGACY = Object.freeze({
   [EMPLOYEE_ROLES.ACM]: "manager",
   [EMPLOYEE_ROLES.SUPERVISOR]: "supervisor",
   [EMPLOYEE_ROLES.HR]: "hr",
+  [EMPLOYEE_ROLES.IT]: "it",
   [EMPLOYEE_ROLES.AGENT]: "agent",
 });
 
@@ -153,6 +153,13 @@ function roleProjectShape(role, input = {}) {
     };
   }
 
+  // IT is a global account-support role, not an operational project member.
+  // Keeping projectIds empty prevents Ticket/Chat/project policies from accidentally
+  // granting business-data access to password-support staff.
+  if (canonical === EMPLOYEE_ROLES.IT) {
+    return { projectId: "", projectIds: [] };
+  }
+
   if (canonical === EMPLOYEE_ROLES.HR) {
     return {
       projectId: inputProjectId || requested[0] || "",
@@ -220,6 +227,15 @@ export function validateEmployeeIdentity(input = {}, options = {}) {
     }
   }
 
+  if (role === EMPLOYEE_ROLES.IT) {
+    if (employee.projectId || employee.projectIds.length || requestedProjects.length) {
+      errors.push("IT Support must not be assigned operational projects.");
+    }
+    if (employee.supervisorUid || employee.supervisorCcmsId) {
+      errors.push("IT Support cannot have a Supervisor assignment.");
+    }
+  }
+
   if (role === EMPLOYEE_ROLES.ACM || role === EMPLOYEE_ROLES.SUPERVISOR) {
     if (!employee.projectId || employee.projectIds.length !== 1 || requestedProjects.length !== 1) {
       errors.push(`${role} must belong to exactly one project.`);
@@ -260,50 +276,27 @@ export function validateEmployeeIdentity(input = {}, options = {}) {
   return employee;
 }
 
-export function sameProject(employeeA, employeeB, projectId = "") {
-  const explicit = normaliseProjectId(projectId);
-  const a = normaliseEmployeeIdentity(employeeA);
-  const b = normaliseEmployeeIdentity(employeeB);
-
-  if (a.roleKey === EMPLOYEE_ROLES.CEO || b.roleKey === EMPLOYEE_ROLES.CEO) return true;
-
-  const target = explicit || a.projectId;
-  if (!target || target === GLOBAL_PROJECT_ID) return false;
-  return a.projectIds.includes(target) && b.projectIds.includes(target);
-}
-
-export function reclassifyEmployeeIdentity(input, next = {}) {
-  const current = normaliseEmployeeIdentity(input);
-  if (!isValidEmployeeUid(current.employeeUid)) {
-    throw new Error("Cannot reclassify an employee without a permanent employeeUid.");
-  }
-
-  const roleKey = normaliseCanonicalRole(next.roleKey || next.role || current.roleKey);
-  const ccmsId = cleanCcmsId(next.ccmsId || current.ccmsId);
-
-  // Permanent identity is intentionally copied unchanged.
-  return normaliseEmployeeIdentity({
-    ...current,
-    ...next,
-    employeeUid: current.employeeUid,
-    ccmsId,
-    roleKey,
-  });
-}
-
-export function nextAvailableCcmsId(role, usedIds = []) {
+export function nextAvailableCcmsId(role, existingIds = []) {
   const canonical = normaliseCanonicalRole(role);
   const prefix = ROLE_CCMS_PREFIX[canonical];
-  if (prefix == null) throw new Error("Unknown employee role.");
+  if (!prefix) throw new Error(`No CCMS range is defined for ${canonical}.`);
 
-  const used = new Set((usedIds || []).map(cleanCcmsId));
-  const start = prefix === "0" ? 1 : Number(`${prefix}001`);
-  const end = Number(`${prefix}999`);
-
-  for (let numeric = start; numeric <= end; numeric += 1) {
-    const candidate = String(numeric).padStart(4, "0");
-    if (!used.has(candidate)) return candidate;
+  const used = new Set((existingIds || []).map(cleanCcmsId));
+  for (let value = 1; value <= 999; value += 1) {
+    const id = `${prefix}${String(value).padStart(3, "0")}`;
+    if (!used.has(id)) return id;
   }
+  throw new Error(`No available CCMS IDs remain in the ${prefix}xxx range.`);
+}
 
-  throw new Error(`No available CCMS IDs remain for ${canonical}.`);
+export function reclassifyEmployeeIdentity(identity, changes = {}) {
+  const current = normaliseEmployeeIdentity(identity);
+  const employeeUid = current.employeeUid;
+  if (!employeeUid) throw new Error("A permanent employeeUid is required before reclassification.");
+
+  return normaliseEmployeeIdentity({
+    ...current,
+    ...changes,
+    employeeUid,
+  });
 }
