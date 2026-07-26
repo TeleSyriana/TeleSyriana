@@ -1,20 +1,20 @@
-// phase2-projects-teams.js — visible Phase 2 Projects & Teams milestone
+// phase2-projects-teams.js — visible Projects & Teams management surface
 //
-// Production-safety contract for this first visible slice:
+// Production-safety contract:
 // - local approved employee identity seed only
 // - pure project/team projection modules only
 // - zero Firebase/Firestore imports, reads, listeners or writes
 // - current login remains owned by app-core.js
-// - operational ticket/presence metrics are deliberately not fabricated
+// - management surface is visible only to CEO, ACM and HR
 
 import { CURRENT_EMPLOYEE_IDENTITY_SEED, seedIdentityByCcms } from "./employee-identity-seed.js";
-import { buildProjectHierarchy, supervisorTeam } from "./project-hierarchy-shadow.js";
+import { buildProjectHierarchy } from "./project-hierarchy-shadow.js";
 import { DEFAULT_PROJECT } from "./project-model.js";
 
 const USER_KEY = "telesyrianaUser";
 const NAV_ID = "nav-projects-teams-v2";
 const PAGE_ID = "page-projects-teams-v2";
-const VISIBLE_ROLES = new Set(["ceo", "acm", "supervisor", "hr"]);
+const VISIBLE_ROLES = new Set(["ceo", "acm", "hr"]);
 let mounted = false;
 
 function clean(value) {
@@ -92,12 +92,15 @@ function projectHierarchy() {
 }
 
 function canOpen(actor = actorIdentity()) {
-  return Boolean(actor?.ccmsId && VISIBLE_ROLES.has(canonicalRole(actor.roleKey)));
+  return Boolean(
+    actor?.ccmsId &&
+    actor.accountStatus !== "disabled" &&
+    VISIBLE_ROLES.has(canonicalRole(actor.roleKey))
+  );
 }
 
 function navLabel(actor = actorIdentity()) {
   const role = canonicalRole(actor?.roleKey);
-  if (role === "supervisor") return t("فريقي", "My Team");
   if (role === "acm") return t("لوحة المشروع", "Project Dashboard");
   if (role === "hr") return t("فريق المشروع", "Project People");
   return t("المشاريع والفرق", "Projects & Teams");
@@ -115,13 +118,12 @@ function injectStyles() {
     .p2-grid{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px}.p2-stat,.p2-card{border:1px solid rgba(100,116,139,.16);border-radius:16px;background:rgba(148,163,184,.035)}
     .p2-stat{padding:14px}.p2-stat strong{display:block;font-size:25px;line-height:1.05}.p2-stat span{font-size:12px;opacity:.7}
     .p2-card{padding:16px}.p2-card h3{margin:0 0 10px}.p2-card p{margin:0;line-height:1.55}
-    .p2-two{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}.p2-project{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+    .p2-project{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
     .p2-project-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}.p2-mini{padding:5px 8px;border-radius:999px;background:rgba(148,163,184,.14);font-size:11px;font-weight:700}
     .p2-table-wrap{overflow:auto;border:1px solid rgba(100,116,139,.16);border-radius:16px}.p2-table{width:100%;border-collapse:collapse;min-width:680px}.p2-table th,.p2-table td{padding:11px 10px;text-align:start;border-bottom:1px solid rgba(100,116,139,.12)}.p2-table th{font-size:12px;opacity:.7}
     .p2-person strong{display:block}.p2-person small{opacity:.62}.p2-muted{opacity:.65}.p2-section-title{margin:0 0 10px}.p2-live-grid{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px}
-    .p2-live{padding:13px;border-radius:14px;border:1px dashed rgba(100,116,139,.28)}.p2-live strong{display:block;font-size:22px}.p2-live small{opacity:.65}.p2-team-list{display:grid;gap:9px}
-    .p2-team-member{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 12px;border:1px solid rgba(100,116,139,.14);border-radius:13px}.p2-team-member small{opacity:.65}
-    @media(max-width:900px){.p2-grid,.p2-live-grid{grid-template-columns:1fr 1fr}.p2-two{grid-template-columns:1fr}}
+    .p2-live{padding:13px;border-radius:14px;border:1px dashed rgba(100,116,139,.28)}.p2-live strong{display:block;font-size:22px}.p2-live small{opacity:.65}
+    @media(max-width:900px){.p2-grid,.p2-live-grid{grid-template-columns:1fr 1fr}}
     @media(max-width:560px){.p2-grid,.p2-live-grid{grid-template-columns:1fr}}
   `;
   document.head.appendChild(style);
@@ -171,7 +173,7 @@ function livePlaceholder() {
   ];
   return `<div class="p2-card"><h3 class="p2-section-title">${esc(t("التشغيل المباشر", "Live operations"))}</h3>
     <div class="p2-live-grid">${values.map((label) => `<div class="p2-live"><strong>—</strong><small>${esc(label)}</small></div>`).join("")}</div>
-    <p class="p2-muted" style="margin-top:10px">${esc(t("لن نعرض أرقاماً وهمية. سيتم ربط هذه البطاقات ببيانات Tickets والحضور الحية في خطوة التكامل التالية.", "No placeholder numbers are fabricated. These cards will connect to live Tickets and attendance data in the next integration step."))}</p></div>`;
+    <p class="p2-muted" style="margin-top:10px">${esc(t("سيتم تحديث هذه البطاقات من بيانات التشغيل الحية عند توفرها.", "These cards update from live operational data when available."))}</p></div>`;
 }
 
 function peopleTable(rows) {
@@ -188,8 +190,7 @@ function renderCeo() {
   const hierarchy = projectHierarchy();
   const rows = projectRows();
   return `
-    <div class="p2-head"><div><h2>${esc(t("المشاريع والفرق", "Projects & Teams"))}</h2><p class="subtitle">${esc(t("نظرة تنفيذية على مشاريع TeleSyriana وهيكل الموظفين.", "Executive view of TeleSyriana projects and employee structure."))}</p></div><span class="p2-chip">${esc(t("عرض آمن", "Safe preview"))}</span></div>
-    <div class="p2-banner">${esc(t("هذه المرحلة تعرض الهيكل الحالي من الدليل المحلي فقط. لا توجد أي كتابة أو استماع إلى Firestore.", "This milestone renders the current structure from the local directory only. It performs no Firestore writes or listeners."))}</div>
+    <div class="p2-head"><div><h2>${esc(t("المشاريع والفرق", "Projects & Teams"))}</h2><p class="subtitle">${esc(t("نظرة تنفيذية على مشاريع TeleSyriana وهيكل الموظفين.", "Executive view of TeleSyriana projects and employee structure."))}</p></div><span class="p2-chip">${esc(t("إدارة", "Management"))}</span></div>
     ${statsCards([["1", t("المشاريع النشطة", "Active projects")], [String(rows.length), t("موظفو iPro", "iPro employees")], [String(hierarchy.totals.supervisors), t("المشرفون", "Supervisors")], [String(hierarchy.totals.agents), t("الموظفون", "Agents")]])}
     <div class="p2-card p2-project"><div><h3>${esc(DEFAULT_PROJECT.name)}</h3><p>${esc(t("المشروع الافتراضي الحالي لخدمة العملاء والتذاكر.", "Current default project for customer support and ticket operations."))}</p><div class="p2-project-meta"><span class="p2-mini">ACM ${hierarchy.totals.acms}</span><span class="p2-mini">HR ${hierarchy.totals.hrs}</span><span class="p2-mini">${esc(t("مشرف", "Supervisor"))} ${hierarchy.totals.supervisors}</span><span class="p2-mini">${esc(t("موظف", "Agent"))} ${hierarchy.totals.agents}</span></div></div><span class="p2-chip">${esc(t("نشط", "Active"))}</span></div>
     <div class="p2-card"><h3>${esc(t("هيكل iPro", "iPro structure"))}</h3>${peopleTable(rows)}</div>`;
@@ -203,15 +204,6 @@ function renderAcm(actor) {
     ${statsCards([[String(rows.length), t("الموظفون", "Employees")], [String(hierarchy.totals.supervisors), t("المشرفون", "Supervisors")], [String(hierarchy.totals.agents), t("الموظفون", "Agents")], [String(hierarchy.totals.hrs), "HR"]])}
     ${livePlaceholder()}
     <div class="p2-card"><h3>${esc(t("فريق المشروع", "Project team"))}</h3>${peopleTable(rows)}</div>`;
-}
-
-function renderSupervisor(actor) {
-  const group = supervisorTeam(DEFAULT_PROJECT.projectId, actor.employeeUid, CURRENT_EMPLOYEE_IDENTITY_SEED);
-  return `
-    <div class="p2-head"><div><h2>${esc(t("فريقي", "My Team"))}</h2><p class="subtitle">${esc(`${actor.fullName} · ${actor.ccmsId} · ${DEFAULT_PROJECT.name}`)}</p></div><span class="p2-chip">${esc(t("مشرف", "Supervisor"))}</span></div>
-    ${statsCards([[String(group.agents.length), t("حجم الفريق", "Team size")], [String(group.activeAgents), t("نشط", "Active")], [String(group.disabledAgents), t("معطّل", "Disabled")], [DEFAULT_PROJECT.name, t("المشروع", "Project")]])}
-    <div class="p2-two"><div class="p2-card"><h3>${esc(t("الموظفون تحت إشرافي", "My assigned agents"))}</h3><div class="p2-team-list">${group.agents.map((row) => `<div class="p2-team-member" data-phase2-ccms="${esc(row.ccmsId)}"><div><strong>${esc(row.fullName)}</strong><small>${esc(`${row.ccmsId} · ${row.timezone || "—"}`)}</small></div><span class="p2-chip">${esc(t("نشط", "Active"))}</span></div>`).join("")}</div><div class="p2-card"><h3>${esc(t("نطاق الصلاحية", "Access scope"))}</h3><p>${esc(t("يظهر هنا فقط الموظفون المعينون لهذا المشرف داخل نفس المشروع. لا يمكن للمشرف رؤية فرق المشاريع الأخرى.", "Only Agents assigned to this Supervisor inside the same project appear here. Cross-project teams are not exposed."))}</p></div></div>
-    ${livePlaceholder()}`;
 }
 
 function renderHr(actor) {
@@ -229,7 +221,6 @@ function render(actor = actorIdentity()) {
   const role = canonicalRole(actor.roleKey);
   if (role === "ceo") page.innerHTML = `<div class="card p2-shell">${renderCeo()}</div>`;
   else if (role === "acm") page.innerHTML = `<div class="card p2-shell">${renderAcm(actor)}</div>`;
-  else if (role === "supervisor") page.innerHTML = `<div class="card p2-shell">${renderSupervisor(actor)}</div>`;
   else page.innerHTML = `<div class="card p2-shell">${renderHr(actor)}</div>`;
   const nav = ensureNav();
   if (nav) nav.textContent = navLabel(actor);
@@ -251,7 +242,7 @@ function syncVisibility() {
   const nav = ensureNav();
   ensurePage();
   if (nav) {
-    nav.textContent = navLabel(actor);
+    nav.textContent = allowed ? navLabel(actor) : "";
     nav.classList.toggle("hidden", !allowed);
   }
   if (!allowed) document.getElementById(PAGE_ID)?.classList.add("hidden");
