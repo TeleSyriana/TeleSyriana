@@ -1,8 +1,8 @@
 // monday-org-transition-runtime.js — runtime guard for the 27 July 2026 iPro change
 //
-// Keeps legacy authentication credentials untouched while enforcing disabled
-// identities and translating Reema's new operational CCMS 2002 to her existing
-// legacy authentication record 9003. No password is copied or exposed here.
+// Enforces disabled identities and publishes the employee's effective identity.
+// Authentication compatibility itself is prepared before app-core.js by
+// monday-auth-compat.js, so this module must never translate 2002 back to 9003.
 
 import {
   IPRO_ORG_CHANGE_EFFECTIVE_MS,
@@ -44,30 +44,17 @@ function disabledMessage(identity) {
   return isArabic ? 'هذا الحساب غير نشط حالياً. تواصل مع الإدارة إذا كنت تعتقد أن هذا خطأ.' : 'This account is currently inactive. Contact management if you believe this is incorrect.';
 }
 
-function guardAndTranslateLogin(event) {
+function guardDisabledLogin(event) {
   if (!isIproMondayOrgChangeEffective(Date.now())) return;
   const form = event.target?.closest?.('#login-form');
   if (!form) return;
-  const input = document.getElementById('ccmsId');
-  const enteredId = clean(input?.value);
+  const enteredId = clean(document.getElementById('ccmsId')?.value);
   const identity = seedIdentityByCcms(enteredId);
-  if (!identity) return;
+  if (!identity || identity.accountStatus === 'active') return;
 
-  if (identity.accountStatus !== 'active') {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    showLoginError(disabledMessage(identity));
-    return;
-  }
-
-  // Reema's permanent identity is unchanged, but the stable legacy auth core still
-  // owns her credential under 9003. Allow her to type the new operational CCMS 2002
-  // and translate only the ID field before the legacy submit handler authenticates.
-  if (enteredId === identity.ccmsId && identity.previousCcmsIds?.length && input) {
-    input.dataset.effectiveCcmsId = identity.ccmsId;
-    input.dataset.compatibilityAuthCcmsId = identity.previousCcmsIds[0];
-    input.value = identity.previousCcmsIds[0];
-  }
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  showLoginError(disabledMessage(identity));
 }
 
 function forceDisabledSessionLogout() {
@@ -123,14 +110,12 @@ function scheduleEffectiveBoundary() {
   if (delay <= 0) return;
   transitionTimer = setTimeout(() => {
     transitionTimer = null;
-    // Reload once at the effective boundary so modules that cache the approved
-    // identity seed at module load switch atomically to the Monday organisation.
     window.location.reload();
   }, Math.min(delay + 250, 2_147_000_000));
 }
 
 function boot() {
-  document.addEventListener('submit', guardAndTranslateLogin, true);
+  document.addEventListener('submit', guardDisabledLogin, true);
   window.addEventListener('telesyriana:user-changed', syncSession);
   window.addEventListener('storage', (event) => { if (event.key === USER_KEY) syncSession(); });
   syncSession();
