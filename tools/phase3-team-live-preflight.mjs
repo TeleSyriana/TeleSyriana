@@ -1,10 +1,37 @@
 import assert from 'node:assert/strict';
-import {
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const root = process.cwd();
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'telesyriana-phase3-team-live-'));
+
+function copyModule(sourceName, targetName, replacements = []) {
+  let source = fs.readFileSync(path.join(root, sourceName), 'utf8');
+  for (const [from, to] of replacements) source = source.split(from).join(to);
+  fs.writeFileSync(path.join(tmp, targetName), source);
+}
+
+copyModule('employee-model.js', 'employee-model.mjs');
+copyModule('project-access-policy.js', 'project-access-policy.mjs', [
+  ['./employee-model.js', './employee-model.mjs'],
+]);
+copyModule('project-hierarchy-shadow.js', 'project-hierarchy-shadow.mjs', [
+  ['./employee-model.js', './employee-model.mjs'],
+  ['./project-access-policy.js', './project-access-policy.mjs'],
+]);
+copyModule('team-live-projection.js', 'team-live-projection.mjs', [
+  ['./employee-model.js', './employee-model.mjs'],
+  ['./project-hierarchy-shadow.js', './project-hierarchy-shadow.mjs'],
+]);
+
+const {
   buildLiveTeamProjection,
   normalizeOperationalStatus,
   operationalTeamForActor,
   projectDayKey,
-} from '../team-live-projection.js';
+} = await import(pathToFileURL(path.join(tmp, 'team-live-projection.mjs')).href);
 
 const employees = [
   { employeeUid:'emp_ceo', ccmsId:'0001', fullName:'CEO', roleKey:'ceo', projectIds:['*'], accountStatus:'active' },
