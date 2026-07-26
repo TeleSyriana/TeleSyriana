@@ -123,6 +123,8 @@ const MONDAY_IDENTITY_SEED = [
     previousCcmsIds: ["9003"],
     employmentType: "full_time",
     shiftWindow: { start: "10:00", end: "18:00", timeZone: "Asia/Damascus" },
+    hourlyRate: 0,
+    payrollRatePending: true,
     promotionEffectiveAt: IPRO_ORG_CHANGE_EFFECTIVE_AT,
   },
   {
