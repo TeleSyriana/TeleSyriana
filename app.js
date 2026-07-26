@@ -5,15 +5,11 @@
 // The previous production application is preserved byte-for-byte in app-core.js.
 // Use it directly until the Phase 1 bootstrap is repaired and browser-tested.
 //
-// The read-only Employees & Accounts preview and Phase 2 Projects & Teams surface
-// are mounted separately. Ticket dashboard metrics reuse the existing Tickets
-// engine snapshot. Phase 3 reuses today's existing agentDays data only while the
-// Projects & Teams page is visible. Phase 4A adds a client-side 15-minute inactivity
-// fallback. Phase 4B publishes throttled Agent activity due-times for the isolated
-// server watchdog. Phase 5 adds one-tap Ticket queue/date controls while the Ticket
-// compatibility loader enforces the shared project/team policy. The Monday org
-// transition guard activates the 27 July 2026 iPro hierarchy/account changes.
+// The Monday auth compatibility bridge must load before app-core.js so the stable
+// legacy login engine can recognise effective CCMS 2002 and new Agent 9004 without
+// changing the proven startup core. Remaining modules mount after the stable core.
 
+import './monday-auth-compat.js';
 import './app-core.js';
 import './employees-accounts-readonly.js';
 import './phase2-projects-teams.js';
