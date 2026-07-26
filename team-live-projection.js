@@ -1,10 +1,12 @@
-// team-live-projection.js — pure Phase 3 live status/attendance projection
+// team-live-projection.js — pure project-scoped live status/attendance projection
 //
 // No DOM, Firebase, storage or network dependency. Converts today's existing
-// agentDays rows into a project/team-scoped operational summary.
+// agentDays rows into a project/team-scoped operational summary. Phase 4A can
+// additionally derive attendance when an explicit employee/row shift schedule exists.
 
 import { EMPLOYEE_ROLES, normaliseCanonicalRole } from "./employee-model.js";
 import { buildProjectHierarchy, supervisorTeam } from "./project-hierarchy-shadow.js";
+import { attendanceFromSchedule, scheduleForEmployee } from "./attendance-schedule-policy.js";
 
 const OPERATIONAL_STATUSES = Object.freeze({
   in_operation: "operating",
@@ -67,14 +69,6 @@ export function operationalTeamForActor(actor, employees = [], projectId = "ipro
   return [];
 }
 
-function explicitAttendance(row = {}) {
-  const raw = clean(row.attendanceStatus).toLowerCase();
-  const late = row.late === true || raw === "late";
-  const absent = row.absent === true || raw === "absent";
-  const known = Boolean(raw) || typeof row.late === "boolean" || typeof row.absent === "boolean";
-  return { known, late, absent };
-}
-
 export function buildLiveTeamProjection(actor, {
   employees = [],
   dayRows = [],
@@ -103,7 +97,15 @@ export function buildLiveTeamProjection(actor, {
     if (hasSignedIn) signedIn += 1;
     else notSignedIn += 1;
 
-    const attendance = explicitAttendance(row || {});
+    const schedule = scheduleForEmployee(employee, row || {});
+    const attendance = attendanceFromSchedule({
+      schedule,
+      loginTime: loginTimeMs,
+      now,
+      explicitStatus: row?.attendanceStatus,
+      explicitLate: row?.late,
+      explicitAbsent: row?.absent,
+    });
     if (attendance.known) {
       attendanceKnown += 1;
       if (attendance.late) late += 1;
@@ -125,8 +127,11 @@ export function buildLiveTeamProjection(actor, {
       updatedAtMs,
       stale,
       attendanceKnown: attendance.known,
+      attendanceStatus: attendance.status,
+      attendanceSource: attendance.source,
       late: attendance.late,
       absent: attendance.absent,
+      hasShiftSchedule: Boolean(schedule),
     };
   });
 

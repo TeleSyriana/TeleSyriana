@@ -1,0 +1,173 @@
+name: Phase 4A Inactivity & Attendance smoke
+
+on:
+  pull_request:
+    branches: [main, agent/phase-3-live-team-status-attendance]
+    paths:
+      - 'app.js'
+      - 'inactivity-policy.js'
+      - 'attendance-schedule-policy.js'
+      - 'team-live-projection.js'
+      - 'phase4a-inactivity-watch.js'
+      - 'tools/phase3-team-live-preflight.mjs'
+      - 'tools/phase4a-policy-preflight.mjs'
+      - '.github/workflows/phase4a-inactivity-attendance-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase4a-policy:
+    name: Verify inactivity fallback and explicit attendance
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Static safety guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp inactivity-policy.js /tmp/inactivity-policy.mjs
+          cp attendance-schedule-policy.js /tmp/attendance-schedule-policy.mjs
+          cp phase4a-inactivity-watch.js /tmp/phase4a-inactivity-watch.mjs
+          node --check /tmp/inactivity-policy.mjs
+          node --check /tmp/attendance-schedule-policy.mjs
+          node --check /tmp/phase4a-inactivity-watch.mjs
+          grep -Fq "import './phase4a-inactivity-watch.js';" app.js
+          grep -q '15 \* 60 \* 1000' inactivity-policy.js
+          grep -q 'statusEligibleForInactivity' inactivity-policy.js
+          grep -q 'attendanceFromSchedule' attendance-schedule-policy.js
+          if grep -Eq 'firebase|firestore|setDoc\(|addDoc\(|updateDoc\(|deleteDoc\(|onSnapshot\(' phase4a-inactivity-watch.js; then
+            echo 'Client inactivity fallback must not own Firebase/Firestore operations.' >&2
+            exit 1
+          fi
+          if grep -Eq 'firebase|firestore|document\.|window\.|localStorage' attendance-schedule-policy.js; then
+            echo 'Attendance schedule policy must remain pure.' >&2
+            exit 1
+          fi
+          echo 'Phase 4A static safety: PASS'
+
+      - name: Run Phase 4A policy preflight
+        run: node tools/phase4a-policy-preflight.mjs
+
+      - name: Re-run Phase 3 projection regression
+        run: node tools/phase3-team-live-preflight.mjs
+
+      - name: Browser inactivity behaviour
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > phase4a-idle-fixture.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head><meta charset="utf-8"></head>
+          <body>
+            <select id="status-select">
+              <option value="in_operation">Operating</option>
+              <option value="break">Break</option>
+              <option value="meeting">Meeting</option>
+              <option value="handling">Handling</option>
+              <option value="unavailable">Unavailable</option>
+            </select>
+            <script>
+              window.__phase4Changes = [];
+              document.getElementById('status-select').addEventListener('change', (event) => {
+                window.__phase4Changes.push(event.target.value);
+              });
+            </script>
+            <script type="module">
+              import { evaluateInactivityNow } from './phase4a-inactivity-watch.js';
+              window.__runPhase4IdleCheck = evaluateInactivityNow;
+            </script>
+          </body>
+          </html>
+          HTML
+
+          mkdir -p /tmp/telesyriana-phase4a-browser
+          cd /tmp/telesyriana-phase4a-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > phase4a-browser-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-phase4a-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/phase4a-browser-smoke.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+          try {
+            const page = await browser.newPage();
+            const errors = [];
+            page.on('pageerror', (error) => errors.push(String(error?.stack || error)));
+            await page.evaluateOnNewDocument(() => {
+              localStorage.setItem('telesyrianaUser', JSON.stringify({ id:'9001', role:'agent' }));
+            });
+            await page.goto('http://127.0.0.1:4173/phase4a-idle-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
+            await page.waitForFunction(() => typeof window.__runPhase4IdleCheck === 'function', { timeout:5_000 });
+
+            const now = 2_000_000_000_000;
+            let result = await page.evaluate((ts) => {
+              const select = document.getElementById('status-select');
+              select.value = 'in_operation';
+              window.__phase4Changes = [];
+              localStorage.setItem('telesyrianaLastActivityMs', String(ts - (16 * 60 * 1000)));
+              const changed = window.__runPhase4IdleCheck(ts);
+              return { changed, value:select.value, changes:[...window.__phase4Changes] };
+            }, now);
+            if (!result.changed || result.value !== 'unavailable' || result.changes.length !== 1) {
+              throw new Error(`Operating idle fallback failed: ${JSON.stringify(result)}`);
+            }
+
+            result = await page.evaluate((ts) => {
+              const select = document.getElementById('status-select');
+              select.value = 'break';
+              window.__phase4Changes = [];
+              localStorage.setItem('telesyrianaLastActivityMs', String(ts - (60 * 60 * 1000)));
+              const changed = window.__runPhase4IdleCheck(ts);
+              return { changed, value:select.value, changes:[...window.__phase4Changes] };
+            }, now);
+            if (result.changed || result.value !== 'break' || result.changes.length) {
+              throw new Error(`Break was incorrectly auto-unavailable: ${JSON.stringify(result)}`);
+            }
+
+            result = await page.evaluate((ts) => {
+              const select = document.getElementById('status-select');
+              select.value = 'meeting';
+              window.__phase4Changes = [];
+              localStorage.setItem('telesyrianaLastActivityMs', String(ts - (60 * 60 * 1000)));
+              const changed = window.__runPhase4IdleCheck(ts);
+              return { changed, value:select.value, changes:[...window.__phase4Changes] };
+            }, now);
+            if (result.changed || result.value !== 'meeting' || result.changes.length) {
+              throw new Error(`Meeting was incorrectly auto-unavailable: ${JSON.stringify(result)}`);
+            }
+
+            console.log(JSON.stringify({ operating:'auto-unavailable', break:'preserved', meeting:'preserved', errors }));
+            if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat "$GITHUB_WORKSPACE/phase4a-browser-smoke.log"
+
+      - name: Upload smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4a-inactivity-attendance-output
+          path: |
+            phase4a-browser-smoke.log
+            phase4a-browser-server.log
+          if-no-files-found: warn
+          retention-days: 7

@@ -8,10 +8,12 @@
 // The read-only Employees & Accounts preview and Phase 2 Projects & Teams surface
 // are mounted separately. Ticket dashboard metrics reuse the existing Tickets
 // engine snapshot. Phase 3 reuses today's existing agentDays data only while the
-// Projects & Teams page is visible.
+// Projects & Teams page is visible. Phase 4A adds a client-side 15-minute inactivity
+// fallback without changing the stable login/runtime core.
 
 import './app-core.js';
 import './employees-accounts-readonly.js';
 import './phase2-projects-teams.js';
 import './phase2-ticket-dashboard-live.js';
 import './phase3-team-status-live.js';
+import './phase4a-inactivity-watch.js';
