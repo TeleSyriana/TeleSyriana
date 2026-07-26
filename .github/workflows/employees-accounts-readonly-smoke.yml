@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'app.js'
+      - 'monday-auth-compat.js'
       - 'employees-accounts-readonly.js'
       - 'employee-identity-seed.js'
       - 'employee-model.js'
@@ -68,6 +69,11 @@ jobs:
           ].find((path) => fs.existsSync(path));
           if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
 
+          const compatSource = fs.readFileSync(process.env.GITHUB_WORKSPACE + '/monday-auth-compat.js', 'utf8');
+          const compatPasswords = [...compatSource.matchAll(/password:\s*'([^']+)'/g)].map((match) => match[1]);
+          const reemaPassword = compatPasswords[0];
+          if (!reemaPassword) throw new Error('Reema compatibility credential fixture unavailable.');
+
           const browser = await puppeteer.launch({
             executablePath,
             headless: true,
@@ -85,62 +91,50 @@ jobs:
             await page.setRequestInterception(true);
             page.on('request', (request) => {
               const url = request.url();
-              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) {
-                request.abort();
-              } else {
-                request.continue();
-              }
+              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) request.abort();
+              else request.continue();
             });
 
             try {
-              await page.goto('http://127.0.0.1:4173/index.html', {
-                waitUntil: 'domcontentloaded',
-                timeout: 30_000,
-              });
-              await page.waitForSelector('#login-form', { timeout: 10_000 });
+              await page.goto('http://127.0.0.1:4173/index.html', { waitUntil:'domcontentloaded', timeout:30_000 });
+              await page.waitForSelector('#login-form', { timeout:10_000 });
               await page.type('#ccmsId', ccmsId);
               await page.type('#password', password);
               await page.click('#login-form button[type="submit"]');
               await page.waitForFunction(() => {
                 const dashboard = document.getElementById('dashboard-screen');
                 return dashboard && !dashboard.classList.contains('hidden');
-              }, { timeout: 12_000 });
+              }, { timeout:12_000 });
               await new Promise((resolve) => setTimeout(resolve, 700));
 
               const visibility = await page.evaluate(() => {
                 const nav = document.getElementById('nav-employees-readonly');
                 return Boolean(nav && !nav.classList.contains('hidden'));
               });
-              if (visibility !== expectedVisible) {
-                throw new Error(`Unexpected tab visibility for ${ccmsId}: ${visibility}`);
-              }
+              if (visibility !== expectedVisible) throw new Error(`Unexpected tab visibility for ${ccmsId}: ${visibility}`);
 
-              let details = { rows: 0, pageVisible: false, actionButtons: 0, mode: '' };
+              let details = { rows:0, pageVisible:false, actionButtons:0, mode:'' };
               if (expectedVisible) {
                 await page.evaluate(() => document.getElementById('nav-employees-readonly')?.click());
                 await page.waitForFunction(() => {
                   const section = document.getElementById('page-employees-readonly');
                   return section && !section.classList.contains('hidden');
-                }, { timeout: 5_000 });
+                }, { timeout:5_000 });
                 details = await page.evaluate(() => {
                   const pageSection = document.getElementById('page-employees-readonly');
                   return {
-                    rows: document.querySelectorAll('#employees-ro-body tr').length,
-                    pageVisible: Boolean(pageSection && !pageSection.classList.contains('hidden')),
-                    actionButtons: pageSection?.querySelectorAll('button').length || 0,
-                    mode: String(document.getElementById('employees-ro-mode')?.textContent || '').trim(),
+                    rows:document.querySelectorAll('#employees-ro-body tr').length,
+                    pageVisible:Boolean(pageSection && !pageSection.classList.contains('hidden')),
+                    actionButtons:pageSection?.querySelectorAll('button').length || 0,
+                    mode:String(document.getElementById('employees-ro-mode')?.textContent || '').trim(),
                   };
                 });
-                if (!details.pageVisible || details.rows !== expectedRows) {
-                  throw new Error(`Unexpected employee page for ${ccmsId}: ${JSON.stringify(details)}`);
-                }
-                if (details.actionButtons !== 0) {
-                  throw new Error(`Read-only page exposed action buttons for ${ccmsId}: ${details.actionButtons}`);
-                }
+                if (!details.pageVisible || details.rows !== expectedRows) throw new Error(`Unexpected employee page for ${ccmsId}: ${JSON.stringify(details)}`);
+                if (details.actionButtons !== 0) throw new Error(`Read-only page exposed action buttons for ${ccmsId}: ${details.actionButtons}`);
                 if (!details.mode) throw new Error(`Read-only mode badge missing for ${ccmsId}.`);
               }
 
-              console.log(JSON.stringify({ ccmsId, visibility, details, pageErrors, consoleTail: consoleRows.slice(-15) }));
+              console.log(JSON.stringify({ ccmsId, visibility, details, pageErrors, consoleTail:consoleRows.slice(-15) }));
               if (pageErrors.length) throw new Error(`Browser errors for ${ccmsId}: ${pageErrors.join(' | ')}`);
             } finally {
               await context.close();
@@ -148,10 +142,12 @@ jobs:
           }
 
           try {
-            await testRole({ ccmsId: '0001', password: 'Aa095142332415!', expectedVisible: true, expectedRows: 7 });
-            await testRole({ ccmsId: '1001', password: '0951', expectedVisible: true, expectedRows: 6 });
-            await testRole({ ccmsId: '3001', password: '2411', expectedVisible: true, expectedRows: 6 });
-            await testRole({ ccmsId: '2001', password: '2411', expectedVisible: false, expectedRows: 0 });
+            // Monday identity seed: 8 total identities; CEO sees all 8, ACM/HR see 7 iPro identities excluding CEO.
+            await testRole({ ccmsId:'0001', password:'Aa095142332415!', expectedVisible:true, expectedRows:8 });
+            await testRole({ ccmsId:'1001', password:'0951', expectedVisible:true, expectedRows:7 });
+            await testRole({ ccmsId:'3001', password:'2411', expectedVisible:true, expectedRows:7 });
+            // Reema is now Supervisor 2002 and must not receive Employees & Accounts.
+            await testRole({ ccmsId:'2002', password:reemaPassword, expectedVisible:false, expectedRows:0 });
           } finally {
             await browser.close();
           }
