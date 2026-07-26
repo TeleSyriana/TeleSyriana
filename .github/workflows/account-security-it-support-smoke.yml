@@ -11,6 +11,7 @@ on:
       - 'employee-it-support-policy.js'
       - 'employee-it-support-service.js'
       - 'employee-management-policy.js'
+      - 'employee-management-service.js'
       - 'ticket-runtime-policy-adapter.js'
       - 'chat-access-policy.js'
       - 'employee-identity-seed.js'
@@ -47,6 +48,7 @@ jobs:
             employee-it-support-policy.js \
             employee-it-support-service.js \
             employee-management-policy.js \
+            employee-management-service.js \
             ticket-runtime-policy-adapter.js \
             chat-access-policy.js; do
             cp "$file" "/tmp/${file%.js}.mjs"
@@ -58,6 +60,7 @@ jobs:
           grep -Fq 'mustChangePassword: true' employee-auth-v2.js
           grep -Fq 'password_change_required' employee-auth-v2.js
           grep -Fq 'EMPLOYEE_ACCOUNT_PROVISIONING_READY' employee-it-support-service.js
+          grep -Fq 'if (roleKey === EMPLOYEE_ROLES.IT) return [];' employee-management-service.js
           grep -Fq 'first available ID is `4001`' docs/account-security-it-support.md
 
           # The real temporary onboarding value is supplied only at provisioning
@@ -71,6 +74,7 @@ jobs:
             employee-it-support-policy.js \
             employee-it-support-service.js \
             employee-management-policy.js \
+            employee-management-service.js \
             ticket-runtime-policy-adapter.js \
             chat-access-policy.js \
             employee-identity-seed.js \
