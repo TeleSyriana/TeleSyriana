@@ -13,6 +13,8 @@ on:
       - 'employee-management-policy.js'
       - 'ticket-runtime-policy-adapter.js'
       - 'chat-access-policy.js'
+      - 'employee-identity-seed.js'
+      - 'docs/account-security-it-support.md'
       - 'tools/account-security-it-preflight.mjs'
       - 'tools/phase1a-model-preflight.mjs'
       - 'tools/phase1b-policy-preflight.mjs'
@@ -56,6 +58,7 @@ jobs:
           grep -Fq 'mustChangePassword: true' employee-auth-v2.js
           grep -Fq 'password_change_required' employee-auth-v2.js
           grep -Fq 'EMPLOYEE_ACCOUNT_PROVISIONING_READY' employee-it-support-service.js
+          grep -Fq 'first available ID is `4001`' docs/account-security-it-support.md
 
           # The real temporary onboarding value is supplied only at provisioning
           # time. Scan application/runtime source, but do not make this workflow
