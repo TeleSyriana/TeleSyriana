@@ -89,6 +89,20 @@ function syncActiveState() {
   });
 }
 
+function hideDuplicatedLegacyControls() {
+  // Queue/status and activity/date are represented by the one-tap chips above.
+  // Keep Search, Priority and Owner visible because they are not duplicated.
+  ['ticket-filter-status', 'ticket-filter-date'].forEach((id) => {
+    const node = el(id);
+    if (!node) return;
+    node.classList.add('p5-source-filter-hidden');
+    node.setAttribute('aria-hidden', 'true');
+    node.tabIndex = -1;
+  });
+  const filters = document.querySelector('#page-tickets .ticket-filters');
+  if (filters) filters.classList.add('p5-ticket-filters-condensed');
+}
+
 function injectStyles() {
   if (el('phase5-ticket-quick-filter-styles')) return;
   const style = document.createElement('style');
@@ -101,6 +115,11 @@ function injectStyles() {
     .p5-ticket-chip.active{background:rgba(59,130,246,.14);border-color:rgba(59,130,246,.34)}
     .p5-ticket-chip.emergency.active{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35)}
     .p5-ticket-filter-note{font-size:11px;opacity:.6}
+    #page-tickets .ticket-filters .p5-source-filter-hidden{display:none!important}
+    #page-tickets .ticket-filters.p5-ticket-filters-condensed{grid-template-columns:minmax(220px,2fr) minmax(150px,1fr) minmax(150px,1fr)}
+    @media(max-width:720px){
+      #page-tickets .ticket-filters.p5-ticket-filters-condensed{grid-template-columns:1fr}
+    }
   `;
   document.head.appendChild(style);
 }
@@ -134,6 +153,7 @@ function renderLabels() {
   host.querySelectorAll('[data-p5-ticket-date]').forEach((button) => {
     button.addEventListener('click', () => applyDateFilter(button.dataset.p5TicketDate || 'all'));
   });
+  hideDuplicatedLegacyControls();
   syncActiveState();
 }
 
