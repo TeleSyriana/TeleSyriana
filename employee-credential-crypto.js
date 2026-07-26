@@ -1,8 +1,10 @@
-// employee-credential-crypto.js — Phase 1B browser-safe password hashing helpers
+// employee-credential-crypto.js — browser-safe password hashing helpers
 //
-// New permanent credentials use PBKDF2-SHA-256 and never store plaintext.
-// This is still a client-side custom-auth bridge; Firebase Auth/server-enforced
-// authorization remains a later security upgrade.
+// New permanent credentials use PBKDF2-SHA-256 and the current password policy.
+// Verification intentionally accepts older password shapes so existing hashes can
+// still authenticate and then be upgraded at the next mandatory password change.
+
+import { validateEmployeePassword } from "./employee-password-policy.js";
 
 export const CREDENTIAL_ALGORITHM = "PBKDF2-SHA-256";
 export const CREDENTIAL_VERSION = 1;
@@ -10,6 +12,12 @@ export const DEFAULT_PBKDF2_ITERATIONS = 210_000;
 
 function clean(value) {
   return String(value ?? "");
+}
+
+function hashablePassword(password) {
+  const value = clean(password);
+  if (!value || value.length > 128) throw new Error("Password cannot be hashed.");
+  return value;
 }
 
 function bytesToBase64(bytes) {
@@ -40,10 +48,7 @@ function cryptoApi() {
 }
 
 export function validateTemporaryPassword(password) {
-  const value = clean(password);
-  if (value.length < 8) throw new Error("Temporary password must contain at least 8 characters.");
-  if (value.length > 128) throw new Error("Password is too long.");
-  return value;
+  return validateEmployeePassword(clean(password));
 }
 
 export function createCredentialSalt(size = 16) {
@@ -54,7 +59,7 @@ export function createCredentialSalt(size = 16) {
 }
 
 export async function deriveCredentialHash(password, saltBase64, iterations = DEFAULT_PBKDF2_ITERATIONS) {
-  const value = validateTemporaryPassword(password);
+  const value = hashablePassword(password);
   const rounds = Math.max(100_000, Number(iterations) || DEFAULT_PBKDF2_ITERATIONS);
   const salt = base64ToBytes(String(saltBase64 || ""));
   if (salt.length < 16) throw new Error("Credential salt is invalid.");
@@ -76,9 +81,10 @@ export async function deriveCredentialHash(password, saltBase64, iterations = DE
 }
 
 export async function createPasswordCredential(password, options = {}) {
+  const value = validateEmployeePassword(password);
   const iterations = Math.max(100_000, Number(options.iterations) || DEFAULT_PBKDF2_ITERATIONS);
   const salt = createCredentialSalt();
-  const passwordHash = await deriveCredentialHash(password, salt, iterations);
+  const passwordHash = await deriveCredentialHash(value, salt, iterations);
   return {
     credentialVersion: CREDENTIAL_VERSION,
     algorithm: CREDENTIAL_ALGORITHM,
@@ -101,6 +107,11 @@ export async function verifyPasswordCredential(password, credential = {}) {
   if (credential.algorithm !== CREDENTIAL_ALGORITHM || Number(credential.credentialVersion) !== CREDENTIAL_VERSION) {
     return false;
   }
-  const derived = await deriveCredentialHash(password, credential.salt, credential.iterations);
+  let derived = "";
+  try {
+    derived = await deriveCredentialHash(password, credential.salt, credential.iterations);
+  } catch {
+    return false;
+  }
   return constantTimeEqualBase64(derived, credential.passwordHash);
 }

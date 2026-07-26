@@ -11,7 +11,8 @@
 // Projects & Teams page is visible. Phase 4A adds a client-side 15-minute inactivity
 // fallback. Phase 4B publishes throttled Agent activity due-times for the isolated
 // server watchdog. Phase 5 adds one-tap Ticket queue/date controls while the Ticket
-// compatibility loader enforces the shared project/team policy.
+// compatibility loader enforces the shared project/team policy. The Monday org
+// transition guard activates the 27 July 2026 iPro hierarchy/account changes.
 
 import './app-core.js';
 import './employees-accounts-readonly.js';
@@ -21,3 +22,4 @@ import './phase3-team-status-live.js';
 import './phase4a-inactivity-watch.js';
 import './phase4b-activity-telemetry.js';
 import './phase5-ticket-quick-filters.js';
+import './monday-org-transition-runtime.js';

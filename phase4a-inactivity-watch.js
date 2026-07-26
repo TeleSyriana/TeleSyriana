@@ -1,11 +1,11 @@
 // phase4a-inactivity-watch.js — client inactivity fallback for Phase 4A
 //
-// This is intentionally not described as server enforcement. While TeleSyriana is
-// open, 15 minutes without user activity changes active work states to Unavailable
-// through the existing status-select change handler, so the existing app persists it.
-// Break and Meeting are excluded by inactivity-policy.js.
+// Applies only to the employee's effective Agent identity. A promoted employee
+// using a legacy compatibility login must not continue receiving Agent inactivity
+// enforcement after the promotion becomes effective.
 
 import { INACTIVITY_UNAVAILABLE_MS, shouldAutoUnavailable } from "./inactivity-policy.js";
+import { seedIdentityByCcms } from "./employee-identity-seed.js";
 
 const USER_KEY = "telesyrianaUser";
 const LAST_ACTIVITY_KEY = "telesyrianaLastActivityMs";
@@ -19,8 +19,18 @@ function readSession() {
   catch { return null; }
 }
 
-function sessionActive() {
-  return Boolean(readSession()?.id || readSession()?.ccmsId);
+function effectiveIdentity() {
+  const session = readSession();
+  const id = String(session?.ccmsId || session?.id || "").trim();
+  return id ? seedIdentityByCcms(id) : null;
+}
+
+function sessionEligible() {
+  const session = readSession();
+  if (!session?.id && !session?.ccmsId) return false;
+  const identity = effectiveIdentity();
+  if (!identity) return String(session?.roleKey || session?.role || "").toLowerCase() === "agent";
+  return identity.accountStatus === "active" && identity.roleKey === "agent";
 }
 
 function readLastActivityMs() {
@@ -29,9 +39,8 @@ function readLastActivityMs() {
 }
 
 function writeLastActivityMs(now = Date.now(), force = false) {
-  if (!sessionActive()) return;
+  if (!sessionEligible()) return;
   const ms = Number(now) || Date.now();
-  // Avoid hammering localStorage on repeated pointer/keyboard events.
   if (!force && ms - lastActivityWriteMs < 5_000) return;
   lastActivityWriteMs = ms;
   try { localStorage.setItem(LAST_ACTIVITY_KEY, String(ms)); } catch {}
@@ -42,7 +51,7 @@ function currentStatusSelect() {
 }
 
 export function evaluateInactivityNow(nowMs = Date.now()) {
-  if (!sessionActive()) return false;
+  if (!sessionEligible()) return false;
   const select = currentStatusSelect();
   if (!select) return false;
   const lastActivityMs = readLastActivityMs();
@@ -75,13 +84,12 @@ function activityEvent() {
 
 function onVisibilityChange() {
   if (document.hidden) return;
-  // Check the previous idle duration before treating the return-to-tab as activity.
   evaluateInactivityNow(Date.now());
   writeLastActivityMs(Date.now(), true);
 }
 
 function onUserChanged() {
-  if (!sessionActive()) {
+  if (!sessionEligible()) {
     try { localStorage.removeItem(LAST_ACTIVITY_KEY); } catch {}
     return;
   }
@@ -101,6 +109,7 @@ function boot() {
   });
   document.addEventListener("visibilitychange", onVisibilityChange);
   window.addEventListener("telesyriana:user-changed", onUserChanged);
+  window.addEventListener("telesyriana:effective-identity-changed", onUserChanged);
   window.addEventListener("storage", (event) => {
     if (event.key === USER_KEY) onUserChanged();
   });

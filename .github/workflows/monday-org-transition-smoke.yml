@@ -1,0 +1,175 @@
+name: Monday iPro Org Transition smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'employee-identity-seed.js'
+      - 'employee-model.js'
+      - 'employee-password-policy.js'
+      - 'project-hierarchy-shadow.js'
+      - 'ticket-runtime-policy-adapter.js'
+      - 'tickets.js'
+      - 'monday-org-transition-runtime.js'
+      - 'phase4a-inactivity-watch.js'
+      - 'phase4b-activity-telemetry.js'
+      - 'functions-phase4b/watchdog-policy.js'
+      - 'app.js'
+      - 'tools/monday-org-transition-preflight.mjs'
+      - '.github/workflows/monday-org-transition-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monday-transition:
+    name: Verify Reema promotion and Monday team
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Static safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp employee-identity-seed.js /tmp/employee-identity-seed.mjs
+          cp ticket-runtime-policy-adapter.js /tmp/ticket-runtime-policy-adapter.mjs
+          cp monday-org-transition-runtime.js /tmp/monday-org-transition-runtime.mjs
+          cp phase4a-inactivity-watch.js /tmp/phase4a-inactivity-watch.mjs
+          cp phase4b-activity-telemetry.js /tmp/phase4b-activity-telemetry.mjs
+          cp tickets.js /tmp/tickets-loader.mjs
+          node --check /tmp/employee-identity-seed.mjs
+          node --check /tmp/ticket-runtime-policy-adapter.mjs
+          node --check /tmp/monday-org-transition-runtime.mjs
+          node --check /tmp/phase4a-inactivity-watch.mjs
+          node --check /tmp/phase4b-activity-telemetry.mjs
+          node --check /tmp/tickets-loader.mjs
+          node --check functions-phase4b/watchdog-policy.js
+          grep -q '2026-07-27T00:00:00+03:00' employee-identity-seed.js
+          grep -q 'previousCcmsIds: \["9003"\]' employee-identity-seed.js
+          grep -q 'ccmsId: "2002"' employee-identity-seed.js
+          grep -q 'ccmsId: "9004"' employee-identity-seed.js
+          grep -q 'credentialSetupRequired: true' employee-identity-seed.js
+          grep -q 'mustChangePasswordOnFirstLogin: true' employee-identity-seed.js
+          grep -q 'runtimeEscalationTarget' tickets.js
+          grep -q 'escalatedTo: escalationTarget.ccmsId' tickets.js
+          grep -q "import './monday-org-transition-runtime.js';" app.js
+          grep -q 'compatibilityAuthCcmsId' monday-org-transition-runtime.js
+          echo 'Monday transition static safety: PASS'
+
+      - name: Run deterministic transition policy tests
+        run: node tools/monday-org-transition-preflight.mjs
+
+      - name: Browser effective Reema team and disabled-login guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > monday-team-fixture.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head><meta charset="utf-8"><style>.hidden{display:none!important}</style></head>
+          <body>
+            <form id="login-form"><input id="ccmsId"><input id="password"><button type="submit">Login</button></form>
+            <div id="login-error" class="hidden"></div>
+            <button id="logout-btn" type="button"></button>
+            <nav id="main-nav"><button class="nav-link" data-page="home">Home</button><button class="nav-link" data-page="settings">Settings</button></nav>
+            <main id="dashboard-screen"><section id="page-home" class="page-section"></section></main>
+            <script type="module" src="./phase2-projects-teams.js"></script>
+            <script type="module" src="./monday-org-transition-runtime.js"></script>
+          </body>
+          </html>
+          HTML
+
+          mkdir -p /tmp/telesyriana-monday-browser
+          cd /tmp/telesyriana-monday-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > monday-browser-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-monday-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/monday-browser-smoke.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+          const MONDAY = Date.parse('2026-07-26T21:00:01Z');
+          try {
+            const context = await browser.createBrowserContext();
+            const page = await context.newPage();
+            const errors = [];
+            page.on('pageerror', (error) => errors.push(String(error?.stack || error)));
+            await page.evaluateOnNewDocument((monday) => {
+              Date.now = () => monday;
+              localStorage.setItem('telesyrianaUser', JSON.stringify({ id:'9003', role:'agent', name:'Reema Obaid' }));
+            }, MONDAY);
+            await page.goto('http://127.0.0.1:4173/monday-team-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
+            await page.waitForSelector('#nav-projects-teams-v2', { timeout:5_000 });
+            const nav = await page.$eval('#nav-projects-teams-v2', (node) => ({ hidden:node.classList.contains('hidden'), text:node.textContent.trim() }));
+            if (nav.hidden || nav.text !== 'My Team') throw new Error(`Reema effective nav failed: ${JSON.stringify(nav)}`);
+            await page.click('#nav-projects-teams-v2');
+            const team = await page.$$eval('#page-projects-teams-v2 [data-phase2-ccms]', (nodes) => nodes.map((node) => node.getAttribute('data-phase2-ccms')).sort());
+            if (JSON.stringify(team) !== JSON.stringify(['9001','9004'])) throw new Error(`Reema team mismatch: ${JSON.stringify(team)}`);
+            const heading = await page.$eval('#page-projects-teams-v2 h2', (node) => node.textContent.trim());
+            if (heading !== 'My Team') throw new Error(`Unexpected Reema heading: ${heading}`);
+            if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
+            await context.close();
+
+            const guardContext = await browser.createBrowserContext();
+            const guardPage = await guardContext.newPage();
+            await guardPage.evaluateOnNewDocument((monday) => { Date.now = () => monday; }, MONDAY);
+            await guardPage.goto('http://127.0.0.1:4173/monday-team-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
+            const guard = await guardPage.evaluate(() => {
+              const results = {};
+              for (const id of ['2001','9002','9003','2002']) {
+                const input = document.getElementById('ccmsId');
+                input.value = id;
+                input.removeAttribute('data-effective-ccms-id');
+                input.removeAttribute('data-compatibility-auth-ccms-id');
+                document.getElementById('login-error').classList.add('hidden');
+                const event = new Event('submit', { bubbles:true, cancelable:true });
+                const allowed = document.getElementById('login-form').dispatchEvent(event);
+                results[id] = {
+                  prevented:!allowed,
+                  errorHidden:document.getElementById('login-error').classList.contains('hidden'),
+                  inputAfter:input.value,
+                  effectiveCcmsId:input.dataset.effectiveCcmsId || '',
+                  compatibilityAuthCcmsId:input.dataset.compatibilityAuthCcmsId || '',
+                };
+              }
+              return results;
+            });
+            if (!guard['2001'].prevented || !guard['9002'].prevented) throw new Error(`Inactive login guard failed: ${JSON.stringify(guard)}`);
+            if (guard['9003'].prevented) throw new Error(`Reema legacy compatibility login was incorrectly blocked: ${JSON.stringify(guard)}`);
+            if (guard['2002'].prevented || guard['2002'].inputAfter !== '9003' || guard['2002'].effectiveCcmsId !== '2002' || guard['2002'].compatibilityAuthCcmsId !== '9003') {
+              throw new Error(`Reema 2002 compatibility login translation failed: ${JSON.stringify(guard)}`);
+            }
+            await guardContext.close();
+
+            console.log(JSON.stringify({ reemaNav:nav, team, guard }));
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat "$GITHUB_WORKSPACE/monday-browser-smoke.log"
+
+      - name: Upload transition smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monday-org-transition-output
+          path: |
+            monday-browser-smoke.log
+            monday-browser-server.log
+          if-no-files-found: warn
+          retention-days: 7

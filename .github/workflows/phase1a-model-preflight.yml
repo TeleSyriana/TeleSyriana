@@ -65,7 +65,7 @@ jobs:
             node --check "/tmp/${file%.js}.mjs"
           done
 
-      - name: Confirm Phase 1A does not touch live runtime entry points
+      - name: Confirm identity changes preserve stable runtime cores
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -75,10 +75,16 @@ jobs:
           changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
           printf '%s\n' "$changed"
 
-          forbidden='^(app\.js|app-core\.js|tickets\.js|tickets-core\.js|payroll\.js|payroll-core\.js|reports\.js|reports-core\.js|messages\.js|messages-core\.js|groups\.js|groups-core\.js|tasks\.js|meetings\.js|index\.html)$'
+          # Phase 1A originally forbade every runtime wrapper because no later phase
+          # existed yet. Later approved phases intentionally mount safe modules from
+          # app.js/tickets.js. Keep protecting the stable cores and unrelated feature
+          # engines while allowing those wrappers to evolve.
+          forbidden='^(app-core\.js|tickets-core\.js|payroll\.js|payroll-core\.js|reports\.js|reports-core\.js|messages\.js|messages-core\.js|groups\.js|groups-core\.js|tasks\.js|meetings\.js|index\.html)$'
           if printf '%s\n' "$changed" | grep -Eq "$forbidden"; then
-            echo 'Phase 1A unexpectedly changes a production runtime entry/module.' >&2
+            echo 'Identity work unexpectedly changes a stable production core/module.' >&2
             exit 1
           fi
 
-          echo 'Phase 1A runtime isolation check: PASS'
+          grep -Fq "import './app-core.js';" app.js
+          grep -q "const CORE_URL = new URL('./tickets-core.js'" tickets.js
+          echo 'Stable runtime core isolation check: PASS'

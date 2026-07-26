@@ -1,5 +1,5 @@
 // employee-credential-prompt.js — reusable masked temporary-password dialog
-// Explicitly invoked only by Employees & Accounts actions.
+// Explicitly invoked only by controlled account actions.
 
 import { validateTemporaryPassword } from "./employee-credential-crypto.js";
 
@@ -29,7 +29,7 @@ function ensureDialog() {
     <div class="employee-credential-card" role="dialog" aria-modal="true">
       <h3 id="employee-credential-title"></h3>
       <p id="employee-credential-message"></p>
-      <label>${t("كلمة المرور المؤقتة الجديدة", "New temporary password")}<input id="employee-credential-password" type="password" autocomplete="new-password" minlength="8" /></label>
+      <label>${t("كلمة المرور المؤقتة الجديدة", "New temporary password")}<input id="employee-credential-password" type="password" autocomplete="new-password" minlength="10" /></label>
       <div id="employee-credential-error" class="employee-credential-error"></div>
       <div class="employee-credential-actions"><button id="employee-credential-cancel" type="button" class="btn-secondary">${t("إلغاء", "Cancel")}</button><button id="employee-credential-confirm" type="button" class="btn-primary">${t("متابعة", "Continue")}</button></div>
     </div>`;
@@ -47,7 +47,10 @@ export function requestTemporaryPassword({ title = "", message = "" } = {}) {
   const cancel = document.getElementById("employee-credential-cancel");
 
   if (titleEl) titleEl.textContent = title || t("إعداد كلمة مرور مؤقتة", "Set temporary password");
-  if (messageEl) messageEl.textContent = message || t("يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.", "The temporary password must contain at least 8 characters.");
+  if (messageEl) messageEl.textContent = message || t(
+    "10 أحرف على الأقل مع حرف كبير وصغير ورقم ورمز. سيُطلب من الموظف تغييرها عند أول تسجيل دخول.",
+    "Use at least 10 characters with upper/lowercase, a number and a symbol. The employee must change it on next login."
+  );
   if (input) input.value = "";
   if (errorEl) errorEl.textContent = "";
   modal.classList.remove("hidden");
@@ -88,9 +91,10 @@ export function requestTemporaryPassword({ title = "", message = "" } = {}) {
 
 export function credentialPromptText(name, action) {
   const displayName = String(name || "").trim();
+  const suffix = t(" وسيُطلب تغييره عند تسجيل الدخول التالي.", " and it will be changed at the next login.");
   return action === "promotion"
-    ? t(`سيتم تغيير CCMS لـ ${displayName}. أنشئ كلمة مرور مؤقتة جديدة للحساب.`, `${displayName}'s CCMS will change. Set a new temporary password for the account.`)
+    ? t(`سيتم تغيير CCMS لـ ${displayName}. أنشئ كلمة مرور مؤقتة جديدة للحساب`, `${displayName}'s CCMS will change. Set a new temporary password for the account`) + suffix
     : action === "demotion"
-      ? t(`سيتم تغيير CCMS لـ ${displayName}. أنشئ كلمة مرور مؤقتة جديدة للحساب.`, `${displayName}'s CCMS will change. Set a new temporary password for the account.`)
-      : t(`إعداد كلمة مرور مؤقتة جديدة لـ ${displayName}.`, `Set a new temporary password for ${displayName}.`);
+      ? t(`سيتم تغيير CCMS لـ ${displayName}. أنشئ كلمة مرور مؤقتة جديدة للحساب`, `${displayName}'s CCMS will change. Set a new temporary password for the account`) + suffix
+      : t(`إعداد كلمة مرور مؤقتة جديدة لـ ${displayName}`, `Set a new temporary password for ${displayName}`) + suffix;
 }

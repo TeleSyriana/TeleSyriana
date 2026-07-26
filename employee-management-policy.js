@@ -1,6 +1,8 @@
-// employee-management-policy.js — Phase 1B pure authorization policy
+// employee-management-policy.js — pure authorization policy
 //
-// No Firestore/DOM dependencies. UI and service layers must both use these rules.
+// IT Support is deliberately excluded from general employee-management permission.
+// CEO may create/manage IT identities, while IT receives its own least-privilege
+// account-support policy in employee-it-support-policy.js.
 
 import {
   EMPLOYEE_ROLES,
@@ -42,7 +44,7 @@ export function canOpenEmployeesAccounts(actor) {
 export function allowedRolesForCreation(actor) {
   const role = managementActorIdentity(actor).roleKey;
   if (role === EMPLOYEE_ROLES.CEO) {
-    return [EMPLOYEE_ROLES.ACM, EMPLOYEE_ROLES.SUPERVISOR, EMPLOYEE_ROLES.HR, EMPLOYEE_ROLES.AGENT];
+    return [EMPLOYEE_ROLES.ACM, EMPLOYEE_ROLES.SUPERVISOR, EMPLOYEE_ROLES.HR, EMPLOYEE_ROLES.IT, EMPLOYEE_ROLES.AGENT];
   }
   if (role === EMPLOYEE_ROLES.ACM) {
     return [EMPLOYEE_ROLES.SUPERVISOR, EMPLOYEE_ROLES.AGENT];
@@ -92,7 +94,7 @@ export function canAssignRoleToTarget(actor, target, nextRole) {
   const actorRole = managementActorIdentity(actor).roleKey;
 
   if (actorRole === EMPLOYEE_ROLES.CEO) {
-    return [EMPLOYEE_ROLES.ACM, EMPLOYEE_ROLES.SUPERVISOR, EMPLOYEE_ROLES.HR, EMPLOYEE_ROLES.AGENT].includes(requested);
+    return [EMPLOYEE_ROLES.ACM, EMPLOYEE_ROLES.SUPERVISOR, EMPLOYEE_ROLES.HR, EMPLOYEE_ROLES.IT, EMPLOYEE_ROLES.AGENT].includes(requested);
   }
   if (actorRole === EMPLOYEE_ROLES.ACM) {
     return [EMPLOYEE_ROLES.SUPERVISOR, EMPLOYEE_ROLES.AGENT].includes(requested);
@@ -107,6 +109,12 @@ export function assertProjectAssignmentAllowed(actor, role, projectIds) {
   const a = managementActorIdentity(actor);
   const requestedRole = normaliseCanonicalRole(role);
   const requestedProjects = normaliseProjectIds(projectIds);
+
+  if (requestedRole === EMPLOYEE_ROLES.IT) {
+    if (a.roleKey !== EMPLOYEE_ROLES.CEO) throw new Error("Only CEO can create or manage IT Support accounts.");
+    if (requestedProjects.length) throw new Error("IT Support accounts must not be assigned operational projects.");
+    return [];
+  }
 
   if (a.roleKey === EMPLOYEE_ROLES.CEO) return requestedProjects;
   if (!requestedProjects.length) throw new Error("At least one project is required.");
