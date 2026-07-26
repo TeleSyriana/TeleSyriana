@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'employee-identity-seed.js'
+      - 'employee-model.js'
+      - 'employee-password-policy.js'
       - 'project-hierarchy-shadow.js'
       - 'ticket-runtime-policy-adapter.js'
       - 'tickets.js'
@@ -51,6 +53,8 @@ jobs:
           grep -q 'previousCcmsIds: \["9003"\]' employee-identity-seed.js
           grep -q 'ccmsId: "2002"' employee-identity-seed.js
           grep -q 'ccmsId: "9004"' employee-identity-seed.js
+          grep -q 'credentialSetupRequired: true' employee-identity-seed.js
+          grep -q 'mustChangePasswordOnFirstLogin: true' employee-identity-seed.js
           grep -q 'runtimeEscalationTarget' tickets.js
           grep -q 'escalatedTo: escalationTarget.ccmsId' tickets.js
           grep -q "import './monday-org-transition-runtime.js';" app.js
