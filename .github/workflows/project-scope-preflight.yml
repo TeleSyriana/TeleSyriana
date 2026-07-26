@@ -1,0 +1,60 @@
+name: Project scope and hierarchy preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'project-access-policy.js'
+      - 'project-hierarchy-shadow.js'
+      - 'employee-model.js'
+      - 'tools/project-scope-preflight.mjs'
+      - '.github/workflows/project-scope-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  project-scope:
+    name: Verify project and team isolation rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Syntax checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp project-access-policy.js /tmp/project-access-policy.mjs
+          cp project-hierarchy-shadow.js /tmp/project-hierarchy-shadow.mjs
+          node --check /tmp/project-access-policy.mjs
+          node --check /tmp/project-hierarchy-shadow.mjs
+          node --check tools/project-scope-preflight.mjs
+
+      - name: Run project scope tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/project-scope-preflight.mjs | tee project-scope-preflight.log
+
+      - name: Hard storage isolation guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq "from [\"']\\./firebase\\.js|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(|onSnapshot\\(" project-access-policy.js project-hierarchy-shadow.js; then
+            echo 'Project scope layer unexpectedly depends on Firebase/Firestore.' >&2
+            exit 1
+          fi
+          echo 'Project scope storage isolation: PASS'
+
+      - name: Upload preflight output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-scope-preflight-output
+          path: project-scope-preflight.log
+          if-no-files-found: warn
+          retention-days: 7

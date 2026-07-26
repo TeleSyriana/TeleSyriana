@@ -1,0 +1,58 @@
+name: Project-aware Chat access preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'chat-access-policy.js'
+      - 'project-access-policy.js'
+      - 'employee-model.js'
+      - 'tools/chat-access-preflight.mjs'
+      - '.github/workflows/chat-access-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chat-access:
+    name: Verify project isolation and CEO visibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Syntax checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp chat-access-policy.js /tmp/chat-access-policy.mjs
+          node --check /tmp/chat-access-policy.mjs
+          node --check tools/chat-access-preflight.mjs
+
+      - name: Run Chat access tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/chat-access-preflight.mjs | tee chat-access-preflight.log
+
+      - name: Hard storage isolation guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq "from [\"']\\./firebase\\.js|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(|onSnapshot\\(" chat-access-policy.js; then
+            echo 'Chat access policy unexpectedly depends on Firebase/Firestore.' >&2
+            exit 1
+          fi
+          echo 'Chat access storage isolation: PASS'
+
+      - name: Upload preflight output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-access-preflight-output
+          path: chat-access-preflight.log
+          if-no-files-found: warn
+          retention-days: 7
