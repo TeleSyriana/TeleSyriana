@@ -5,9 +5,10 @@
 // The previous production application is preserved byte-for-byte in app-core.js.
 // Use it directly until the Phase 1 bootstrap is repaired and browser-tested.
 //
-// The read-only Employees & Accounts preview is mounted separately. It uses only
-// the approved local Phase 1A identity seed, performs no Firestore operations,
-// and does not change login or account-management behaviour.
+// The read-only Employees & Accounts preview and Phase 2 Projects & Teams surface
+// are mounted separately. Both use local approved identity/project projections and
+// do not change current login or account-management behaviour.
 
 import './app-core.js';
 import './employees-accounts-readonly.js';
+import './phase2-projects-teams.js';
