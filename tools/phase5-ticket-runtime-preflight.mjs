@@ -29,6 +29,11 @@ copyModule('ticket-runtime-policy-adapter.js', 'ticket-runtime-policy-adapter.mj
   ['./employee-identity-seed.js', './employee-identity-seed.mjs'],
 ]);
 
+// Phase 5 originally shipped before the 27 July organisation change. Keep this
+// regression deterministic so it continues proving the original role boundaries
+// even when CI runs after the effective-dated promotion.
+const originalDateNow = Date.now;
+Date.now = () => Date.parse('2026-07-26T20:00:00Z');
 const policy = await import(pathToFileURL(path.join(tmp, 'ticket-runtime-policy-adapter.mjs')).href);
 
 const directory = [
@@ -49,7 +54,7 @@ const supervisor = { id:'2001', role:'supervisor' };
 const hr = { id:'3001', role:'hr' };
 const agent1 = { id:'9001', role:'agent' };
 
-const legacyOwn = { id:'t-own', assignedTo:'9001', status:'open' }; // legacy => iPro
+const legacyOwn = { id:'t-own', assignedTo:'9001', status:'open' };
 const legacyAgent2 = { id:'t-a2', assignedTo:'9002', status:'open' };
 const legacySupervisor = { id:'t-sup', assignedTo:'2001', status:'open' };
 const legacyAcm = { id:'t-acm', assignedTo:'1001', status:'open' };
@@ -61,14 +66,12 @@ assert.equal(policy.runtimeTicketProjectId(agent1, directory), 'ipro');
 assert.equal(policy.runtimeCanOpenTickets(hr, directory), false);
 assert.equal(policy.runtimeCanOpenTickets(agent1, directory), true);
 
-// Agent = own assigned tickets only. Historical/resolved stays visible to its owner.
 assert.equal(policy.runtimeCanViewTicket(agent1, legacyOwn, directory), true);
 assert.equal(policy.runtimeCanViewTicket(agent1, resolvedOwn, directory), true);
 assert.equal(policy.runtimeCanViewTicket(agent1, legacyAgent2, directory), false);
 assert.equal(policy.runtimeCanViewTicket(agent1, legacyUnassigned, directory), false);
 assert.equal(policy.runtimeCanViewTicket(agent1, otherProject, directory), false);
 
-// Supervisor = self + direct reports, never ACM-owned/unassigned/cross-project.
 assert.equal(policy.runtimeCanViewTicket(supervisor, legacyOwn, directory), true);
 assert.equal(policy.runtimeCanViewTicket(supervisor, legacyAgent2, directory), true);
 assert.equal(policy.runtimeCanViewTicket(supervisor, legacySupervisor, directory), true);
@@ -76,7 +79,6 @@ assert.equal(policy.runtimeCanViewTicket(supervisor, legacyAcm, directory), fals
 assert.equal(policy.runtimeCanViewTicket(supervisor, legacyUnassigned, directory), false);
 assert.equal(policy.runtimeCanViewTicket(supervisor, otherProject, directory), false);
 
-// ACM = project-wide; CEO = global; HR = no operational Ticket access.
 assert.equal(policy.runtimeCanViewTicket(acm, legacyOwn, directory), true);
 assert.equal(policy.runtimeCanViewTicket(acm, legacyUnassigned, directory), true);
 assert.equal(policy.runtimeCanViewTicket(acm, otherProject, directory), false);
@@ -109,6 +111,7 @@ assert.equal(policy.runtimeCanSetTicketAssignment(hr, legacyOwn, '9001', directo
 
 console.log(JSON.stringify({
   phase:'5-project-aware-ticket-engine',
+  fixtureTime:'2026-07-26T20:00:00Z',
   agentScope:policy.runtimeTicketScope(agent1, directory),
   supervisorScope:policy.runtimeTicketScope(supervisor, directory),
   acmScope:policy.runtimeTicketScope(acm, directory),
@@ -116,3 +119,5 @@ console.log(JSON.stringify({
   legacyProjectFallback:policy.runtimeTicketProjectId(agent1, directory),
   result:'PASS',
 }, null, 2));
+
+Date.now = originalDateNow;
