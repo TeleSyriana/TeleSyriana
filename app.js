@@ -6,9 +6,10 @@
 // Use it directly until the Phase 1 bootstrap is repaired and browser-tested.
 //
 // The read-only Employees & Accounts preview and Phase 2 Projects & Teams surface
-// are mounted separately. Both use local approved identity/project projections and
-// do not change current login or account-management behaviour.
+// are mounted separately. Ticket dashboard metrics reuse the existing Tickets
+// engine snapshot and do not start a second Firestore listener.
 
 import './app-core.js';
 import './employees-accounts-readonly.js';
 import './phase2-projects-teams.js';
+import './phase2-ticket-dashboard-live.js';

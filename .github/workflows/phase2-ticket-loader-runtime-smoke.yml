@@ -1,0 +1,95 @@
+name: Phase 2 Ticket loader runtime smoke
+
+on:
+  pull_request:
+    branches: [agent/phase-2-visible-projects-teams, main]
+    paths:
+      - 'tickets.js'
+      - 'tickets-core.js'
+      - 'phase2-ticket-dashboard-live.js'
+      - '.github/workflows/phase2-ticket-loader-runtime-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  loader-runtime:
+    name: Verify Ticket loader does not fall back
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: |
+          cp tickets.js /tmp/tickets-loader.mjs
+          node --check /tmp/tickets-loader.mjs
+
+      - name: Browser runtime with Firestore blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/telesyriana-ticket-loader-browser
+          cd /tmp/telesyriana-ticket-loader-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund --silent puppeteer-core@24
+
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 4173 --bind 127.0.0.1 > phase2-ticket-loader-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          sleep 1
+
+          cd /tmp/telesyriana-ticket-loader-browser
+          node --input-type=module > "$GITHUB_WORKSPACE/phase2-ticket-loader-browser.log" 2>&1 <<'NODE'
+          import fs from 'node:fs';
+          import puppeteer from 'puppeteer-core';
+
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
+          if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+          try {
+            const page = await browser.newPage();
+            const consoleRows = [];
+            const pageErrors = [];
+            page.on('console', (message) => consoleRows.push(`[${message.type()}] ${message.text()}`));
+            page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
+            await page.setRequestInterception(true);
+            page.on('request', (request) => {
+              const url = request.url();
+              if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) request.abort();
+              else request.continue();
+            });
+            await page.goto('http://127.0.0.1:4173/index.html', { waitUntil:'domcontentloaded', timeout:30_000 });
+            await page.waitForFunction(() => window.__TS_TICKET_PAGE_LIFECYCLE__ === true, { timeout:10_000 });
+            await new Promise((resolve) => setTimeout(resolve, 800));
+            const fallback = consoleRows.filter((row) => /Central ticket staff-directory bridge failed/i.test(row));
+            const result = {
+              ticketLifecycle: await page.evaluate(() => window.__TS_TICKET_PAGE_LIFECYCLE__ === true),
+              fallback,
+              pageErrors,
+              consoleTail: consoleRows.slice(-20),
+            };
+            console.log(JSON.stringify(result));
+            if (!result.ticketLifecycle) throw new Error('Ticket page lifecycle bridge did not initialize.');
+            if (fallback.length) throw new Error(`Ticket loader fell back: ${fallback.join(' | ')}`);
+            if (pageErrors.length) throw new Error(`Browser errors: ${pageErrors.join(' | ')}`);
+          } finally {
+            await browser.close();
+          }
+          NODE
+          cat "$GITHUB_WORKSPACE/phase2-ticket-loader-browser.log"
+
+      - name: Upload runtime output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-ticket-loader-runtime-output
+          path: |
+            phase2-ticket-loader-browser.log
+            phase2-ticket-loader-server.log
+          if-no-files-found: warn
+          retention-days: 7

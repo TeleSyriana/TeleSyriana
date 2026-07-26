@@ -1,6 +1,7 @@
 // tickets.js — TeleSyriana Phase 1 staff-directory migration loader
 // Preserves the current ticket engine byte-for-byte in tickets-core.js, swaps
-// the staff directory, and avoids Firestore subscriptions while Tickets is hidden.
+// the staff directory, avoids Firestore subscriptions while Tickets is hidden,
+// and publishes a sanitized in-memory snapshot for Phase 2 dashboard metrics.
 
 const CORE_URL = new URL('./tickets-core.js', import.meta.url);
 const FIREBASE_URL = new URL('./firebase.js', import.meta.url).href;
@@ -33,6 +34,28 @@ function patchTickets(coreSource) {
 
   const ticketLifecycleHelpers = `function ticketPageIsActive() {\n  const page = el("page-tickets");\n  return Boolean(page && !page.classList.contains("hidden"));\n}\n\nfunction stopTicketPageSubscriptions() {\n  if (unsubTickets) { try { unsubTickets(); } catch {} }\n  unsubTickets = null;\n  if (unsubDeletedTickets) { try { unsubDeletedTickets(); } catch {} }\n  unsubDeletedTickets = null;\n  deletedTickets = [];\n  clearTicketSlowTimer();\n}\n\nfunction bindTicketPageLifecycle() {\n  if (window.__TS_TICKET_PAGE_LIFECYCLE__) return;\n  window.__TS_TICKET_PAGE_LIFECYCLE__ = true;\n  document.addEventListener("click", (event) => {\n    const nav = event.target?.closest?.(".nav-link[data-page]");\n    if (!nav) return;\n    if (nav.dataset.page === "tickets") setTimeout(() => initTickets(), 0);\n    else stopTicketPageSubscriptions();\n  });\n}\n\n`;
   source = replaceRequired(source, 'function initTickets() {\n  currentUser = getCurrentUser();', `${ticketLifecycleHelpers}async function initTickets() {\n  currentUser = getCurrentUser();\n  bindTicketPageLifecycle();`, 'ticket init lifecycle');
+
+  const dashboardBridge = `function safeTicketDashboardRows() {\n  return allTickets.map((ticket) => ({\n    id: String(ticket.id || ""),\n    projectId: String(ticket.projectId || ticket.project || "ipro"),\n    status: String(ticket.status || "open"),\n    priority: String(ticket.priority || "normal"),\n    assignedTo: String(ticket.assignedTo || ticket.assignedCcmsId || ticket.assignedEmployeeId || ""),\n    assignedEmployeeUid: String(ticket.assignedEmployeeUid || ticket.assignedUid || ""),\n    createdBy: String(ticket.createdBy || ""),\n    createdAt: tsToMs(ticket.createdAt) || 0,\n    updatedAt: tsToMs(ticket.updatedAt) || tsToMs(ticket.resolvedAt) || tsToMs(ticket.createdAt) || 0,\n    resolvedAt: tsToMs(ticket.resolvedAt) || 0,\n    dueAt: tsToMs(ticket.dueAt || ticket.slaDueAt) || 0,\n  }));\n}\n\nfunction publishTicketDashboardSnapshot() {\n  const rows = safeTicketDashboardRows();\n  window.__TS_TICKET_DASHBOARD_SNAPSHOT__ = () => rows.map((row) => ({ ...row }));\n  try {\n    window.dispatchEvent(new CustomEvent("telesyriana:ticket-dashboard-snapshot", { detail: { rows: rows.map((row) => ({ ...row })) } }));\n  } catch {}\n}\n\n`;
+  source = replaceRequired(source, 'function ticketPageIsActive() {', `${dashboardBridge}function ticketPageIsActive() {`, 'ticket dashboard snapshot bridge');
+
+  source = replaceRequired(
+    source,
+    '  ticketTeamSearchMap = new Map();\n  teamSearchIndexLoaded = false;',
+    '  ticketTeamSearchMap = new Map();\n  teamSearchIndexLoaded = false;',
+    'ticket snapshot stable marker'
+  );
+  source = replaceRequired(
+    source,
+    '  mergeTicketMaps();\n\n  const sources = ticketListenSourcesForUser(currentUser);',
+    '  mergeTicketMaps();\n  publishTicketDashboardSnapshot();\n\n  const sources = ticketListenSourcesForUser(currentUser);',
+    'publish initial ticket dashboard snapshot'
+  );
+  source = replaceRequired(
+    source,
+    '    mergeTicketMaps();\n    if (selectedTicketId && !allTickets.some((t) => t.id === selectedTicketId)) selectedTicketId = null;',
+    '    mergeTicketMaps();\n    publishTicketDashboardSnapshot();\n    if (selectedTicketId && !allTickets.some((t) => t.id === selectedTicketId)) selectedTicketId = null;',
+    'publish live ticket dashboard snapshot'
+  );
 
   source = replaceRequired(
     source,
@@ -68,6 +91,8 @@ function patchTickets(coreSource) {
   if (!source.includes('subscribeDeletedTickets();\n  renderDeletedTicketsList();')) throw new Error('Ticket quota validation failed: deleted tickets are not on-demand.');
   if (source.includes('currentUser = getCurrentUser();\n  await refreshTicketStaffDirectory();')) throw new Error('Ticket quota validation failed: directory still loads before page/login need.');
   if (!source.includes('document.readyState === "loading"')) throw new Error('Ticket boot validation failed: ready-state boot missing.');
+  if (!source.includes('window.__TS_TICKET_DASHBOARD_SNAPSHOT__')) throw new Error('Ticket dashboard bridge validation failed: snapshot getter missing.');
+  if (!source.includes('telesyriana:ticket-dashboard-snapshot')) throw new Error('Ticket dashboard bridge validation failed: event missing.');
   return source;
 }
 
