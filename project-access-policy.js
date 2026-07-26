@@ -28,6 +28,8 @@ export function projectActor(actor = {}) {
     roleKey,
     projectId: primary,
     projectIds: assigned,
+    supervisorUid: clean(actor.supervisorUid),
+    supervisorCcmsId: clean(actor.supervisorCcmsId || actor.supervisorId),
   };
 }
 
