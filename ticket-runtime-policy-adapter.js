@@ -73,8 +73,6 @@ export function runtimeEmployeeIdentity(row = {}, directoryRows = []) {
 export function runtimeEmployees(directoryRows = []) {
   const byCcms = new Map();
 
-  // Approved identity seed carries project/supervisor structure for the seven
-  // compatibility accounts even when the legacy employee collection does not.
   for (const seed of CURRENT_EMPLOYEE_IDENTITY_SEED) {
     const row = runtimeEmployeeIdentity(seed, directoryRows);
     if (row) byCcms.set(row.ccmsId, row);
@@ -146,14 +144,32 @@ export function runtimeAssignmentCandidates(session = {}, directoryRows = [], ti
     .filter((employee) => employee.accountStatus === 'active');
   if (!actor || actor.roleKey === 'hr') return [];
 
-  // Agents create work for themselves but cannot reassign an existing ticket.
+  // Agents may retain themselves as the assignment target but never receive a
+  // different Agent/Supervisor option in the live UI.
   if (actor.roleKey === 'agent') {
-    if (ticket) return [];
     return employees.filter((employee) => employee.ccmsId === actor.ccmsId);
   }
 
   const ticketLike = ticket || { projectId: actor.projectId || 'ipro' };
   return employees.filter((employee) => canAssignTicket(actor, ticketLike, employee, employees));
+}
+
+export function runtimeCanSetTicketAssignment(session, ticket, targetCcmsId, directoryRows = []) {
+  const actor = runtimeTicketActor(session, directoryRows);
+  if (!actor || actor.roleKey === 'hr') return false;
+  const targetId = clean(targetCcmsId);
+
+  if (!targetId) {
+    return ['ceo', 'acm', 'supervisor'].includes(actor.roleKey);
+  }
+
+  if (actor.roleKey === 'agent') {
+    return targetId === actor.ccmsId && runtimeCanViewTicket(session, ticket, directoryRows);
+  }
+
+  const employees = runtimeEmployees(directoryRows);
+  const target = employees.find((employee) => employee.ccmsId === targetId);
+  return Boolean(target && canAssignTicket(actor, ticket, target, employees));
 }
 
 export function runtimeTicketProjectMatches(session, ticket, directoryRows = []) {
