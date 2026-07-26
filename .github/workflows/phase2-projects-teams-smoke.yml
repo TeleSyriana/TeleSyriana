@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   phase2-visible:
-    name: Verify role-specific Projects & Teams UI
+    name: Verify management-only Projects & Teams UI
     runs-on: ubuntu-latest
     timeout-minutes: 12
 
@@ -35,11 +35,12 @@ jobs:
           grep -Fq "import './phase2-projects-teams.js';" app.js
           grep -q 'CURRENT_EMPLOYEE_IDENTITY_SEED' phase2-projects-teams.js
           grep -q 'buildProjectHierarchy' phase2-projects-teams.js
+          grep -Fq 'const VISIBLE_ROLES = new Set(["ceo", "acm", "hr"]);' phase2-projects-teams.js
           if grep -Eq "from [\"']\\./firebase\\.js|firestore|onSnapshot\\(|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(" phase2-projects-teams.js; then
-            echo 'Phase 2 visible module contains a Firebase/Firestore import or operation.' >&2
+            echo 'Projects & Teams contains a Firebase/Firestore import or operation.' >&2
             exit 1
           fi
-          echo 'Phase 2 static safety guard: PASS'
+          echo 'Projects & Teams static safety guard: PASS'
 
       - name: Browser role visibility with Firestore blocked
         shell: bash
@@ -54,9 +55,7 @@ jobs:
               <button class="nav-link" data-page="home">Home</button>
               <button class="nav-link" data-page="settings">Settings</button>
             </nav>
-            <main id="dashboard-screen">
-              <section id="page-home" class="page-section"></section>
-            </main>
+            <main id="dashboard-screen"><section id="page-home" class="page-section"></section></main>
             <script type="module" src="./phase2-projects-teams.js"></script>
           </body>
           </html>
@@ -78,82 +77,70 @@ jobs:
           import fs from 'node:fs';
           import puppeteer from 'puppeteer-core';
 
-          const executablePath = [
-            '/usr/bin/google-chrome',
-            '/usr/bin/google-chrome-stable',
-            '/usr/bin/chromium-browser',
-            '/usr/bin/chromium',
-          ].find((path) => fs.existsSync(path));
+          const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium-browser','/usr/bin/chromium'].find(fs.existsSync);
           if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
+          const browser = await puppeteer.launch({ executablePath, headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+          const MONDAY = Date.parse('2026-07-26T21:00:01Z');
 
-          const browser = await puppeteer.launch({
-            executablePath,
-            headless: true,
-            args: ['--no-sandbox', '--disable-dev-shm-usage'],
-          });
-
-          async function testRole({ session, expectedVisible, expectedNav, expectedRows, headingIncludes }) {
+          async function testRole({ session, expectedVisible, expectedNav = '', expectedRows = 0, headingIncludes = '' }) {
             const context = await browser.createBrowserContext();
             const page = await context.newPage();
             const pageErrors = [];
             page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
-
             await page.setRequestInterception(true);
             page.on('request', (request) => {
               const url = request.url();
               if (url.includes('firestore.googleapis.com') || url.includes('google.firestore.v1.Firestore')) request.abort();
               else request.continue();
             });
-
-            await page.evaluateOnNewDocument((savedSession) => {
+            await page.evaluateOnNewDocument((savedSession, monday) => {
+              Date.now = () => monday;
               localStorage.setItem('telesyrianaUser', JSON.stringify(savedSession));
-            }, session);
+            }, session, MONDAY);
 
             try {
-              await page.goto('http://127.0.0.1:4173/phase2-role-fixture.html', { waitUntil: 'networkidle0', timeout: 20_000 });
-              await page.waitForSelector('#nav-projects-teams-v2', { timeout: 5_000 });
+              await page.goto('http://127.0.0.1:4173/phase2-role-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
+              await page.waitForSelector('#nav-projects-teams-v2', { timeout:5_000 });
               const nav = await page.evaluate(() => {
                 const node = document.getElementById('nav-projects-teams-v2');
-                return { visible: Boolean(node && !node.classList.contains('hidden')), text: String(node?.textContent || '').trim() };
+                return { visible:Boolean(node && !node.classList.contains('hidden')), text:String(node?.textContent || '').trim() };
               });
               if (nav.visible !== expectedVisible) throw new Error(`Unexpected visibility for ${session.id}: ${JSON.stringify(nav)}`);
               if (expectedVisible && nav.text !== expectedNav) throw new Error(`Unexpected nav label for ${session.id}: ${nav.text}`);
 
-              let details = { rows: 0, heading: '', pageVisible: false };
+              let details = { rows:0, heading:'', pageVisible:false };
               if (expectedVisible) {
                 await page.click('#nav-projects-teams-v2');
                 await page.waitForFunction(() => {
                   const node = document.getElementById('page-projects-teams-v2');
                   return node && !node.classList.contains('hidden');
-                }, { timeout: 5_000 });
+                }, { timeout:5_000 });
                 details = await page.evaluate(() => ({
-                  rows: document.querySelectorAll('#page-projects-teams-v2 [data-phase2-ccms]').length,
-                  heading: String(document.querySelector('#page-projects-teams-v2 h2')?.textContent || '').trim(),
-                  pageVisible: !document.getElementById('page-projects-teams-v2')?.classList.contains('hidden'),
+                  rows:document.querySelectorAll('#page-projects-teams-v2 [data-phase2-ccms]').length,
+                  heading:String(document.querySelector('#page-projects-teams-v2 h2')?.textContent || '').trim(),
+                  pageVisible:!document.getElementById('page-projects-teams-v2')?.classList.contains('hidden'),
                 }));
-                if (!details.pageVisible) throw new Error(`Page did not open for ${session.id}`);
                 if (details.rows !== expectedRows) throw new Error(`Unexpected row count for ${session.id}: ${JSON.stringify(details)}`);
                 if (!details.heading.includes(headingIncludes)) throw new Error(`Unexpected heading for ${session.id}: ${details.heading}`);
               }
-
               if (pageErrors.length) throw new Error(`Browser errors for ${session.id}: ${pageErrors.join(' | ')}`);
-              console.log(JSON.stringify({ id: session.id, nav, details }));
+              console.log(JSON.stringify({ id:session.id, nav, details }));
             } finally {
               await context.close();
             }
           }
 
           try {
-            await testRole({ session: { id: '0001', role: 'admin' }, expectedVisible: true, expectedNav: 'Projects & Teams', expectedRows: 6, headingIncludes: 'Projects & Teams' });
-            await testRole({ session: { id: '1001', role: 'manager' }, expectedVisible: true, expectedNav: 'Project Dashboard', expectedRows: 6, headingIncludes: 'Project Dashboard' });
-            await testRole({ session: { id: '2001', role: 'supervisor' }, expectedVisible: true, expectedNav: 'My Team', expectedRows: 3, headingIncludes: 'My Team' });
-            await testRole({ session: { id: '3001', role: 'hr' }, expectedVisible: true, expectedNav: 'Project People', expectedRows: 6, headingIncludes: 'Project People' });
-            await testRole({ session: { id: '9001', role: 'agent' }, expectedVisible: false, expectedNav: '', expectedRows: 0, headingIncludes: '' });
+            await testRole({ session:{ id:'0001', role:'admin' }, expectedVisible:true, expectedNav:'Projects & Teams', expectedRows:7, headingIncludes:'Projects & Teams' });
+            await testRole({ session:{ id:'1001', role:'manager' }, expectedVisible:true, expectedNav:'Project Dashboard', expectedRows:7, headingIncludes:'Project Dashboard' });
+            await testRole({ session:{ id:'3001', role:'hr' }, expectedVisible:true, expectedNav:'Project People', expectedRows:7, headingIncludes:'Project People' });
+            await testRole({ session:{ id:'2002', role:'supervisor' }, expectedVisible:false });
+            await testRole({ session:{ id:'2001', role:'supervisor' }, expectedVisible:false });
+            await testRole({ session:{ id:'9001', role:'agent' }, expectedVisible:false });
           } finally {
             await browser.close();
           }
           NODE
-
           cat "$GITHUB_WORKSPACE/phase2-browser-smoke.log"
 
       - name: Upload smoke output
