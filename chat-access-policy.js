@@ -1,7 +1,7 @@
 // chat-access-policy.js — project-aware Chat visibility and CEO privacy rules
 //
-// Pure policy only: no DOM, Firebase or Firestore. Chat UI/storage will consume
-// these decisions later so project isolation and CEO visibility are consistent.
+// Pure policy only: no DOM, Firebase or Firestore. IT Support is an account-security
+// role and has no operational Chat scope unless a separate future permission is added.
 
 import {
   EMPLOYEE_ROLES,
@@ -40,6 +40,10 @@ function sameEmployee(a, b) {
   return Boolean(accms && bccms && accms === bccms);
 }
 
+function isIt(employee = {}) {
+  return normaliseCanonicalRole(employee.roleKey || employee.role) === EMPLOYEE_ROLES.IT;
+}
+
 export function isExecutiveDirect(conversation = {}) {
   return clean(conversation.type).toLowerCase() === "executive_direct";
 }
@@ -59,11 +63,13 @@ export function existingExecutiveDirect(viewer, ceo, conversations = []) {
 }
 
 export function chatProjectForViewer(viewer, requestedProjectId = "") {
+  if (isIt(viewer)) throw new Error("IT Support has no operational Chat project.");
   return resolveActorProject(viewer, requestedProjectId);
 }
 
 export function canListChatContact(viewer, target, requestedProjectId = "", conversations = []) {
   if (!viewer || !target || sameEmployee(viewer, target) || !activeEmployee(target)) return false;
+  if (isIt(viewer) || isIt(target)) return false;
 
   const v = projectActor(viewer);
   const targetRole = normaliseCanonicalRole(target.roleKey || target.role);
@@ -81,11 +87,13 @@ export function canListChatContact(viewer, target, requestedProjectId = "", conv
 }
 
 export function visibleChatContacts(viewer, employees = [], requestedProjectId = "", conversations = []) {
+  if (isIt(viewer)) return [];
   return (employees || []).filter((target) => canListChatContact(viewer, target, requestedProjectId, conversations));
 }
 
 export function canInitiateDirectChat(viewer, target, requestedProjectId = "", conversations = []) {
   if (!viewer || !target || sameEmployee(viewer, target) || !activeEmployee(viewer) || !activeEmployee(target)) return false;
+  if (isIt(viewer) || isIt(target)) return false;
 
   const v = projectActor(viewer);
   const targetRole = normaliseCanonicalRole(target.roleKey || target.role);
@@ -96,8 +104,6 @@ export function canInitiateDirectChat(viewer, target, requestedProjectId = "", c
   }
 
   if (targetRole === EMPLOYEE_ROLES.CEO) {
-    // Employees cannot discover/initiate a new CEO conversation. They can only
-    // continue one that CEO already initiated with that exact employee.
     return Boolean(existingExecutiveDirect(v, target, conversations));
   }
 
@@ -107,7 +113,7 @@ export function canInitiateDirectChat(viewer, target, requestedProjectId = "", c
 
 export function buildDirectConversationSpec(initiator, target, requestedProjectId = "", conversations = []) {
   if (!canInitiateDirectChat(initiator, target, requestedProjectId, conversations)) {
-    throw new Error("Direct conversation is not allowed by project/CEO visibility rules.");
+    throw new Error("Direct conversation is not allowed by project/CEO/IT visibility rules.");
   }
 
   const initiatorRole = normaliseCanonicalRole(initiator.roleKey || initiator.role);
@@ -146,13 +152,13 @@ export function buildDirectConversationSpec(initiator, target, requestedProjectI
 }
 
 export function canViewConversation(viewer, conversation = {}) {
+  if (isIt(viewer)) return false;
   const v = projectActor(viewer);
   const viewerKeys = new Set([employeeId(v), v.ccmsId].filter(Boolean));
   const members = memberIds(conversation);
   if (!members.some((id) => viewerKeys.has(id))) return false;
 
   if (isExecutiveDirect(conversation)) {
-    // Executive DMs are visible only to the exact two members.
     return members.length === 2;
   }
 
@@ -162,6 +168,7 @@ export function canViewConversation(viewer, conversation = {}) {
 }
 
 export function canSeeDetailedPresence(viewer, target) {
+  if (isIt(viewer) || isIt(target)) return false;
   const viewerRole = normaliseCanonicalRole(viewer?.roleKey || viewer?.role);
   const targetRole = normaliseCanonicalRole(target?.roleKey || target?.role);
   if (targetRole === EMPLOYEE_ROLES.CEO && viewerRole !== EMPLOYEE_ROLES.CEO) return false;
@@ -171,13 +178,13 @@ export function canSeeDetailedPresence(viewer, target) {
 }
 
 export function canAddGroupMember(actor, target, projectId) {
+  if (isIt(actor) || isIt(target)) return false;
   const a = projectActor(actor);
   const targetRole = normaliseCanonicalRole(target?.roleKey || target?.role);
   const project = normaliseProjectId(projectId);
   if (!project || !actorCanAccessProject(a, project)) return false;
 
   if (targetRole === EMPLOYEE_ROLES.CEO) {
-    // CEO is never auto-included. CEO may explicitly join as the acting account.
     return a.roleKey === EMPLOYEE_ROLES.CEO && sameEmployee(a, target);
   }
 
