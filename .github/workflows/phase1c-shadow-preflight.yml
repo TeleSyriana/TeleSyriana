@@ -1,0 +1,62 @@
+name: Phase 1C shadow management preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'employee-management-shadow.js'
+      - 'employee-management-policy.js'
+      - 'employee-model.js'
+      - 'employee-identity-seed.js'
+      - 'project-model.js'
+      - 'tools/phase1c-shadow-preflight.mjs'
+      - '.github/workflows/phase1c-shadow-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shadow-management:
+    name: Verify Firestore-free management simulation
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Syntax checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp employee-management-shadow.js /tmp/employee-management-shadow.mjs
+          node --check /tmp/employee-management-shadow.mjs
+          node --check tools/phase1c-shadow-preflight.mjs
+
+      - name: Run Phase 1C shadow rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/phase1c-shadow-preflight.mjs | tee phase1c-shadow-preflight.log
+
+      - name: Hard no-Firestore/no-write guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq "from [\"']\\./firebase\\.js|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(|onSnapshot\\(" employee-management-shadow.js; then
+            echo 'Shadow management module unexpectedly contains Firebase/Firestore write APIs.' >&2
+            exit 1
+          fi
+          grep -q 'writesPerformed: false' employee-management-shadow.js
+          grep -q 'accountProvisioningReady: false' employee-management-shadow.js
+          echo 'Shadow no-write guard: PASS'
+
+      - name: Upload preflight output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1c-shadow-preflight-output
+          path: phase1c-shadow-preflight.log
+          if-no-files-found: warn
+          retention-days: 7
