@@ -1,0 +1,58 @@
+name: Project-aware Ticket access preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ticket-access-policy.js'
+      - 'project-access-policy.js'
+      - 'employee-model.js'
+      - 'tools/ticket-access-preflight.mjs'
+      - '.github/workflows/ticket-access-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ticket-access:
+    name: Verify project/team Ticket visibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Syntax checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp ticket-access-policy.js /tmp/ticket-access-policy.mjs
+          node --check /tmp/ticket-access-policy.mjs
+          node --check tools/ticket-access-preflight.mjs
+
+      - name: Run Ticket access tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/ticket-access-preflight.mjs | tee ticket-access-preflight.log
+
+      - name: Hard storage isolation guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq "from [\"']\\./firebase\\.js|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(|onSnapshot\\(" ticket-access-policy.js; then
+            echo 'Ticket access policy unexpectedly depends on Firebase/Firestore.' >&2
+            exit 1
+          fi
+          echo 'Ticket access storage isolation: PASS'
+
+      - name: Upload preflight output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ticket-access-preflight-output
+          path: ticket-access-preflight.log
+          if-no-files-found: warn
+          retention-days: 7
