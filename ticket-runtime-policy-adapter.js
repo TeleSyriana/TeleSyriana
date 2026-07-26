@@ -1,7 +1,8 @@
 // ticket-runtime-policy-adapter.js — bridges legacy live sessions/directory rows
 // into the project/team Ticket policy.
 //
-// Pure module: no DOM, Firebase, storage or network access.
+// Pure module: no DOM, Firebase, storage or network access. IT Support is an
+// account-security role and must never fall through to Agent/project Ticket access.
 
 import {
   canAssignTicket,
@@ -21,7 +22,7 @@ function canonicalRole(role) {
   const value = clean(role).toLowerCase();
   if (value === 'admin') return 'ceo';
   if (value === 'manager') return 'acm';
-  if (['ceo', 'acm', 'supervisor', 'hr', 'agent'].includes(value)) return value;
+  if (['ceo', 'acm', 'supervisor', 'hr', 'it', 'agent'].includes(value)) return value;
   return 'agent';
 }
 
@@ -43,6 +44,7 @@ export function runtimeEmployeeIdentity(row = {}, directoryRows = []) {
   const seeded = seedIdentityByCcms(requestedCcmsId);
   const effectiveCcmsId = clean(seeded?.ccmsId || requestedCcmsId);
   const seededIsAuthoritative = Boolean(seeded);
+  const roleKey = canonicalRole(seeded?.roleKey || row.roleKey || row.role);
 
   const supervisorCcmsId = clean(
     seededIsAuthoritative
@@ -54,16 +56,20 @@ export function runtimeEmployeeIdentity(row = {}, directoryRows = []) {
     ? (directoryRows || []).find((candidate) => clean(candidate.ccmsId || candidate.id) === supervisorCcmsId)
     : null;
 
-  const projectId = clean(
-    seededIsAuthoritative
-      ? seeded?.projectId
-      : (row.projectId || 'ipro')
-  ) || 'ipro';
-  const rawProjectIds = seededIsAuthoritative && Array.isArray(seeded?.projectIds)
-    ? seeded.projectIds
-    : Array.isArray(row.projectIds)
-      ? row.projectIds
-      : [projectId];
+  const projectId = roleKey === 'it'
+    ? ''
+    : clean(
+      seededIsAuthoritative
+        ? seeded?.projectId
+        : (row.projectId || 'ipro')
+    ) || 'ipro';
+  const rawProjectIds = roleKey === 'it'
+    ? []
+    : seededIsAuthoritative && Array.isArray(seeded?.projectIds)
+      ? seeded.projectIds
+      : Array.isArray(row.projectIds)
+        ? row.projectIds
+        : [projectId];
   const projectIds = [...new Set(rawProjectIds.map(clean).filter(Boolean))];
 
   return {
@@ -72,7 +78,7 @@ export function runtimeEmployeeIdentity(row = {}, directoryRows = []) {
     ccmsId: effectiveCcmsId,
     previousCcmsIds: [...new Set([...(seeded?.previousCcmsIds || [])].map(clean).filter(Boolean))],
     fullName: clean(seeded?.fullName || row.fullName || row.name || effectiveCcmsId),
-    roleKey: canonicalRole(seeded?.roleKey || row.roleKey || row.role),
+    roleKey,
     projectId,
     projectIds,
     supervisorCcmsId,
@@ -124,7 +130,8 @@ export function runtimeTicketActor(session = {}, directoryRows = []) {
 
 export function runtimeTicketProjectId(session = {}, directoryRows = []) {
   const actor = runtimeTicketActor(session, directoryRows);
-  return clean(actor?.projectId || 'ipro') || 'ipro';
+  if (!actor || actor.roleKey === 'it') return '';
+  return clean(actor.projectId || 'ipro') || 'ipro';
 }
 
 export function runtimeCanOpenTickets(session = {}, directoryRows = []) {
@@ -135,7 +142,7 @@ export function runtimeCanOpenTickets(session = {}, directoryRows = []) {
 
 export function runtimeCanViewTicket(session, ticket, directoryRows = []) {
   const actor = runtimeTicketActor(session, directoryRows);
-  if (!actor || actor.accountStatus !== 'active') return false;
+  if (!actor || actor.accountStatus !== 'active' || ['hr', 'it'].includes(actor.roleKey)) return false;
   const projectId = ticketProjectId(ticket);
   if (actor.roleKey !== 'ceo' && projectId !== (actor.projectId || 'ipro')) return false;
 
@@ -148,7 +155,7 @@ export function runtimeCanViewTicket(session, ticket, directoryRows = []) {
 export function runtimeTicketScope(session = {}, directoryRows = []) {
   const actor = runtimeTicketActor(session, directoryRows);
   const employees = runtimeEmployees(directoryRows);
-  if (!actor || actor.accountStatus !== 'active' || actor.roleKey === 'hr') {
+  if (!actor || actor.accountStatus !== 'active' || ['hr', 'it'].includes(actor.roleKey)) {
     return { mode: 'none', projectId: '', assignmentIds: [] };
   }
   if (actor.roleKey === 'ceo') return { mode: 'global', projectId: '', assignmentIds: [] };
@@ -167,18 +174,21 @@ export function runtimeTicketScope(session = {}, directoryRows = []) {
       assignmentIds: [...new Set([...assignmentIds, ...identityAliases(actor)])],
     };
   }
-  return {
-    mode: 'assignments',
-    projectId: actor.projectId || 'ipro',
-    assignmentIds: identityAliases(actor),
-  };
+  if (actor.roleKey === 'agent') {
+    return {
+      mode: 'assignments',
+      projectId: actor.projectId || 'ipro',
+      assignmentIds: identityAliases(actor),
+    };
+  }
+  return { mode: 'none', projectId: '', assignmentIds: [] };
 }
 
 export function runtimeAssignmentCandidates(session = {}, directoryRows = [], ticket = null) {
   const actor = runtimeTicketActor(session, directoryRows);
   const employees = runtimeEmployees(directoryRows)
     .filter((employee) => employee.accountStatus === 'active');
-  if (!actor || actor.accountStatus !== 'active' || actor.roleKey === 'hr') return [];
+  if (!actor || actor.accountStatus !== 'active' || ['hr', 'it'].includes(actor.roleKey)) return [];
 
   if (actor.roleKey === 'agent') {
     return employees.filter((employee) => employee.ccmsId === actor.ccmsId);
@@ -190,7 +200,7 @@ export function runtimeAssignmentCandidates(session = {}, directoryRows = [], ti
 
 export function runtimeCanSetTicketAssignment(session, ticket, targetCcmsId, directoryRows = []) {
   const actor = runtimeTicketActor(session, directoryRows);
-  if (!actor || actor.accountStatus !== 'active' || actor.roleKey === 'hr') return false;
+  if (!actor || actor.accountStatus !== 'active' || ['hr', 'it'].includes(actor.roleKey)) return false;
   const targetId = clean(targetCcmsId);
 
   if (!targetId) {
@@ -228,7 +238,7 @@ export function runtimeEscalationTarget(session = {}, directoryRows = []) {
 
 export function runtimeTicketProjectMatches(session, ticket, directoryRows = []) {
   const actor = runtimeTicketActor(session, directoryRows);
-  if (!actor || actor.accountStatus !== 'active') return false;
+  if (!actor || actor.accountStatus !== 'active' || actor.roleKey === 'it') return false;
   if (actor.roleKey === 'ceo') return true;
   return ticketProjectId(ticket) === (actor.projectId || 'ipro');
 }
