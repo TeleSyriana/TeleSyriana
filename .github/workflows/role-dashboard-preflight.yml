@@ -1,0 +1,60 @@
+name: Role dashboard projection preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'role-dashboard-shadow.js'
+      - 'ticket-access-policy.js'
+      - 'project-hierarchy-shadow.js'
+      - 'project-access-policy.js'
+      - 'employee-model.js'
+      - 'tools/role-dashboard-preflight.mjs'
+      - '.github/workflows/role-dashboard-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  role-dashboard:
+    name: Verify Supervisor and ACM summaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Syntax checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp role-dashboard-shadow.js /tmp/role-dashboard-shadow.mjs
+          node --check /tmp/role-dashboard-shadow.mjs
+          node --check tools/role-dashboard-preflight.mjs
+
+      - name: Run dashboard projection tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/role-dashboard-preflight.mjs | tee role-dashboard-preflight.log
+
+      - name: Hard storage isolation guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq "from [\"']\\./firebase\\.js|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(|onSnapshot\\(" role-dashboard-shadow.js; then
+            echo 'Role dashboard projection unexpectedly depends on Firebase/Firestore.' >&2
+            exit 1
+          fi
+          echo 'Role dashboard storage isolation: PASS'
+
+      - name: Upload preflight output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: role-dashboard-preflight-output
+          path: role-dashboard-preflight.log
+          if-no-files-found: warn
+          retention-days: 7
