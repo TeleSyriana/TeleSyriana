@@ -7,9 +7,11 @@
 //
 // The read-only Employees & Accounts preview and Phase 2 Projects & Teams surface
 // are mounted separately. Ticket dashboard metrics reuse the existing Tickets
-// engine snapshot and do not start a second Firestore listener.
+// engine snapshot. Phase 3 reuses today's existing agentDays data only while the
+// Projects & Teams page is visible.
 
 import './app-core.js';
 import './employees-accounts-readonly.js';
 import './phase2-projects-teams.js';
 import './phase2-ticket-dashboard-live.js';
+import './phase3-team-status-live.js';
