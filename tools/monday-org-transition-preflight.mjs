@@ -36,7 +36,7 @@ copyModule('ticket-runtime-policy-adapter.js', 'ticket-runtime-policy-adapter.mj
 copyModule('functions-phase4b/watchdog-policy.js', 'watchdog-policy.cjs');
 
 const BEFORE = Date.parse('2026-07-26T20:59:59Z');
-const MONDAY = Date.parse('2026-07-26T21:00:01Z'); // 00:00:01 Monday in Damascus
+const MONDAY = Date.parse('2026-07-26T21:00:01Z');
 const originalDateNow = Date.now;
 Date.now = () => MONDAY;
 
@@ -85,6 +85,9 @@ assert.equal(lana.supervisorCcmsId, '2002');
 assert.equal(lana.employmentType, 'full_time');
 assert.deepEqual(lana.shiftWindow, { start:'10:00', end:'18:00', timeZone:'Asia/Damascus' });
 assert.equal(lana.payrollRatePending, true);
+assert.equal(lana.credentialSetupRequired, true);
+assert.equal(lana.mustChangePasswordOnFirstLogin, true);
+assert.equal(Object.prototype.hasOwnProperty.call(lana, 'password'), false);
 
 const hierarchy = hierarchyModule.buildProjectHierarchy('ipro', mondayRows);
 assert.equal(hierarchy.totals.supervisors, 1);
@@ -158,6 +161,7 @@ console.log(JSON.stringify({
   activeSupervisor:{ ccmsId:reema.ccmsId, employeeUid:reema.employeeUid },
   activeAgents:hierarchy.supervisors[0].agents.map((row) => row.ccmsId),
   inactive:hierarchy.inactiveEmployees.map((row) => row.ccmsId),
+  lanaCredentialSetupRequired:lana.credentialSetupRequired,
   reemaTicketScope:reemaScope.assignmentIds,
   escalationTargetForRaghad:raghadTarget?.ccmsId,
   escalationTargetForLana:lanaTarget?.ccmsId,
