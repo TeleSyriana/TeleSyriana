@@ -91,7 +91,12 @@ assert.deepEqual(policy.visibleProjectsForActor(hrMulti, projects).map((row) => 
 assert.deepEqual(policy.visibleProjectsForActor(ceo, projects).map((row) => row.projectId), ['ipro', 'happy-tails']);
 assert.deepEqual(policy.visibleProjectsForActor(itSupport, projects), []);
 
+const serviceSource = fs.readFileSync(path.join(root, 'employee-management-service.js'), 'utf8');
+assert.match(serviceSource, /if \(roleKey === EMPLOYEE_ROLES\.IT\) return \[\];/);
+assert.match(serviceSource, /roleKey === EMPLOYEE_ROLES\.IT \? ""/);
+assert.match(serviceSource, /supervisorCcmsId: roleKey === EMPLOYEE_ROLES\.IT \? ""/);
+
 console.log('Phase 1B employee management policy preflight: PASS');
-console.log('Verified CEO can create/manage dedicated IT identities while IT cannot use general employee-management powers.');
+console.log('Verified CEO can create/manage dedicated projectless IT identities while IT cannot use general employee-management powers.');
 console.log('Verified ACM project-scoped, HR assigned-project, and Supervisor/Agent no-management rules.');
 console.log('Verified seed-only rows remain read-only until permanent migration.');
