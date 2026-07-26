@@ -21,9 +21,11 @@ copyModule('project-hierarchy-shadow.js', 'project-hierarchy-shadow.mjs', [
   ['./employee-model.js', './employee-model.mjs'],
   ['./project-access-policy.js', './project-access-policy.mjs'],
 ]);
+copyModule('attendance-schedule-policy.js', 'attendance-schedule-policy.mjs');
 copyModule('team-live-projection.js', 'team-live-projection.mjs', [
   ['./employee-model.js', './employee-model.mjs'],
   ['./project-hierarchy-shadow.js', './project-hierarchy-shadow.mjs'],
+  ['./attendance-schedule-policy.js', './attendance-schedule-policy.mjs'],
 ]);
 
 const {
