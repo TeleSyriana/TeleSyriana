@@ -142,6 +142,8 @@ const MONDAY_IDENTITY_SEED = [
     employmentType: "full_time",
     shiftWindow: { start: "10:00", end: "18:00", timeZone: "Asia/Damascus" },
     payrollRatePending: true,
+    credentialSetupRequired: true,
+    mustChangePasswordOnFirstLogin: true,
     effectiveFrom: IPRO_ORG_CHANGE_EFFECTIVE_AT,
   },
 ];
@@ -157,6 +159,8 @@ function immutableMetadata(row, validated) {
     promotionEffectiveAt: String(row.promotionEffectiveAt || ""),
     effectiveFrom: String(row.effectiveFrom || ""),
     payrollRatePending: row.payrollRatePending === true,
+    credentialSetupRequired: row.credentialSetupRequired === true,
+    mustChangePasswordOnFirstLogin: row.mustChangePasswordOnFirstLogin === true,
   });
 }
 
