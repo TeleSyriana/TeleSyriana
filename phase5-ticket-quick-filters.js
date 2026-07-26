@@ -9,6 +9,18 @@ function language() {
 }
 function t(ar, en) { return language() === 'ar' ? ar : en; }
 
+function ensureAllStatusOption() {
+  const status = el('ticket-filter-status');
+  if (!status) return;
+  let option = status.querySelector('option[value="all"]');
+  if (!option) {
+    option = document.createElement('option');
+    option.value = 'all';
+    status.appendChild(option);
+  }
+  option.textContent = t('كل الحالات', 'All statuses');
+}
+
 function setSelect(id, value) {
   const node = el(id);
   if (!node) return;
@@ -96,6 +108,7 @@ function injectStyles() {
 function renderLabels() {
   const host = el(HOST_ID);
   if (!host) return;
+  ensureAllStatusOption();
   host.innerHTML = `
     <div class="p5-ticket-filter-row">
       <span class="p5-ticket-filter-label">${t('القائمة', 'Queue')}</span>
@@ -127,6 +140,7 @@ function renderLabels() {
 function mount() {
   const filters = document.querySelector('#page-tickets .ticket-filters');
   if (!filters) return false;
+  ensureAllStatusOption();
   let host = el(HOST_ID);
   if (!host) {
     host = document.createElement('div');
