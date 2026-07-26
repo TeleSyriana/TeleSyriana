@@ -45,6 +45,14 @@ export function runtimeEmployeeIdentity(row = {}, directoryRows = []) {
   const effectiveCcmsId = clean(seeded?.ccmsId || requestedCcmsId);
   const seededIsAuthoritative = Boolean(seeded);
   const roleKey = canonicalRole(seeded?.roleKey || row.roleKey || row.role);
+  // Effective-dated transition rows may intentionally force an account inactive
+  // (Dema/Qamar). Otherwise, a live directory disable/archive must win over the
+  // compatibility seed so an inactive employee cannot regain Ticket access.
+  const transitionForcesInactive = Boolean(
+    seeded?.inactiveEffectiveAt &&
+    clean(seeded?.accountStatus) &&
+    clean(seeded?.accountStatus).toLowerCase() !== 'active'
+  );
 
   const supervisorCcmsId = clean(
     seededIsAuthoritative
@@ -89,7 +97,11 @@ export function runtimeEmployeeIdentity(row = {}, directoryRows = []) {
       directorySupervisor?.employeeUid ||
       fallbackUid(supervisorCcmsId)
     ),
-    accountStatus: clean(seeded?.accountStatus || row.accountStatus || 'active') || 'active',
+    accountStatus: clean(
+      transitionForcesInactive
+        ? seeded?.accountStatus
+        : (row.accountStatus || seeded?.accountStatus || 'active')
+    ).toLowerCase() || 'active',
   };
 }
 
