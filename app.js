@@ -10,7 +10,8 @@
 // engine snapshot. Phase 3 reuses today's existing agentDays data only while the
 // Projects & Teams page is visible. Phase 4A adds a client-side 15-minute inactivity
 // fallback. Phase 4B publishes throttled Agent activity due-times for the isolated
-// server watchdog without changing the stable login/runtime core.
+// server watchdog. Phase 5 adds one-tap Ticket queue/date controls while the Ticket
+// compatibility loader enforces the shared project/team policy.
 
 import './app-core.js';
 import './employees-accounts-readonly.js';
@@ -19,3 +20,4 @@ import './phase2-ticket-dashboard-live.js';
 import './phase3-team-status-live.js';
 import './phase4a-inactivity-watch.js';
 import './phase4b-activity-telemetry.js';
+import './phase5-ticket-quick-filters.js';
