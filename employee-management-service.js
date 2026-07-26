@@ -116,6 +116,7 @@ export async function nextManagedCcmsId(role) {
 
 function normaliseCreationProjects(input, role) {
   const roleKey = normaliseCanonicalRole(role);
+  if (roleKey === EMPLOYEE_ROLES.IT) return [];
   if (roleKey === EMPLOYEE_ROLES.HR) {
     return normaliseProjectIds(input.projectIds || input.projectId || []);
   }
@@ -134,7 +135,7 @@ export async function createManagedEmployee(actor, input = {}) {
   assertProjectAssignmentAllowed(actor, roleKey, projectIds);
 
   const ccmsId = clean(input.ccmsId) || await nextManagedCcmsId(roleKey);
-  const projectId = clean(input.projectId) || projectIds[0] || "";
+  const projectId = roleKey === EMPLOYEE_ROLES.IT ? "" : clean(input.projectId) || projectIds[0] || "";
 
   return createEmployeeIdentity({
     ...input,
@@ -142,7 +143,8 @@ export async function createManagedEmployee(actor, input = {}) {
     roleKey,
     projectId,
     projectIds,
-    supervisorCcmsId: clean(input.supervisorCcmsId || input.supervisorId),
+    supervisorCcmsId: roleKey === EMPLOYEE_ROLES.IT ? "" : clean(input.supervisorCcmsId || input.supervisorId),
+    supervisorUid: roleKey === EMPLOYEE_ROLES.IT ? "" : clean(input.supervisorUid),
   }, actor);
 }
 
@@ -164,15 +166,17 @@ export async function updateManagedEmployee(actor, employeeUid, patch = {}) {
     throw new Error("CCMS changes are handled only through controlled role reclassification.");
   }
 
-  const nextProjects = normaliseProjectIds(patch.projectIds || patch.projectId || target.projectIds);
+  const nextProjects = target.roleKey === EMPLOYEE_ROLES.IT
+    ? []
+    : normaliseProjectIds(patch.projectIds || patch.projectId || target.projectIds);
   assertProjectAssignmentAllowed(actor, target.roleKey, nextProjects);
 
   return updateEmployeeIdentity(target.employeeUid, {
     fullName: Object.prototype.hasOwnProperty.call(patch, "fullName") ? patch.fullName : target.fullName,
-    projectId: Object.prototype.hasOwnProperty.call(patch, "projectId") ? patch.projectId : target.projectId,
+    projectId: target.roleKey === EMPLOYEE_ROLES.IT ? "" : (Object.prototype.hasOwnProperty.call(patch, "projectId") ? patch.projectId : target.projectId),
     projectIds: nextProjects,
-    supervisorUid: Object.prototype.hasOwnProperty.call(patch, "supervisorUid") ? patch.supervisorUid : target.supervisorUid,
-    supervisorCcmsId: Object.prototype.hasOwnProperty.call(patch, "supervisorCcmsId") ? patch.supervisorCcmsId : target.supervisorCcmsId,
+    supervisorUid: target.roleKey === EMPLOYEE_ROLES.IT ? "" : (Object.prototype.hasOwnProperty.call(patch, "supervisorUid") ? patch.supervisorUid : target.supervisorUid),
+    supervisorCcmsId: target.roleKey === EMPLOYEE_ROLES.IT ? "" : (Object.prototype.hasOwnProperty.call(patch, "supervisorCcmsId") ? patch.supervisorCcmsId : target.supervisorCcmsId),
     hourlyRate: Object.prototype.hasOwnProperty.call(patch, "hourlyRate") ? patch.hourlyRate : target.hourlyRate,
     currency: Object.prototype.hasOwnProperty.call(patch, "currency") ? patch.currency : target.currency,
     timezone: Object.prototype.hasOwnProperty.call(patch, "timezone") ? patch.timezone : target.timezone,
