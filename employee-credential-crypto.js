@@ -1,8 +1,8 @@
 // employee-credential-crypto.js — browser-safe password hashing helpers
 //
-// Permanent credentials use PBKDF2-SHA-256 and never store plaintext.
-// This remains a client-side custom-auth bridge; server-enforced auth is a later
-// security upgrade.
+// New permanent credentials use PBKDF2-SHA-256 and the current password policy.
+// Verification intentionally accepts older password shapes so existing hashes can
+// still authenticate and then be upgraded at the next mandatory password change.
 
 import { validateEmployeePassword } from "./employee-password-policy.js";
 
@@ -12,6 +12,12 @@ export const DEFAULT_PBKDF2_ITERATIONS = 210_000;
 
 function clean(value) {
   return String(value ?? "");
+}
+
+function hashablePassword(password) {
+  const value = clean(password);
+  if (!value || value.length > 128) throw new Error("Password cannot be hashed.");
+  return value;
 }
 
 function bytesToBase64(bytes) {
@@ -53,7 +59,7 @@ export function createCredentialSalt(size = 16) {
 }
 
 export async function deriveCredentialHash(password, saltBase64, iterations = DEFAULT_PBKDF2_ITERATIONS) {
-  const value = validateEmployeePassword(password);
+  const value = hashablePassword(password);
   const rounds = Math.max(100_000, Number(iterations) || DEFAULT_PBKDF2_ITERATIONS);
   const salt = base64ToBytes(String(saltBase64 || ""));
   if (salt.length < 16) throw new Error("Credential salt is invalid.");
@@ -75,9 +81,10 @@ export async function deriveCredentialHash(password, saltBase64, iterations = DE
 }
 
 export async function createPasswordCredential(password, options = {}) {
+  const value = validateEmployeePassword(password);
   const iterations = Math.max(100_000, Number(options.iterations) || DEFAULT_PBKDF2_ITERATIONS);
   const salt = createCredentialSalt();
-  const passwordHash = await deriveCredentialHash(password, salt, iterations);
+  const passwordHash = await deriveCredentialHash(value, salt, iterations);
   return {
     credentialVersion: CREDENTIAL_VERSION,
     algorithm: CREDENTIAL_ALGORITHM,
