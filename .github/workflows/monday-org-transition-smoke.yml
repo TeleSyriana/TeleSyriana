@@ -54,6 +54,7 @@ jobs:
           grep -q 'runtimeEscalationTarget' tickets.js
           grep -q 'escalatedTo: escalationTarget.ccmsId' tickets.js
           grep -q "import './monday-org-transition-runtime.js';" app.js
+          grep -q 'compatibilityAuthCcmsId' monday-org-transition-runtime.js
           echo 'Monday transition static safety: PASS'
 
       - name: Run deterministic transition policy tests
@@ -126,18 +127,29 @@ jobs:
             await guardPage.goto('http://127.0.0.1:4173/monday-team-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
             const guard = await guardPage.evaluate(() => {
               const results = {};
-              for (const id of ['2001','9002','9003']) {
+              for (const id of ['2001','9002','9003','2002']) {
                 const input = document.getElementById('ccmsId');
                 input.value = id;
+                input.removeAttribute('data-effective-ccms-id');
+                input.removeAttribute('data-compatibility-auth-ccms-id');
                 document.getElementById('login-error').classList.add('hidden');
                 const event = new Event('submit', { bubbles:true, cancelable:true });
                 const allowed = document.getElementById('login-form').dispatchEvent(event);
-                results[id] = { prevented:!allowed, errorHidden:document.getElementById('login-error').classList.contains('hidden') };
+                results[id] = {
+                  prevented:!allowed,
+                  errorHidden:document.getElementById('login-error').classList.contains('hidden'),
+                  inputAfter:input.value,
+                  effectiveCcmsId:input.dataset.effectiveCcmsId || '',
+                  compatibilityAuthCcmsId:input.dataset.compatibilityAuthCcmsId || '',
+                };
               }
               return results;
             });
             if (!guard['2001'].prevented || !guard['9002'].prevented) throw new Error(`Inactive login guard failed: ${JSON.stringify(guard)}`);
-            if (guard['9003'].prevented) throw new Error(`Reema compatibility login was incorrectly blocked: ${JSON.stringify(guard)}`);
+            if (guard['9003'].prevented) throw new Error(`Reema legacy compatibility login was incorrectly blocked: ${JSON.stringify(guard)}`);
+            if (guard['2002'].prevented || guard['2002'].inputAfter !== '9003' || guard['2002'].effectiveCcmsId !== '2002' || guard['2002'].compatibilityAuthCcmsId !== '9003') {
+              throw new Error(`Reema 2002 compatibility login translation failed: ${JSON.stringify(guard)}`);
+            }
             await guardContext.close();
 
             console.log(JSON.stringify({ reemaNav:nav, team, guard }));
