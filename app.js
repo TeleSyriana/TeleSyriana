@@ -58,8 +58,9 @@ function patchCoreAuth(coreSource) {
   const v2Login = `    const auth = await authenticateEmployeeV2(id, pw);\n    if (!auth?.ok || !auth.employee) {\n      hideAppLoading(0);\n      const authMessages = {\n        not_found: loadingText("المستخدم غير موجود.", "Employee not found."),\n        incorrect_password: loadingText("كلمة المرور غير صحيحة.", "Incorrect password."),\n        disabled: loadingText("هذا الحساب معطّل. تواصل مع الإدارة.", "This account is disabled. Contact management."),\n        archived: loadingText("هذا الحساب مؤرشف.", "This account is archived."),\n        credential_not_provisioned: loadingText("بيانات الدخول لهذا الحساب لم تُجهز بعد. تواصل مع HR أو ACM.", "This account credential has not been provisioned yet. Contact HR or ACM."),\n        credential_unavailable: loadingText("تعذر الوصول إلى بيانات الدخول الآن. أعد المحاولة أو تواصل مع الإدارة.", "Account credentials are temporarily unavailable. Retry or contact management."),\n        credential_ccms_mismatch: loadingText("بيانات الحساب تحتاج مزامنة CCMS من الإدارة.", "This account needs a CCMS credential sync by management."),\n      };\n      showError(authMessages[auth?.reason] || loadingText("تعذر تسجيل الدخول.", "Login unavailable."));\n      return;\n    }\n\n    setAppLoading(24, loadingText("تسجيل الدخول صحيح", "Login accepted"), loadingText("تحميل دور المستخدم والصلاحيات…", "Loading user role and permissions…"));\n    currentUser = auth.employee;\n    if (auth.reason === "password_change_required") {\n      window.setTimeout(() => showToast(loadingText("يجب تغيير كلمة المرور المؤقتة من إدارة الحسابات.", "Your temporary password must be changed through account management."), "warning", 7000), 250);\n    }`;
   source = replaceRequired(source, loginAssignment, v2Login, 'v2 login assignment');
 
-  // Blob-loaded modules can finish after the browser's original DOMContentLoaded.
-  // Convert the preserved core listener to an idempotent ready-state boot.
+  // Convert the preserved DOMContentLoaded callback into a named idempotent boot.
+  // Do NOT invoke it here: this location is before later module-level const values
+  // such as LANGUAGE_KEY are initialized. The invocation is appended at module end.
   source = replaceRequired(
     source,
     'document.addEventListener("DOMContentLoaded", async () => {',
@@ -69,9 +70,11 @@ function patchCoreAuth(coreSource) {
   source = replaceRequired(
     source,
     '  showLogin();\n});\n\nfunction closeMobileMenu() {',
-    '  showLogin();\n}\nif (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootTeleSyrianaProduction, { once: true });\nelse bootTeleSyrianaProduction();\n\nfunction closeMobileMenu() {',
+    '  showLogin();\n}\n\nfunction closeMobileMenu() {',
     'core DOM boot lifecycle'
   );
+
+  source += `\n\n// Start only after every module-level declaration above has initialized.\nif (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootTeleSyrianaProduction, { once: true });\nelse bootTeleSyrianaProduction();\n`;
 
   if (!source.includes('authenticateEmployeeV2(id, pw)')) throw new Error('Production auth loader validation failed: V2 authentication missing.');
   if (!source.includes('getEmployeeIdentityByCcms(savedId')) throw new Error('Production auth loader validation failed: saved-session identity refresh missing.');
