@@ -6,6 +6,9 @@ on:
     paths:
       - 'app.js'
       - 'app-core.js'
+      - 'employee-auth-v2.js'
+      - 'employee-identity-store.js'
+      - 'employee-identity-compat.js'
       - 'messages.js'
       - 'messages-core.js'
       - 'groups.js'
@@ -87,7 +90,11 @@ jobs:
               waitUntil: 'domcontentloaded',
               timeout: 30_000,
             });
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            await page.waitForFunction(() => {
+              const form = document.getElementById('login-form');
+              const login = document.getElementById('login-screen');
+              return Boolean(form && login && !login.classList.contains('hidden'));
+            }, { timeout: 10_000 });
 
             const before = await page.evaluate(() => ({
               form: Boolean(document.getElementById('login-form')),
@@ -99,12 +106,16 @@ jobs:
               throw new Error(`Login screen did not initialise correctly: ${JSON.stringify(before)}`);
             }
 
-            // Invalid credentials prove the submit handler is attached without
-            // causing any Firestore activity.
+            // Invalid credentials prove the submit handler is attached. V2 auth may
+            // first attempt a Firestore identity lookup, so await the UI outcome rather
+            // than assuming a synchronous legacy USERS-table rejection.
             await page.type('#ccmsId', '9999');
             await page.type('#password', 'invalid-smoke-password');
             await page.click('#login-form button[type="submit"]');
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await page.waitForFunction(() => {
+              const error = document.getElementById('login-error');
+              return Boolean(error && !error.classList.contains('hidden') && String(error.textContent || '').trim());
+            }, { timeout: 8_000 });
 
             const invalidResult = await page.evaluate(() => {
               const error = document.getElementById('login-error');
@@ -122,9 +133,8 @@ jobs:
               throw new Error('Invalid credentials unexpectedly opened the dashboard.');
             }
 
-            // Now prove an existing production account can enter the dashboard
-            // while Firestore is completely unavailable. This uses the same
-            // compatibility credentials already present in the preserved core.
+            // Prove an existing production account still enters through the V2
+            // compatibility fallback while Firestore is completely unavailable.
             await page.evaluate(() => {
               document.getElementById('ccmsId').value = '';
               document.getElementById('password').value = '';
@@ -137,7 +147,11 @@ jobs:
             await page.type('#ccmsId', '1001');
             await page.type('#password', '0951');
             await page.click('#login-form button[type="submit"]');
-            await new Promise((resolve) => setTimeout(resolve, 2500));
+            await page.waitForFunction(() => {
+              let stored = null;
+              try { stored = JSON.parse(localStorage.getItem('telesyrianaUser') || 'null'); } catch {}
+              return document.getElementById('dashboard-screen')?.classList.contains('hidden') === false && stored?.id === '1001';
+            }, { timeout: 10_000 });
 
             const validResult = await page.evaluate(() => {
               let stored = null;
