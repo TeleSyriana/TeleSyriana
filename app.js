@@ -23,3 +23,4 @@ import './phase4a-inactivity-watch.js';
 import './phase4b-activity-telemetry.js';
 import './phase5-ticket-quick-filters.js';
 import './monday-org-transition-runtime.js';
+import './projects-teams-access-guard.js';

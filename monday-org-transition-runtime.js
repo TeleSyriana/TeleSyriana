@@ -9,6 +9,7 @@ import {
   isIproMondayOrgChangeEffective,
   seedIdentityByCcms,
 } from './employee-identity-seed.js';
+import { employeeIdentityToLegacySession } from './employee-identity-compat.js';
 
 const USER_KEY = 'telesyrianaUser';
 let transitionTimer = null;
@@ -60,9 +61,9 @@ function guardAndTranslateLogin(event) {
     return;
   }
 
-  // Reema's permanent identity is unchanged, but the stable legacy auth core still
-  // owns her credential under 9003. Allow her to type the new operational CCMS 2002
-  // and translate only the ID field before the legacy submit handler authenticates.
+  // The production recovery core still authenticates Reema's password against the
+  // legacy 9003 record. Translate only for credential verification; syncSession()
+  // immediately restores the permanent operational identity 2002 / Supervisor.
   if (enteredId === identity.ccmsId && identity.previousCcmsIds?.length && input) {
     input.dataset.effectiveCcmsId = identity.ccmsId;
     input.dataset.compatibilityAuthCcmsId = identity.previousCcmsIds[0];
@@ -88,8 +89,38 @@ function forceDisabledSessionLogout() {
   return true;
 }
 
-function publishEffectiveIdentity() {
+function normalizeEffectiveSession() {
+  if (!isIproMondayOrgChangeEffective(Date.now())) return readSession();
   const session = readSession();
+  const requestedId = clean(session?.ccmsId || session?.id);
+  if (!requestedId) return session;
+  const identity = seedIdentityByCcms(requestedId);
+  if (!identity || identity.accountStatus !== 'active') return session;
+
+  const normalized = {
+    ...session,
+    ...employeeIdentityToLegacySession(identity),
+    authCcmsId: clean(session?.authCcmsId || requestedId),
+  };
+
+  const changed = clean(session?.id) !== clean(normalized.id)
+    || clean(session?.ccmsId) !== clean(normalized.ccmsId)
+    || clean(session?.role) !== clean(normalized.role)
+    || clean(session?.roleKey) !== clean(normalized.roleKey);
+
+  if (changed) {
+    try { localStorage.setItem(USER_KEY, JSON.stringify(normalized)); } catch {}
+  }
+
+  const code = document.getElementById('set-staff-code');
+  const role = document.getElementById('set-role');
+  if (code) code.textContent = normalized.ccmsId || normalized.id || '—';
+  if (role) role.textContent = normalized.roleKey === 'supervisor' ? 'Supervisor' : (normalized.role || normalized.roleKey || '—');
+  return normalized;
+}
+
+function publishEffectiveIdentity() {
+  const session = normalizeEffectiveSession() || readSession();
   const enteredId = clean(session?.ccmsId || session?.id);
   if (!enteredId) {
     window.__TS_EFFECTIVE_EMPLOYEE_IDENTITY__ = null;
@@ -114,6 +145,7 @@ function publishEffectiveIdentity() {
 
 function syncSession() {
   if (forceDisabledSessionLogout()) return;
+  normalizeEffectiveSession();
   publishEffectiveIdentity();
 }
 
