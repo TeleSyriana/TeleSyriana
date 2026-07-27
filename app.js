@@ -22,6 +22,50 @@ const IDENTITY_STORE_URL = new URL('./employee-identity-store.js', import.meta.u
 const IDENTITY_SEED_URL = new URL('./employee-identity-seed.js', import.meta.url).href;
 const IDENTITY_COMPAT_URL = new URL('./employee-identity-compat.js', import.meta.url).href;
 
+function normaliseCcmsDigits(value) {
+  const arabicIndic = '٠١٢٣٤٥٦٧٨٩';
+  const easternArabicIndic = '۰۱۲۳۴۵۶۷۸۹';
+  return String(value ?? '')
+    .replace(/[٠-٩]/g, (ch) => String(arabicIndic.indexOf(ch)))
+    .replace(/[۰-۹]/g, (ch) => String(easternArabicIndic.indexOf(ch)))
+    .replace(/\D+/g, '');
+}
+
+function hardenLoginInputs() {
+  const ccms = document.getElementById('ccmsId');
+  const password = document.getElementById('password');
+
+  if (ccms && ccms.dataset.tsInputHardened !== '1') {
+    ccms.dataset.tsInputHardened = '1';
+    ccms.setAttribute('dir', 'ltr');
+    ccms.setAttribute('inputmode', 'numeric');
+    ccms.setAttribute('autocomplete', 'username');
+    ccms.setAttribute('pattern', '[0-9]*');
+    ccms.setAttribute('maxlength', '12');
+    ccms.style.direction = 'ltr';
+    ccms.style.textAlign = 'left';
+    ccms.style.unicodeBidi = 'plaintext';
+    ccms.addEventListener('input', () => {
+      const next = normaliseCcmsDigits(ccms.value);
+      if (ccms.value !== next) ccms.value = next;
+    });
+  }
+
+  if (password && password.dataset.tsInputHardened !== '1') {
+    password.dataset.tsInputHardened = '1';
+    password.setAttribute('dir', 'ltr');
+    password.setAttribute('autocomplete', 'current-password');
+    password.style.direction = 'ltr';
+    password.style.textAlign = 'left';
+    password.style.unicodeBidi = 'plaintext';
+  }
+}
+
+hardenLoginInputs();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', hardenLoginInputs, { once: true });
+}
+
 function replaceRequired(source, oldText, newText, label) {
   if (!source.includes(oldText)) throw new Error(`Production auth loader marker missing: ${label}`);
   return source.replace(oldText, newText);
