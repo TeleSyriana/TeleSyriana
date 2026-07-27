@@ -14,6 +14,7 @@
 // import './phase5-ticket-quick-filters.js';
 // import './monday-org-transition-runtime.js';
 // import './projects-teams-access-guard.js';
+// import './credential-provisioning-ui.js';
 
 const CORE_URL = new URL('./app-core.js', import.meta.url);
 const FIREBASE_URL = new URL('./firebase.js', import.meta.url).href;
@@ -156,3 +157,4 @@ await import('./phase4b-activity-telemetry.js');
 await import('./phase5-ticket-quick-filters.js');
 await import('./monday-org-transition-runtime.js');
 await import('./projects-teams-access-guard.js');
+await import('./credential-provisioning-ui.js');
