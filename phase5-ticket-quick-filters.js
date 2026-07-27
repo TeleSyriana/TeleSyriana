@@ -101,6 +101,9 @@ function injectStyles() {
     .p5-ticket-chip.active{background:rgba(59,130,246,.14);border-color:rgba(59,130,246,.34)}
     .p5-ticket-chip.emergency.active{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35)}
     .p5-ticket-filter-note{font-size:11px;opacity:.6}
+    #page-tickets .ticket-filters #ticket-filter-status,
+    #page-tickets .ticket-filters #ticket-filter-date,
+    #page-tickets .ticket-filters #ticket-filter-priority{display:none!important}
   `;
   document.head.appendChild(style);
 }
