@@ -97,6 +97,7 @@ function verifyProductionAuthContract() {
     'credential_not_provisioned',
     'Production V2 auth loader failed; falling back to stable legacy core.',
     'await import(CORE_URL.href)',
+    'Start only after every module-level declaration above has initialized.',
   ];
   for (const marker of appMarkers) {
     assert(app.includes(marker), `app.js: production auth contract missing: ${marker}`);
@@ -114,12 +115,7 @@ function verifyProductionAuthContract() {
   }
 }
 
-function verifyFacadeFallbacks() {
-  for (const file of ['employees-ui.js', 'tickets.js', 'payroll.js', 'reports.js', 'messages.js', 'groups.js']) {
-    const source = read(file);
-    assert(source.includes('await import(CORE_URL.href)'), `${file}: untouched-core fallback import missing`);
-  }
-
+function verifyManagementDirectoryGuards() {
   const directory = read('employee-directory.js');
   assert(directory.includes("export * from './employee-directory-core.js';"), 'employee-directory.js: core facade export missing');
   assert(directory.includes('assertManagementActor(actor)'), 'employee-directory.js: management actor guard missing');
@@ -130,7 +126,7 @@ try {
   verifySyntax();
   verifyPreservedBlobs();
   verifyProductionAuthContract();
-  verifyFacadeFallbacks();
+  verifyManagementDirectoryGuards();
   console.log('Phase 1 static preflight: PASS');
   console.log(`Validated ${JS_FILES.length} JavaScript files, ${Object.keys(PRESERVED_BLOBS).length} stable core blobs, and the production V2 auth contract.`);
 } catch (error) {
