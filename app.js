@@ -93,6 +93,16 @@ function patchCoreAuth(coreSource) {
   const savedSessionReplacement = `      const u = JSON.parse(savedUser);\n      const savedId = String(u?.ccmsId || u?.id || "").trim();\n      const localIdentity = savedId ? seedIdentityByCcms(savedId) : null;\n      const immediateSession = localIdentity && localIdentity.accountStatus === "active"\n        ? employeeIdentityToLegacySession(localIdentity)\n        : (u && u.id ? u : null);\n      if (immediateSession) {\n        setAppLoading(28, loadingText("تحميل الجلسة", "Restoring session"), loadingText("فتح الحساب المحفوظ…", "Opening saved account…"));\n        currentUser = immediateSession;\n        localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n        setAppLoading(52, loadingText("تحميل جلسة اليوم", "Loading today’s session"), loadingText("قراءة حالة الدوام الحالية…", "Reading the current work state…"));\n        await initStateForUser();\n        setAppLoading(88, loadingText("فتح لوحة التحكم", "Opening dashboard"), loadingText("تجهيز الصفحة الرئيسية…", "Preparing the home page…"));\n        showDashboard();\n        window.dispatchEvent(new Event("telesyriana:user-changed"));\n\n        // Reconcile role/status from Firestore without blocking the user.\n        if (savedId) {\n          void getEmployeeIdentityByCcms(savedId, { allowSeedFallback: false }).then((freshIdentity) => {\n            if (!freshIdentity || freshIdentity.accountStatus !== "active") return;\n            const freshSession = employeeIdentityToLegacySession(freshIdentity);\n            currentUser = freshSession;\n            localStorage.setItem(USER_KEY, JSON.stringify(freshSession));\n            window.dispatchEvent(new Event("telesyriana:user-changed"));\n          }).catch((err) => console.warn("Background employee identity refresh failed.", err));\n        }\n        return;\n      }\n      localStorage.removeItem(USER_KEY);\n`;
   source = replaceBetweenRequired(source, savedSessionStart, savedSessionEnd, savedSessionReplacement, 'fast saved-session restore');
 
+  // A slow/offline Firestore read must never freeze login at the work-session step.
+  // The existing initStateForUser catch path creates a local day state, while normal
+  // Firestore syncing can recover in the background once connectivity returns.
+  source = replaceRequired(
+    source,
+    '    const snap = await getDoc(ref);',
+    '    const snap = await Promise.race([\n      getDoc(ref),\n      new Promise((_, reject) => window.setTimeout(() => reject(new Error("work_session_read_timeout")), 1800)),\n    ]);',
+    'work-session Firestore read timeout'
+  );
+
   source = replaceRequired(
     source,
     '  if (!USERS[id]) return showError("المستخدم غير موجود. جرّب 0001 أو 1001 أو 2001 أو 3001 أو 9001 أو 9002 أو 9003.");\n  if (USERS[id].password !== pw) return showError(getLanguage() === "ar" ? "كلمة المرور غير صحيحة." : "Incorrect password.");\n\n',
@@ -125,6 +135,7 @@ function patchCoreAuth(coreSource) {
   if (!source.includes('authenticateEmployeeV2(id, pw)')) throw new Error('Production auth loader validation failed: V2 authentication missing.');
   if (!source.includes('seedIdentityByCcms(savedId)')) throw new Error('Production auth loader validation failed: local saved-session restore missing.');
   if (!source.includes('getEmployeeIdentityByCcms(savedId, { allowSeedFallback: false })')) throw new Error('Production auth loader validation failed: background identity refresh missing.');
+  if (!source.includes('work_session_read_timeout')) throw new Error('Production auth loader validation failed: work-session read timeout missing.');
   if (!source.includes('window.__TS_APP_PRODUCTION_BOOTED__')) throw new Error('Production auth loader validation failed: ready-state boot missing.');
   return source;
 }
