@@ -215,27 +215,41 @@ async function authenticateThroughLegacyFallback(identity, ccmsId, password) {
   };
 }
 
+function seedIdentityForAuth(ccmsId) {
+  const seed = seedIdentityByCcms(ccmsId);
+  return seed ? { ...seed, directorySource: "seed" } : null;
+}
+
 export async function authenticateEmployeeV2(ccmsId, password) {
   const id = clean(ccmsId);
   if (!id) return { ok: false, reason: "not_found", employee: null };
 
-  const identity = await getEmployeeIdentityByCcms(id, { allowSeedFallback: true });
+  // Known current/legacy staff should not wait on a Firestore identity lookup.
+  // This is especially important during quota/network incidents. Managed users such
+  // as Lana can still use the hashed employeeCredentials record keyed by employeeUid.
+  const seededIdentity = seedIdentityForAuth(id);
+  const identity = seededIdentity || await getEmployeeIdentityByCcms(id, { allowSeedFallback: false });
   if (!identity) return { ok: false, reason: "not_found", employee: null };
   if (identity.accountStatus !== "active") {
     return { ok: false, reason: identity.accountStatus || "disabled", employee: null };
   }
 
-  if (identity.directorySource === "seed") {
+  // Existing legacy accounts authenticate immediately without touching the permanent
+  // credential collection. Seeded accounts explicitly awaiting credential setup skip
+  // this path and continue to the secure hashed credential lookup below.
+  if (identity.directorySource === "seed" && identity.credentialSetupRequired !== true) {
     const legacy = await authenticateThroughLegacyFallback(identity, id, password);
-    return legacy || { ok: false, reason: "credential_unavailable", employee: null };
+    if (legacy) return legacy;
   }
 
   let credential = null;
   try {
     credential = await readCredentialRecord(identity.employeeUid);
   } catch (error) {
-    const legacy = await authenticateThroughLegacyFallback(identity, id, password);
-    if (legacy) return legacy;
+    if (identity.credentialSetupRequired !== true) {
+      const legacy = await authenticateThroughLegacyFallback(identity, id, password);
+      if (legacy) return legacy;
+    }
     return {
       ok: false,
       reason: "credential_unavailable",
@@ -264,8 +278,10 @@ export async function authenticateEmployeeV2(ccmsId, password) {
     };
   }
 
-  const legacy = await authenticateThroughLegacyFallback(identity, id, password);
-  if (legacy) return legacy;
+  if (identity.credentialSetupRequired !== true) {
+    const legacy = await authenticateThroughLegacyFallback(identity, id, password);
+    if (legacy) return legacy;
+  }
 
   return {
     ok: false,

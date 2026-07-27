@@ -8,6 +8,7 @@ on:
       - 'tickets.js'
       - 'phase2-projects-teams.js'
       - 'phase2-ticket-dashboard-live.js'
+      - 'projects-teams-access-guard.js'
       - 'role-dashboard-shadow.js'
       - 'ticket-access-policy.js'
       - 'employee-identity-seed.js'
@@ -39,7 +40,6 @@ jobs:
           grep -q 'telesyriana:ticket-dashboard-snapshot' tickets.js
           grep -q 'safeTicketDashboardRows' tickets.js
           grep -q 'buildAcmDashboard' phase2-ticket-dashboard-live.js
-          grep -q 'buildSupervisorDashboard' phase2-ticket-dashboard-live.js
           grep -Fq "import './phase2-ticket-dashboard-live.js';" app.js
           if grep -Eq "from [\"']\\./firebase\\.js|onSnapshot\\(|getDocs\\(|getDoc\\(|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(" phase2-ticket-dashboard-live.js; then
             echo 'Dashboard bridge must not create its own Firebase/Firestore operation.' >&2
@@ -66,14 +66,15 @@ jobs:
               const hour = 60 * 60 * 1000;
               const rows = [
                 { id:'t1', projectId:'ipro', status:'open', priority:'normal', assignedTo:'9001', updatedAt:now-hour, dueAt:now+hour },
-                { id:'t2', projectId:'ipro', status:'open', priority:'emergency', assignedTo:'9002', updatedAt:now-hour, dueAt:now-hour },
-                { id:'t3', projectId:'ipro', status:'resolved', priority:'normal', assignedTo:'9003', updatedAt:now-hour, resolvedAt:now-hour },
-                { id:'t4', projectId:'ipro', status:'escalated', priority:'high', assignedTo:'2001', updatedAt:now-hour, dueAt:now+hour },
+                { id:'t2', projectId:'ipro', status:'open', priority:'emergency', assignedTo:'9004', updatedAt:now-hour, dueAt:now-hour },
+                { id:'t3', projectId:'ipro', status:'resolved', priority:'normal', assignedTo:'2002', updatedAt:now-hour, resolvedAt:now-hour },
+                { id:'t4', projectId:'ipro', status:'escalated', priority:'high', assignedTo:'2002', updatedAt:now-hour, dueAt:now+hour },
                 { id:'t5', projectId:'ipro', status:'open', priority:'normal', assignedTo:'1001', updatedAt:now-hour, dueAt:now+hour },
               ];
               window.__TS_TICKET_DASHBOARD_SNAPSHOT__ = () => rows.map((row) => ({...row}));
             </script>
             <script type="module" src="./phase2-projects-teams.js"></script>
+            <script type="module" src="./projects-teams-access-guard.js"></script>
             <script type="module" src="./phase2-ticket-dashboard-live.js"></script>
           </body>
           </html>
@@ -99,29 +100,45 @@ jobs:
           if (!executablePath) throw new Error('No Chrome/Chromium executable found.');
           const browser = await puppeteer.launch({ executablePath, headless: true, args: ['--no-sandbox','--disable-dev-shm-usage'] });
 
-          async function test({ id, expected }) {
+          async function testAcm() {
             const context = await browser.createBrowserContext();
             const page = await context.newPage();
             const errors = [];
             page.on('pageerror', (error) => errors.push(String(error?.stack || error)));
-            await page.evaluateOnNewDocument((ccms) => localStorage.setItem('telesyrianaUser', JSON.stringify({ id: ccms })), id);
+            await page.evaluateOnNewDocument(() => localStorage.setItem('telesyrianaUser', JSON.stringify({ id:'1001', role:'manager' })));
             await page.goto('http://127.0.0.1:4173/phase2-ticket-bridge-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
+            await page.waitForSelector('#nav-projects-teams-v2', { timeout:5_000 });
+            const navVisible = await page.$eval('#nav-projects-teams-v2', (node) => !node.classList.contains('hidden'));
+            if (!navVisible) throw new Error('ACM Projects/Teams navigation unexpectedly hidden.');
             await page.click('#nav-projects-teams-v2');
             await page.waitForFunction(() => document.querySelectorAll('#page-projects-teams-v2 .p2-live strong[data-metric-state="loaded"]').length === 4, { timeout:5_000 });
             const values = await page.$$eval('#page-projects-teams-v2 .p2-live strong', (nodes) => nodes.map((node) => Number(node.textContent)));
             const note = await page.$eval('#page-projects-teams-v2 .p2-live-grid + .p2-muted', (node) => node.textContent);
-            console.log(JSON.stringify({ id, values, note, errors }));
-            if (JSON.stringify(values) !== JSON.stringify(expected)) throw new Error(`${id} expected ${expected} but got ${values}`);
-            if (!note.includes('Latest Tickets snapshot')) throw new Error(`${id} live snapshot note missing`);
-            if (errors.length) throw new Error(`${id} browser errors: ${errors.join(' | ')}`);
+            console.log(JSON.stringify({ id:'1001', values, note, errors }));
+            if (JSON.stringify(values) !== JSON.stringify([4,1,1,1])) throw new Error(`1001 expected 4,1,1,1 but got ${values}`);
+            if (!note.includes('Latest Tickets snapshot')) throw new Error('1001 live snapshot note missing');
+            if (errors.length) throw new Error(`1001 browser errors: ${errors.join(' | ')}`);
+            await context.close();
+          }
+
+          async function testSupervisorHidden() {
+            const context = await browser.createBrowserContext();
+            const page = await context.newPage();
+            await page.evaluateOnNewDocument(() => localStorage.setItem('telesyrianaUser', JSON.stringify({ id:'2002', role:'supervisor' })));
+            await page.goto('http://127.0.0.1:4173/phase2-ticket-bridge-fixture.html', { waitUntil:'networkidle0', timeout:20_000 });
+            await page.waitForSelector('#nav-projects-teams-v2', { timeout:5_000 });
+            const state = await page.$eval('#nav-projects-teams-v2', (node) => ({ hidden:node.classList.contains('hidden') }));
+            if (!state.hidden) throw new Error('Supervisor must not see Projects/Teams dashboard navigation.');
+            console.log(JSON.stringify({ id:'2002', navHidden:true }));
             await context.close();
           }
 
           try {
-            // ACM sees all five iPro tickets: 4 active, 1 emergency, 1 resolved today, 1 overdue.
-            await test({ id:'1001', expected:[4,1,1,1] });
-            // Supervisor sees 9001/9002/9003 + own 2001 ticket, but not the ACM-owned ticket.
-            await test({ id:'2001', expected:[3,1,1,1] });
+            // ACM is the only role with this project-level live Ticket dashboard.
+            await testAcm();
+            // Supervisor ticket permissions remain elsewhere, but this surface is
+            // intentionally hidden per the CEO/ACM/HR Projects/Teams visibility rule.
+            await testSupervisorHidden();
           } finally {
             await browser.close();
           }
