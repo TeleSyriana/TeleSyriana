@@ -148,9 +148,12 @@ jobs:
           }
 
           try {
-            await testRole({ ccmsId: '0001', password: 'Aa095142332415!', expectedVisible: true, expectedRows: 7 });
-            await testRole({ ccmsId: '1001', password: '0951', expectedVisible: true, expectedRows: 6 });
-            await testRole({ ccmsId: '3001', password: '2411', expectedVisible: true, expectedRows: 6 });
+            // Monday identity seed: 8 total people. CEO sees everyone; ACM/HR see the
+            // seven iPro project people excluding CEO. Disabled rows remain visible
+            // in this read-only directory preview so management can audit the structure.
+            await testRole({ ccmsId: '0001', password: 'Aa095142332415!', expectedVisible: true, expectedRows: 8 });
+            await testRole({ ccmsId: '1001', password: '0951', expectedVisible: true, expectedRows: 7 });
+            await testRole({ ccmsId: '3001', password: '2411', expectedVisible: true, expectedRows: 7 });
             await testRole({ ccmsId: '2001', password: '2411', expectedVisible: false, expectedRows: 0 });
           } finally {
             await browser.close();
