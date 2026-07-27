@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const PRESERVED_BLOBS = Object.freeze({
-  'app-core.js': '7332d1dcb36f0b84e4f9c48ffa59d0bcf17551d2',
+  // app-core.js was intentionally advanced on main after the original Phase 1
+  // baseline. This is the current stable core that the narrow auth loader patches.
+  'app-core.js': '41c4776ed73f188c99992af657c85ac75cf2a5ed',
   'employee-directory-core.js': '47e30399c9ddcc5786a8673deecdf6818cc1b3f9',
   'employees-ui-core.js': '77f6a5d69073e673be71d3f66aa135f4a70d363a',
   'tickets-core.js': '14d7fb79255962944c3a54f20c394122f909d290',
@@ -40,22 +42,18 @@ const JS_FILES = [
 ];
 
 const CORE_MARKERS = Object.freeze({
+  // Only assert markers the current production auth loader actually patches.
+  // The previous broad loader depended on unrelated quota/profile markers and
+  // became fragile whenever app-core evolved.
   'app-core.js': [
     'import { db, fs } from "./firebase.js";',
     '// Demo users\n',
-    'function hasRoleAtLeast(user, role) {',
     'function safeUserPayload(id) {\n  const u = USERS[id];\n  if (!u) return null;\n  const { password, ...safe } = u;\n  return { id, ...safe };\n}\n',
     '      const u = JSON.parse(savedUser);\n      if (USERS[u.id]) {',
+    '  if (!USERS[id]) return showError("المستخدم غير موجود. جرّب 0001 أو 1001 أو 2001 أو 3001 أو 9001 أو 9002 أو 9003.");',
     '    currentUser = safeUserPayload(id);',
-    'let staffSettingsUnsub = null;\nlet issueStatsByDay = {};',
-    '/* --------------------------- Widgets (Clock/Date) ------------------------ */',
-    'function finishInit(now) {\n  if (canViewTeamDashboard(currentUser)) subscribeSupervisorDashboard();',
-    '  if (nameEl) nameEl.value = currentUser.name || currentUser.id;',
-    '  if (cached.name) {\n    currentUser = { ...currentUser, name: cached.name, profilePhoto: cached.profilePhoto || currentUser.profilePhoto || "" };',
-    '  const name = document.getElementById("set-name")?.value?.trim() || currentUser.name || currentUser.id;',
-    '  presenceTimerId = setInterval(() => updatePresence(false), 30_000);',
-    '  if (role !== "agent") return [{ key: "team", source: base }];',
-    '  updatePresence(false).catch(() => {});\n  try { translateFeaturePages(getLanguage()); applyPhase21LanguagePolish(getLanguage()); setTimeout(() => applyPhase21LanguagePolish(getLanguage()), 80); } catch {}',
+    'document.addEventListener("DOMContentLoaded", async () => {',
+    '  showLogin();\n});\n\nfunction closeMobileMenu() {',
   ],
   'employees-ui-core.js': [
     '} from "./employee-directory.js";',
@@ -180,11 +178,11 @@ function verifyFacadeAndLoaderGuards() {
 
   const loaders = {
     'app.js': [
-      'legacy safe-user helper',
-      'legacy auth code remains',
-      'profile name can still override directory identity',
-      'quota-safe presence lifecycle missing',
-      'Home issue calendar still reads full ticket history',
+      'authenticateEmployeeV2(id, pw)',
+      'getEmployeeIdentityByCcms(savedId',
+      'Production V2 auth loader failed',
+      'window.__TS_APP_PRODUCTION_BOOTED__',
+      'credential_not_provisioned',
     ],
     'employees-ui.js': ['duplicate CCMS protection missing', 'self-role lock missing', 'active-team protection missing', 'hidden-page directory refresh remains'],
     'tickets.js': ['legacy STAFF remains', 'active assignment filter missing', 'hidden-page subscriptions remain', 'deleted tickets are not on-demand', 'directory still loads before page/login need'],
