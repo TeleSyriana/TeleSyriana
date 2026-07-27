@@ -6,6 +6,7 @@ on:
     paths:
       - 'app.js'
       - 'phase2-projects-teams.js'
+      - 'projects-teams-access-guard.js'
       - 'employee-identity-seed.js'
       - 'project-hierarchy-shadow.js'
       - 'project-access-policy.js'
@@ -31,10 +32,14 @@ jobs:
         run: |
           set -euo pipefail
           cp phase2-projects-teams.js /tmp/phase2-projects-teams.mjs
+          cp projects-teams-access-guard.js /tmp/projects-teams-access-guard.mjs
           node --check /tmp/phase2-projects-teams.mjs
-          grep -Fq "import './phase2-projects-teams.js';" app.js
+          node --check /tmp/projects-teams-access-guard.mjs
+          grep -Fq "await import('./phase2-projects-teams.js');" app.js
+          grep -Fq "await import('./projects-teams-access-guard.js');" app.js
           grep -q 'CURRENT_EMPLOYEE_IDENTITY_SEED' phase2-projects-teams.js
           grep -q 'buildProjectHierarchy' phase2-projects-teams.js
+          grep -q 'ALLOWED_ROLES' projects-teams-access-guard.js
           if grep -Eq "from [\"']\\./firebase\\.js|firestore|onSnapshot\\(|setDoc\\(|addDoc\\(|updateDoc\\(|deleteDoc\\(|runTransaction\\(" phase2-projects-teams.js; then
             echo 'Phase 2 visible module contains a Firebase/Firestore import or operation.' >&2
             exit 1
@@ -58,6 +63,7 @@ jobs:
               <section id="page-home" class="page-section"></section>
             </main>
             <script type="module" src="./phase2-projects-teams.js"></script>
+            <script type="module" src="./projects-teams-access-guard.js"></script>
           </body>
           </html>
           HTML
@@ -112,6 +118,7 @@ jobs:
             try {
               await page.goto('http://127.0.0.1:4173/phase2-role-fixture.html', { waitUntil: 'networkidle0', timeout: 20_000 });
               await page.waitForSelector('#nav-projects-teams-v2', { timeout: 5_000 });
+              await page.waitForTimeout(50);
               const nav = await page.evaluate(() => {
                 const node = document.getElementById('nav-projects-teams-v2');
                 return { visible: Boolean(node && !node.classList.contains('hidden')), text: String(node?.textContent || '').trim() };
@@ -144,10 +151,10 @@ jobs:
           }
 
           try {
-            await testRole({ session: { id: '0001', role: 'admin' }, expectedVisible: true, expectedNav: 'Projects & Teams', expectedRows: 6, headingIncludes: 'Projects & Teams' });
-            await testRole({ session: { id: '1001', role: 'manager' }, expectedVisible: true, expectedNav: 'Project Dashboard', expectedRows: 6, headingIncludes: 'Project Dashboard' });
-            await testRole({ session: { id: '2001', role: 'supervisor' }, expectedVisible: true, expectedNav: 'My Team', expectedRows: 3, headingIncludes: 'My Team' });
-            await testRole({ session: { id: '3001', role: 'hr' }, expectedVisible: true, expectedNav: 'Project People', expectedRows: 6, headingIncludes: 'Project People' });
+            await testRole({ session: { id: '0001', role: 'admin' }, expectedVisible: true, expectedNav: 'Projects & Teams', expectedRows: 7, headingIncludes: 'Projects & Teams' });
+            await testRole({ session: { id: '1001', role: 'manager' }, expectedVisible: true, expectedNav: 'Project Dashboard', expectedRows: 7, headingIncludes: 'Project Dashboard' });
+            await testRole({ session: { id: '2002', role: 'supervisor' }, expectedVisible: false, expectedNav: '', expectedRows: 0, headingIncludes: '' });
+            await testRole({ session: { id: '3001', role: 'hr' }, expectedVisible: true, expectedNav: 'Project People', expectedRows: 7, headingIncludes: 'Project People' });
             await testRole({ session: { id: '9001', role: 'agent' }, expectedVisible: false, expectedNav: '', expectedRows: 0, headingIncludes: '' });
           } finally {
             await browser.close();
