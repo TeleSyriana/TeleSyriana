@@ -10,16 +10,16 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const PRESERVED_BLOBS = Object.freeze({
-  // app-core.js was intentionally advanced on main after the original Phase 1
-  // baseline. This is the current stable core that the narrow auth loader patches.
+  // These are the stable cores currently present on main. The production entry
+  // patches authentication around them instead of rewriting the cores themselves.
   'app-core.js': '41c4776ed73f188c99992af657c85ac75cf2a5ed',
   'employee-directory-core.js': '47e30399c9ddcc5786a8673deecdf6818cc1b3f9',
   'employees-ui-core.js': '77f6a5d69073e673be71d3f66aa135f4a70d363a',
   'tickets-core.js': '14d7fb79255962944c3a54f20c394122f909d290',
   'payroll-core.js': '51e6bd65e3f13e0addefc0dad8e40932352ed09c',
   'reports-core.js': '1687f8c185dece33ed6bae21dd863db2da4abe97',
-  'messages-core.js': 'bcd3e9ce562054284b2dc4cb0eca6424d8a67956',
-  'groups-core.js': '8c706449e5229dca0785317bcaebbf2697cceab4',
+  'messages-core.js': 'b1b439fb74a635371caf6f6beba9ed9d6f764779',
+  'groups-core.js': '09d2e323b60adb30e583dcf4c7bc707bdb4f6ad2',
 });
 
 const JS_FILES = [
