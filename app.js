@@ -19,6 +19,7 @@ const CORE_URL = new URL('./app-core.js', import.meta.url);
 const FIREBASE_URL = new URL('./firebase.js', import.meta.url).href;
 const AUTH_V2_URL = new URL('./employee-auth-v2.js', import.meta.url).href;
 const IDENTITY_STORE_URL = new URL('./employee-identity-store.js', import.meta.url).href;
+const IDENTITY_SEED_URL = new URL('./employee-identity-seed.js', import.meta.url).href;
 const IDENTITY_COMPAT_URL = new URL('./employee-identity-compat.js', import.meta.url).href;
 
 function replaceRequired(source, oldText, newText, label) {
@@ -37,15 +38,15 @@ function replaceBetweenRequired(source, startMarker, endMarker, replacement, lab
 function patchCoreAuth(coreSource) {
   let source = String(coreSource || '');
 
-  const imports = `import { db, fs } from ${JSON.stringify(FIREBASE_URL)};\nimport { authenticateEmployeeV2 } from ${JSON.stringify(AUTH_V2_URL)};\nimport { getEmployeeIdentityByCcms } from ${JSON.stringify(IDENTITY_STORE_URL)};\nimport { employeeIdentityToLegacySession } from ${JSON.stringify(IDENTITY_COMPAT_URL)};`;
+  const imports = `import { db, fs } from ${JSON.stringify(FIREBASE_URL)};\nimport { authenticateEmployeeV2 } from ${JSON.stringify(AUTH_V2_URL)};\nimport { getEmployeeIdentityByCcms } from ${JSON.stringify(IDENTITY_STORE_URL)};\nimport { seedIdentityByCcms } from ${JSON.stringify(IDENTITY_SEED_URL)};\nimport { employeeIdentityToLegacySession } from ${JSON.stringify(IDENTITY_COMPAT_URL)};`;
   source = replaceRequired(source, 'import { db, fs } from "./firebase.js";', imports, 'firebase/auth imports');
 
-  // Saved sessions must refresh through the effective employee identity rather than
-  // the old hard-coded USERS table. This preserves promotions and supports 9004+.
+  // Fast saved-session path: use the approved local identity seed immediately.
+  // Firestore reconciliation happens after the dashboard is open and never blocks restore.
   const savedSessionStart = '      const u = JSON.parse(savedUser);\n      if (USERS[u.id]) {';
   const savedSessionEnd = '    }\n  } catch (err) {';
-  const savedSessionReplacement = `      const u = JSON.parse(savedUser);\n      const savedId = String(u?.ccmsId || u?.id || "").trim();\n      const identity = savedId ? await getEmployeeIdentityByCcms(savedId, { allowSeedFallback: true }) : null;\n      if (identity && identity.accountStatus === "active") {\n        setAppLoading(30, loadingText("تحميل الصلاحيات", "Loading permissions"), loadingText("تحديث هوية الموظف من النظام…", "Refreshing employee identity…"));\n        currentUser = employeeIdentityToLegacySession(identity);\n        localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n        setAppLoading(48, loadingText("تحميل جلسة اليوم", "Loading today’s session"), loadingText("قراءة حالة الدوام الحالية…", "Reading the current work state…"));\n        await initStateForUser();\n        setAppLoading(72, loadingText("فتح لوحة التحكم", "Opening dashboard"), loadingText("تجهيز الصفحة الرئيسية…", "Preparing the home page…"));\n        showDashboard();\n        window.dispatchEvent(new Event("telesyriana:user-changed"));\n        return;\n      }\n      localStorage.removeItem(USER_KEY);\n`;
-  source = replaceBetweenRequired(source, savedSessionStart, savedSessionEnd, savedSessionReplacement, 'saved-session identity refresh');
+  const savedSessionReplacement = `      const u = JSON.parse(savedUser);\n      const savedId = String(u?.ccmsId || u?.id || "").trim();\n      const localIdentity = savedId ? seedIdentityByCcms(savedId) : null;\n      const immediateSession = localIdentity && localIdentity.accountStatus === "active"\n        ? employeeIdentityToLegacySession(localIdentity)\n        : (u && u.id ? u : null);\n      if (immediateSession) {\n        setAppLoading(28, loadingText("تحميل الجلسة", "Restoring session"), loadingText("فتح الحساب المحفوظ…", "Opening saved account…"));\n        currentUser = immediateSession;\n        localStorage.setItem(USER_KEY, JSON.stringify(currentUser));\n        setAppLoading(52, loadingText("تحميل جلسة اليوم", "Loading today’s session"), loadingText("قراءة حالة الدوام الحالية…", "Reading the current work state…"));\n        await initStateForUser();\n        setAppLoading(88, loadingText("فتح لوحة التحكم", "Opening dashboard"), loadingText("تجهيز الصفحة الرئيسية…", "Preparing the home page…"));\n        showDashboard();\n        window.dispatchEvent(new Event("telesyriana:user-changed"));\n\n        // Reconcile role/status from Firestore without blocking the user.\n        if (savedId) {\n          void getEmployeeIdentityByCcms(savedId, { allowSeedFallback: false }).then((freshIdentity) => {\n            if (!freshIdentity || freshIdentity.accountStatus !== "active") return;\n            const freshSession = employeeIdentityToLegacySession(freshIdentity);\n            currentUser = freshSession;\n            localStorage.setItem(USER_KEY, JSON.stringify(freshSession));\n            window.dispatchEvent(new Event("telesyriana:user-changed"));\n          }).catch((err) => console.warn("Background employee identity refresh failed.", err));\n        }\n        return;\n      }\n      localStorage.removeItem(USER_KEY);\n`;
+  source = replaceBetweenRequired(source, savedSessionStart, savedSessionEnd, savedSessionReplacement, 'fast saved-session restore');
 
   source = replaceRequired(
     source,
@@ -77,7 +78,8 @@ function patchCoreAuth(coreSource) {
   source += `\n\n// Start only after every module-level declaration above has initialized.\nif (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootTeleSyrianaProduction, { once: true });\nelse bootTeleSyrianaProduction();\n`;
 
   if (!source.includes('authenticateEmployeeV2(id, pw)')) throw new Error('Production auth loader validation failed: V2 authentication missing.');
-  if (!source.includes('getEmployeeIdentityByCcms(savedId')) throw new Error('Production auth loader validation failed: saved-session identity refresh missing.');
+  if (!source.includes('seedIdentityByCcms(savedId)')) throw new Error('Production auth loader validation failed: local saved-session restore missing.');
+  if (!source.includes('getEmployeeIdentityByCcms(savedId, { allowSeedFallback: false })')) throw new Error('Production auth loader validation failed: background identity refresh missing.');
   if (!source.includes('window.__TS_APP_PRODUCTION_BOOTED__')) throw new Error('Production auth loader validation failed: ready-state boot missing.');
   return source;
 }
