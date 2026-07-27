@@ -35,8 +35,8 @@ jobs:
           cp projects-teams-access-guard.js /tmp/projects-teams-access-guard.mjs
           node --check /tmp/phase2-projects-teams.mjs
           node --check /tmp/projects-teams-access-guard.mjs
-          grep -Fq "await import('./phase2-projects-teams.js');" app.js
-          grep -Fq "await import('./projects-teams-access-guard.js');" app.js
+          grep -Fq "import './phase2-projects-teams.js';" app.js
+          grep -Fq "import './projects-teams-access-guard.js';" app.js
           grep -q 'CURRENT_EMPLOYEE_IDENTITY_SEED' phase2-projects-teams.js
           grep -q 'buildProjectHierarchy' phase2-projects-teams.js
           grep -q 'ALLOWED_ROLES' projects-teams-access-guard.js
@@ -118,7 +118,7 @@ jobs:
             try {
               await page.goto('http://127.0.0.1:4173/phase2-role-fixture.html', { waitUntil: 'networkidle0', timeout: 20_000 });
               await page.waitForSelector('#nav-projects-teams-v2', { timeout: 5_000 });
-              await page.waitForTimeout(50);
+              await new Promise((resolve) => setTimeout(resolve, 50));
               const nav = await page.evaluate(() => {
                 const node = document.getElementById('nav-projects-teams-v2');
                 return { visible: Boolean(node && !node.classList.contains('hidden')), text: String(node?.textContent || '').trim() };
