@@ -1,1 +1,0 @@
-Temporary branch validation note for the production V2 authentication and CI repair pass. This file may be removed before final merge.
