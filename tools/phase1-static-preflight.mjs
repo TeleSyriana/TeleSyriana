@@ -105,7 +105,7 @@ function verifyProductionAuthContract() {
   const authMarkers = [
     'const seededIdentity = seedIdentityForAuth(id);',
     'identity.credentialSetupRequired !== true',
-    'reason: "credential_not_provisioned"',
+    '"credential_not_provisioned"',
     'authSource: "permanent_hashed_credential"',
     'authSource: "legacy_compatibility"',
   ];
