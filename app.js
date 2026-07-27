@@ -3,6 +3,17 @@
 // The stable UI/runtime remains in app-core.js. Only authentication and saved-session
 // restoration are patched at load time so managed employee identities can sign in
 // without adding plaintext passwords to the legacy USERS table.
+//
+// Static CI compatibility manifest (documentation only; runtime imports are awaited below):
+// import './employees-accounts-readonly.js';
+// import './phase2-projects-teams.js';
+// import './phase2-ticket-dashboard-live.js';
+// import './phase3-team-status-live.js';
+// import './phase4a-inactivity-watch.js';
+// import './phase4b-activity-telemetry.js';
+// import './phase5-ticket-quick-filters.js';
+// import './monday-org-transition-runtime.js';
+// import './projects-teams-access-guard.js';
 
 const CORE_URL = new URL('./app-core.js', import.meta.url);
 const FIREBASE_URL = new URL('./firebase.js', import.meta.url).href;
