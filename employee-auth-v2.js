@@ -5,7 +5,7 @@
 // Password hashes/salts/history are never returned through account-support metadata.
 
 import { db, fs } from "./firebase.js";
-import { authenticateEmployee as authenticateLegacyEmployee } from "./employee-directory-core.js";
+import { getLegacyEmployee } from "./employee-directory-core.js";
 import { employeeIdentityToLegacySession } from "./employee-identity-compat.js";
 import { seedIdentityByCcms } from "./employee-identity-seed.js";
 import { getEmployeeIdentityByCcms } from "./employee-identity-store.js";
@@ -25,9 +25,20 @@ import {
 const { doc, getDoc, serverTimestamp, setDoc } = fs;
 
 export const EMPLOYEE_CREDENTIALS_COL = "employeeCredentials";
+const LOGIN_NETWORK_TIMEOUT_MS = 2500;
 
 function clean(value) {
   return String(value ?? "").trim();
+}
+
+function withLoginTimeout(promise, label = "login_network_timeout") {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label)), LOGIN_NETWORK_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 function actorFields(actor = null) {
@@ -198,8 +209,17 @@ async function authenticateThroughLegacyFallback(identity, ccmsId, password) {
   const authCcmsId = identity.previousCcmsIds?.includes(clean(ccmsId))
     ? clean(ccmsId)
     : clean(identity.previousCcmsIds?.[0] || ccmsId);
-  const legacy = await authenticateLegacyEmployee(authCcmsId, password);
-  if (!legacy?.ok) return legacy;
+
+  // Legacy compatibility accounts are already bundled locally. Never wait on
+  // Firestore just to verify a password that is available in the approved seed.
+  const legacy = getLegacyEmployee(authCcmsId);
+  if (!legacy) return { ok: false, reason: "not_found", employee: null };
+  if (legacy.accountStatus !== "active") {
+    return { ok: false, reason: legacy.accountStatus || "disabled", employee: null };
+  }
+  if (legacy.password !== String(password || "")) {
+    return { ok: false, reason: "incorrect_password", employee: null };
+  }
 
   return {
     ok: true,
@@ -228,7 +248,17 @@ export async function authenticateEmployeeV2(ccmsId, password) {
   // This is especially important during quota/network incidents. Managed users such
   // as Lana can still use the hashed employeeCredentials record keyed by employeeUid.
   const seededIdentity = seedIdentityForAuth(id);
-  const identity = seededIdentity || await getEmployeeIdentityByCcms(id, { allowSeedFallback: false });
+  let identity = seededIdentity;
+  if (!identity) {
+    try {
+      identity = await withLoginTimeout(
+        getEmployeeIdentityByCcms(id, { allowSeedFallback: false }),
+        "employee_identity_lookup_timeout"
+      );
+    } catch (error) {
+      return { ok: false, reason: "credential_unavailable", employee: null, error: String(error?.message || error) };
+    }
+  }
   if (!identity) return { ok: false, reason: "not_found", employee: null };
   if (identity.accountStatus !== "active") {
     return { ok: false, reason: identity.accountStatus || "disabled", employee: null };
@@ -244,7 +274,10 @@ export async function authenticateEmployeeV2(ccmsId, password) {
 
   let credential = null;
   try {
-    credential = await readCredentialRecord(identity.employeeUid);
+    credential = await withLoginTimeout(
+      readCredentialRecord(identity.employeeUid),
+      "employee_credential_lookup_timeout"
+    );
   } catch (error) {
     if (identity.credentialSetupRequired !== true) {
       const legacy = await authenticateThroughLegacyFallback(identity, id, password);
